@@ -8,7 +8,23 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 [Metallic]: https://github.com/jdh8/metallic
 
+Assumptions
+-----------
 C libraries tend to have strict yet obsolete assumptions on math functions.
+For example, `float` functions dare not use `double` instructions for fear
+that the host does not support them.  In this library, I assume all Rust
+primitive types are IEEE 754 compliant and native to the host.  In other
+words, I assume the following instructions are available to floating-point
+types:
+
+- Addition, subtraction, multiplication, division
+- Square root ([`f32::sqrt`](https://doc.rust-lang.org/std/primitive.f32.html#method.sqrt))
+- Fused multiply-add ([`f32::mul_add`](https://doc.rust-lang.org/std/primitive.f32.html#method.mul_add))
+- Rounding instructions such as [`f32::trunc`](https://doc.rust-lang.org/std/primitive.f32.html#method.trunc)
+
+The assumptions beyond the four basic arithmetic operations creates dependency
+on the [Rust standard library](https://doc.rust-lang.org/std/).  This library
+is not intended for embedded systems.
 
 Goals
 -----
