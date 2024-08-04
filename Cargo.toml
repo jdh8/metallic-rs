@@ -1,0 +1,10 @@
+[package]
+name = "metallic"
+version = "0.0.0"
+authors = ["Chen-Pang He (https://jdh8.org)"]
+edition = "2021"
+description = "C math functions from scratch"
+repository = "https://github.com/jdh8/metallic-rs"
+license = "MIT"
+categories = ["mathematics"]
+keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
