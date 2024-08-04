@@ -1,5 +1,8 @@
 metallic-rs
 ===========
+[![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
+[![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
+
 C math functions from scratch for Rust
 
 This library is a successor to [Metallic], my C library for WebAssembly
