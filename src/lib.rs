@@ -45,3 +45,6 @@
 //!       [`f32::abs`].
 
 #![warn(missing_docs)]
+
+/// Real functions for `f32`s
+pub mod f32;
