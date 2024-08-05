@@ -1,24 +1,27 @@
 /// Fast C `ldexp` assuming normal argument and result
-#[allow(clippy::cast_sign_loss)]
-pub fn fast_ldexp(x: f64, n: i32) -> f64 {
-    f64::from_bits((i64::from(n) << 52) as u64 + x.to_bits())
+pub fn fast_ldexp(x: f64, n: i64) -> f64 {
+    #[allow(clippy::cast_possible_wrap)]
+    let wrapped = x.to_bits() as i64;
+
+    #[allow(clippy::cast_sign_loss)]
+    return f64::from_bits((wrapped + (n << 52)) as u64);
 }
 
 /// Restriction of `x.exp_m1() / x` to [-0.5 ln 2, 0.5 ln 2]
 pub fn exp(x: f64) -> f64 {
-    #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
-    const C: [f64; 6] = [
-        1.000000010775500705,
-        5.000000080819903627e-1,
-        1.666650523422326531e-1,
-        4.166624066361261157e-2,
-        8.369150671031008566e-3,
-        1.394858354331218335e-3
+    #[allow(clippy::excessive_precision)]
+    const P: [f64; 6] = [
+        1.000_000_010_775_500_705,
+        5.000_000_080_819_903_627e-1,
+        1.666_650_523_422_326_531e-1,
+        4.166_624_066_361_261_157e-2,
+        8.369_150_671_031_008_566e-3,
+        1.394_858_354_331_218_335e-3,
     ];
 
-    C[5].mul_add(x, C[4])
-        .mul_add(x, C[3])
-        .mul_add(x, C[2])
-        .mul_add(x, C[1])
-        .mul_add(x, C[0])
+    P[5].mul_add(x, P[4])
+        .mul_add(x, P[3])
+        .mul_add(x, P[2])
+        .mul_add(x, P[1])
+        .mul_add(x, P[0])
 }
