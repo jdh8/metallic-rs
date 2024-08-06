@@ -8,3 +8,10 @@ repository = "https://github.com/jdh8/metallic-rs"
 license = "MIT"
 categories = ["mathematics"]
 keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "f32_exp"
+harness = false
