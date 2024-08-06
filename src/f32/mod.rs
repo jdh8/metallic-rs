@@ -1,6 +1,9 @@
 mod kernel;
 
 /// The least number greater than `x`
+///
+/// This is a less careful version of [`f32::next_up`] regarding subnormal
+/// numbers.  This function is useful until `f32::next_up` gets stabilized.
 #[must_use]
 pub fn next_up(x: f32) -> f32 {
     if x.is_nan() || x == f32::INFINITY {
@@ -15,6 +18,9 @@ pub fn next_up(x: f32) -> f32 {
 }
 
 /// The greatest number less than `x`
+///
+/// This is a less careful version of [`f32::next_down`] regarding subnormal
+/// numbers.  This function is useful until `f32::next_down` gets stabilized.
 #[must_use]
 pub fn next_down(x: f32) -> f32 {
     if x.is_nan() || x == f32::NEG_INFINITY {
