@@ -34,11 +34,13 @@ pub fn exp(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
 
-    if x < -150.0 * LN_2 {
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
+    if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LN_2 {
         return 0.0;
     }
 
-    if x > 128.0 * LN_2 {
+    #[allow(clippy::cast_precision_loss)]
+    if x > f32::MAX_EXP as f32 * LN_2 {
         return f32::INFINITY;
     }
 

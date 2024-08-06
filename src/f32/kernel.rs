@@ -1,10 +1,12 @@
 /// Fast C `ldexp` assuming normal argument and result
 pub fn fast_ldexp(x: f64, n: i64) -> f64 {
+    const SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
+
     #[allow(clippy::cast_possible_wrap)]
     let wrapped = x.to_bits() as i64;
 
     #[allow(clippy::cast_sign_loss)]
-    return f64::from_bits((wrapped + (n << 52)) as u64);
+    return f64::from_bits((wrapped + (n << SHIFT)) as u64);
 }
 
 /// Restriction of `x.exp_m1() / x` to [-0.5 ln 2, 0.5 ln 2]
