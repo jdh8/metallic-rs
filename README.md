@@ -26,8 +26,7 @@ types:
 - Rounding instructions such as [`f32::trunc`](https://doc.rust-lang.org/std/primitive.f32.html#method.trunc)
 
 The assumptions beyond the four basic arithmetic operations creates dependency
-on the [Rust standard library](https://doc.rust-lang.org/std/).  This library
-is not intended for embedded systems.
+on the [Rust standard library](https://doc.rust-lang.org/std/).
 
 Goals
 -----

@@ -21,8 +21,7 @@
 //! - Rounding instructions such as [`f32::trunc`]
 //!
 //! The assumptions beyond the four basic arithmetic operations creates
-//! dependency on the [Rust standard library][std].  This library is not
-//! intended for embedded systems.
+//! dependency on the [Rust standard library][std].
 //!
 //! Goals
 //! -----
