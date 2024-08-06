@@ -58,3 +58,19 @@ pub fn exp(x: f32) -> f32 {
     #[allow(clippy::cast_possible_truncation)]
     return kernel::fast_ldexp(y, n as i64) as f32;
 }
+
+/// Multiply `x` by 2 raised to the power of `n`
+#[must_use]
+pub fn ldexp(x: f32, n: i32) -> f32 {
+    let coefficient = match n {
+        ..-1022 => f64::exp2(-1023.0),
+
+        #[allow(clippy::cast_sign_loss)]
+        n @ -1022..1024 => f64::from_bits(((n + 1023) as u64) << 52),
+
+        1024.. => f64::MAX,
+    };
+
+    #[allow(clippy::cast_possible_truncation)]
+    return (f64::from(x) * coefficient) as f32;
+}

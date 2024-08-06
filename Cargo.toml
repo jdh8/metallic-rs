@@ -11,6 +11,7 @@ keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "speci
 
 [dev-dependencies]
 criterion = "0.5.1"
+libm = "0.2.8"
 rand = "0.8.5"
 
 [[bench]]

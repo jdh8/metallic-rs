@@ -1,4 +1,5 @@
-use core::f64;
+mod ldexp;
+
 use metallic::f32 as lib;
 
 fn is_faithful_rounding(result: f32, expected: f64) -> bool {
