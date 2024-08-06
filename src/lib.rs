@@ -22,6 +22,10 @@
 //!
 //! The assumptions beyond the four basic arithmetic operations creates
 //! dependency on the [Rust standard library][std].
+//! 
+//! Besides, I ignore the floating-point environment, which is not available in
+//! Rust.  It is also mostly unused in C and C++ because it requires
+//! `#pragma STDC FENV_ACCESS ON` and compiler support.
 //!
 //! Goals
 //! -----
