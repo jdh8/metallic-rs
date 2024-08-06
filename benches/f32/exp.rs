@@ -11,12 +11,12 @@ fn bench(criterion: &mut Criterion, id: &str, f: fn(f32) -> f32) {
     });
 }
 
-fn bench_lib(c: &mut Criterion) {
-    crate::bench!(c, metallic::f32::exp);
+fn bench_crate(c: &mut Criterion) {
+    crate::bench!(bench, c, metallic::f32::exp);
 }
 
-fn bench_sys(c: &mut Criterion) {
-    crate::bench!(c, f32::exp);
+fn bench_std(c: &mut Criterion) {
+    crate::bench!(bench, c, f32::exp);
 }
 
-criterion::criterion_group!(benches, bench_lib, bench_sys);
+criterion::criterion_group!(benches, bench_crate, bench_std);

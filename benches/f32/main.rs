@@ -7,7 +7,7 @@ criterion_main!(exp::benches, ldexp::benches);
 
 #[macro_export]
 macro_rules! bench {
-    ($criterion:expr, $f:expr) => {
-        bench($criterion, stringify!($f), $f);
+    ($bench:expr, $criterion:expr, $f:expr) => {
+        $bench($criterion, stringify!($f), $f);
     };
 }
