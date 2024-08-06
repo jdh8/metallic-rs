@@ -13,5 +13,5 @@ keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "speci
 criterion = "0.5.1"
 
 [[bench]]
-name = "f32_exp"
+name = "f32"
 harness = false
