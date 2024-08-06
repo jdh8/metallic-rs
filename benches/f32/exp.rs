@@ -1,25 +1,23 @@
-use criterion::{criterion_group, Criterion};
+use criterion::{BatchSize, Criterion};
 use metallic::f32 as lib;
+use rand::Rng;
 
-fn bench_exp(f: impl Fn(f32) -> f32) {
-    let mut x = 100.0;
-
-    #[allow(clippy::while_float)]
-    while core::hint::black_box(f(x)) > 0.0 {
-        x -= 1.337e-2;
-    }
+fn bench_exp(criterion: &mut Criterion, id: &str, f: fn(f32) -> f32) {
+    criterion.bench_function(id, |bencher| {
+        bencher.iter_batched(
+            || rand::thread_rng().gen_range(-105.0..90.0),
+            f,
+            BatchSize::SmallInput,
+        );
+    });
 }
 
 fn bench_lib(c: &mut Criterion) {
-    c.bench_function("bench_lib", |b| {
-        b.iter(|| bench_exp(lib::exp));
-    });
+    bench_exp(c, "lib_exp", lib::exp);
 }
 
 fn bench_sys(c: &mut Criterion) {
-    c.bench_function("bench_sys", |b| {
-        b.iter(|| bench_exp(f32::exp));
-    });
+    bench_exp(c, "sys_exp", f32::exp);
 }
 
-criterion_group!(benches, bench_lib, bench_sys);
+criterion::criterion_group!(benches, bench_lib, bench_sys);
