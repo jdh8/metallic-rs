@@ -1,4 +1,21 @@
 mod kernel;
+use core::num::NonZeroU32;
+
+/// Explicitly stored significand bits
+pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
+
+/// Normalize nonzero magnitude
+#[allow(clippy::cast_possible_wrap)]
+const fn normalize(x: NonZeroU32) -> i32 {
+    let x = x.get() as i32;
+
+    if x < 0x0080_0000 {
+        let shift = x.leading_zeros() as i32 - 8;
+        (x << shift) - (shift << EXP_SHIFT)
+    } else {
+        x
+    }
+}
 
 /// The least number greater than `x`
 ///
@@ -73,4 +90,27 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
 
     #[allow(clippy::cast_possible_truncation)]
     return (f64::from(x) * coefficient) as f32;
+}
+
+/// Decompose into a significand and an exponent
+#[must_use]
+pub fn frexp(x: f32) -> (f32, i32) {
+    let Some(magnitude) = NonZeroU32::new(x.abs().to_bits()) else {
+        return (x, 0);
+    };
+
+    if magnitude.get() >= f32::INFINITY.to_bits() {
+        return (x, 0);
+    }
+
+    let magnitude = normalize(magnitude);
+    let mask = f32::MIN_POSITIVE.to_bits() - 1;
+
+    #[allow(clippy::cast_sign_loss)]
+    let significand = magnitude as u32 & mask | 0.5f32.to_bits();
+
+    (
+        f32::from_bits(significand),
+        f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
+    )
 }
