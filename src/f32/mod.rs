@@ -96,6 +96,10 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
 }
 
 /// Decompose into a significand and an exponent
+///
+/// The absolute value of the significand is in the range of [0.5, 1) for
+/// nonzero finite `x` for historical reasons.  This function also explains how
+/// [`f32::MAX_EXP`] and [`f32::MIN_EXP`] are defined.
 #[must_use]
 pub fn frexp(x: f32) -> (f32, i32) {
     let Some(magnitude) = NonZeroU32::new(x.abs().to_bits()) else {
@@ -113,7 +117,7 @@ pub fn frexp(x: f32) -> (f32, i32) {
     let significand = magnitude as u32 & mask | 0.5f32.to_bits();
 
     (
-        f32::from_bits(significand),
+        f32::from_bits(significand).copysign(x),
         f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
     )
 }
