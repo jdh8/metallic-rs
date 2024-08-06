@@ -1,7 +1,9 @@
 mod kernel;
 use core::num::NonZeroU32;
 
-/// Explicitly stored significand bits
+/// Explicitly stored significand bits in [`f32`]
+///
+/// This constant is usually used as a shift to access the exponent bits.
 pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
 
 /// Normalize nonzero magnitude
