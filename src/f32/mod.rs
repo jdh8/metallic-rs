@@ -79,13 +79,16 @@ pub fn exp(x: f32) -> f32 {
 /// Multiply `x` by 2 raised to the power of `n`
 #[must_use]
 pub fn ldexp(x: f32, n: i32) -> f32 {
+    const MIN_EXP: i32 = f64::MIN_EXP - 1;
+    const MAX_EXP: i32 = f64::MAX_EXP;
+
     let coefficient = match n {
-        ..-1022 => f64::exp2(-1023.0),
+        ..MIN_EXP => 0.5 * f64::MIN_POSITIVE,
 
         #[allow(clippy::cast_sign_loss)]
-        n @ -1022..1024 => f64::from_bits(((n + 1023) as u64) << 52),
+        n @ MIN_EXP..MAX_EXP => f64::from_bits(((MAX_EXP - 1 + n) as u64) << crate::f64::EXP_SHIFT),
 
-        1024.. => f64::MAX,
+        MAX_EXP.. => f64::MAX,
     };
 
     #[allow(clippy::cast_possible_truncation)]

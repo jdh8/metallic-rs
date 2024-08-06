@@ -1,5 +1,4 @@
 mod ldexp;
-
 use metallic::f32 as metal;
 
 fn is_faithful_rounding(result: f32, expected: f64) -> bool {
