@@ -14,7 +14,12 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
 
 #[test]
 fn test_exp() {
-    (0..u32::MAX).step_by(77).for_each(|i| {
+    assert!(metal::exp(0.0).eq(&1.0));
+    assert!(metal::exp(-0.0).eq(&1.0));
+    assert!(metal::exp(f32::INFINITY).eq(&f32::INFINITY));
+    assert!(metal::exp(f32::NEG_INFINITY).to_bits() == 0);
+
+    (0..u32::MAX).step_by(69).for_each(|i| {
         let x = f32::from_bits(i);
         assert!(is_faithful_rounding(metal::exp(x), f64::from(x).exp()));
     });
