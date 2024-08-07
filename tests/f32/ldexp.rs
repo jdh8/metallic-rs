@@ -4,7 +4,7 @@ fn up(x: f32) {
     let mut y = x;
 
     for n in 0..300 {
-        assert!(metal::ldexp(x, n).eq(&y));
+        assert_eq!(metal::ldexp(x, n).to_bits(), y.to_bits());
         y *= 2.0;
     }
 }
@@ -15,7 +15,7 @@ fn down(x: f32) {
     for n in 0..300 {
         #[allow(clippy::cast_possible_truncation)]
         let y = (f64::from(x) * coefficient) as f32;
-        assert!(metal::ldexp(x, -n).eq(&y));
+        assert_eq!(metal::ldexp(x, -n).to_bits(), y.to_bits());
         coefficient *= 0.5;
     }
 }
