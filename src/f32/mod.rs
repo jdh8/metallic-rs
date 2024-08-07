@@ -44,7 +44,10 @@ fn normalize(x: f32) -> (bool, Magnitude) {
         FpCategory::Normal => (sign, Magnitude::Normalized(magnitude)),
         FpCategory::Subnormal => {
             let shift = magnitude.leading_zeros() as i32 - 8;
-            (sign, Magnitude::Normalized((magnitude << shift) - (shift << EXP_SHIFT)))
+            (
+                sign,
+                Magnitude::Normalized((magnitude << shift) - (shift << EXP_SHIFT)),
+            )
         }
     }
 }
