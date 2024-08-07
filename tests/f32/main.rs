@@ -48,6 +48,7 @@ macro_rules! test_unary {
 
 test_unary!(cbrt, 69);
 test_unary!(exp, 69);
+test_unary!(exp_m1, 69);
 
 #[test]
 fn frexp() {

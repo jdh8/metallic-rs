@@ -162,7 +162,7 @@ pub fn exp_m1(x: f32) -> f32 {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(y.mul_add(x, 1.0), n as i64) as f32;
+    return (kernel::fast_ldexp(y.mul_add(x, 1.0), n as i64) - 1.0) as f32;
 }
 
 /// Multiply `x` by 2 raised to the power of `n`
