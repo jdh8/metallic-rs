@@ -30,7 +30,7 @@ fn test_frexp() {
     (0..u32::MAX).step_by(69).for_each(|i| {
         let x = f32::from_bits(i);
         let (significand, exponent) = metal::frexp(x);
-        
+
         match x.classify() {
             FpCategory::Nan => assert!(significand.is_nan()),
             FpCategory::Infinite => assert_eq!(significand.to_bits(), x.to_bits()),
