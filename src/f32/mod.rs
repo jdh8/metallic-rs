@@ -1,21 +1,50 @@
 mod kernel;
-use core::num::NonZeroU32;
+use core::num::FpCategory;
 
 /// Explicitly stored significand bits in [`f32`]
 ///
 /// This constant is usually used as a shift to access the exponent bits.
 pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
 
-/// Normalize nonzero magnitude
-#[allow(clippy::cast_possible_wrap)]
-const fn normalize(x: NonZeroU32) -> i32 {
-    let x = x.get() as i32;
+/// Magnitude of `f32`
+///
+/// Nonzero subnormal numbers are normalized to have an implicit leading bit.
+enum Magnitude {
+    /// NaN, see [`FpCategory::Nan`]
+    Nan,
 
-    if x < 0x0080_0000 {
-        let shift = x.leading_zeros() as i32 - 8;
-        (x << shift) - (shift << EXP_SHIFT)
-    } else {
-        x
+    /// Infinity, see [`FpCategory::Infinite`]
+    Infinite,
+
+    /// Zero, see [`FpCategory::Zero`]
+    ///
+    /// Zero cannot be normalized.  A normalized magnitude has an implicit
+    /// leading bit.
+    Zero,
+
+    /// Normalized magnitude
+    ///
+    /// The layout of the bits is the same as a normal positive `f32`.  For
+    /// subnormal numbers, the stored exponent becomes zero or negative while
+    /// the significand is normalized to have an implicit leading bit.
+    Normalized(i32),
+}
+
+/// Break a `f32` into its sign and magnitude
+#[allow(clippy::cast_possible_wrap)]
+fn normalize(x: f32) -> (bool, Magnitude) {
+    let sign = x.is_sign_negative();
+    let magnitude = x.abs().to_bits() as i32;
+
+    match x.classify() {
+        FpCategory::Nan => (sign, Magnitude::Nan),
+        FpCategory::Infinite => (sign, Magnitude::Infinite),
+        FpCategory::Zero => (sign, Magnitude::Zero),
+        FpCategory::Normal => (sign, Magnitude::Normalized(magnitude)),
+        FpCategory::Subnormal => {
+            let shift = magnitude.leading_zeros() as i32 - 8;
+            (sign, Magnitude::Normalized((magnitude << shift) - (shift << EXP_SHIFT)))
+        }
     }
 }
 
@@ -104,22 +133,17 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
 /// [`f32::MAX_EXP`] and [`f32::MIN_EXP`] are defined.
 #[must_use]
 pub fn frexp(x: f32) -> (f32, i32) {
-    let Some(magnitude) = NonZeroU32::new(x.abs().to_bits()) else {
+    let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return (x, 0);
     };
 
-    if magnitude.get() >= f32::INFINITY.to_bits() {
-        return (x, 0);
-    }
-
-    let magnitude = normalize(magnitude);
     let mask = f32::MIN_POSITIVE.to_bits() - 1;
 
     #[allow(clippy::cast_sign_loss)]
     let significand = magnitude as u32 & mask | 0.5f32.to_bits();
 
     (
-        f32::from_bits(significand).copysign(x),
+        f32::from_bits(u32::from(sign) << 31 | significand),
         f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
     )
 }
