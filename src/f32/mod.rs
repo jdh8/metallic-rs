@@ -132,6 +132,37 @@ pub fn exp(x: f32) -> f32 {
     return kernel::fast_ldexp(y, n as i64) as f32;
 }
 
+/// Compute `exp(x) - 1` accurately especially for small `x`
+#[must_use]
+#[inline]
+pub fn exp_m1(x: f32) -> f32 {
+    use core::f32::consts::LN_2;
+    use core::f64::consts;
+
+    #[allow(clippy::cast_precision_loss)]
+    if x < f32::MANTISSA_DIGITS as f32 * -LN_2 {
+        return -1.0;
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    if x > f32::MAX_EXP as f32 * LN_2 {
+        return f32::INFINITY;
+    }
+
+    let x = f64::from(x);
+    let n = (x * consts::LOG2_E).round_ties_even() + 0.0;
+    let x = n.mul_add(-consts::LN_2, x);
+    let y = kernel::exp(x);
+
+    if n == 0.0 {
+        #[allow(clippy::cast_possible_truncation)]
+        return (x * y) as f32;
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    return kernel::fast_ldexp(y.mul_add(x, 1.0), n as i64) as f32;
+}
+
 /// Multiply `x` by 2 raised to the power of `n`
 #[must_use]
 #[inline]

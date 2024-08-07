@@ -10,7 +10,7 @@ pub fn fast_ldexp(x: f64, n: i64) -> f64 {
     return f64::from_bits((wrapped + (n << SHIFT)) as u64);
 }
 
-/// Restriction of `x.exp_m1() / x` to [-0.5 ln 2, 0.5 ln 2]
+/// Restriction of `(exp(x) - 1) / x` to [-0.5 ln 2, 0.5 ln 2]
 #[inline]
 pub fn exp(x: f64) -> f64 {
     #[allow(clippy::excessive_precision)]
