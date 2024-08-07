@@ -9,6 +9,7 @@ pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
 /// Magnitude of `f32`
 ///
 /// Nonzero subnormal numbers are normalized to have an implicit leading bit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Magnitude {
     /// NaN, see [`FpCategory::Nan`]
     Nan,
