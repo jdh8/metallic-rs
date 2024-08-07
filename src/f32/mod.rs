@@ -103,7 +103,9 @@ pub fn cbrt(x: f32) -> f32 {
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
 
     let iter = |y: f32| 3.0f32.recip().mul_add(x / (y * y) - y, y);
-    iter(iter(iter(f32::from_bits(u32::from(sign) << 31 | magnitude))))
+    iter(iter(iter(f32::from_bits(
+        u32::from(sign) << 31 | magnitude,
+    ))))
 }
 
 /// The exponential function
