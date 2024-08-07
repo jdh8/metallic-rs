@@ -1,8 +1,8 @@
 use criterion::{BatchSize, Criterion};
 use rand::Rng as _;
 
-fn bench(criterion: &mut Criterion, id: &str, f: fn(f32, i32) -> f32) {
-    criterion.bench_function(id, |bencher| {
+fn bench(criterion: &mut Criterion, name: &str, f: impl Fn(f32, i32) -> f32) {
+    criterion.bench_function(name, |bencher| {
         let rng = &mut rand::thread_rng();
         bencher.iter_batched(
             || (rng.gen(), rng.gen_range(-300..300)),

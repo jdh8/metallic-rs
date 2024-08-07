@@ -1,11 +1,11 @@
 use criterion::{BatchSize, Criterion};
 use rand::Rng as _;
 
-fn bench(criterion: &mut Criterion, id: &str, f: fn(f32) -> f32) {
-    criterion.bench_function(id, |bencher| {
+fn bench(criterion: &mut Criterion, name: &str, f: impl Fn(f32) -> f32) {
+    criterion.bench_function(name, |bencher| {
         bencher.iter_batched(
             || rand::thread_rng().gen_range(-105.0..90.0),
-            f,
+            &f,
             BatchSize::SmallInput,
         );
     });
