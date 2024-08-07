@@ -28,7 +28,7 @@ fn run(x: f32) {
 }
 
 #[test]
-fn test_ldexp() {
+fn test() {
     run(f32::INFINITY);
 
     (0..0x7F00_0000).step_by(7146).for_each(|i| {

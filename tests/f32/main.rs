@@ -12,35 +12,45 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     (next_down..=next_up).contains(&expected)
 }
 
-#[test]
-fn test_cbrt() {
-    assert_eq!(metal::cbrt(0.0).to_bits(), 0);
-    assert_eq!(metal::cbrt(-0.0).to_bits(), (-0.0f32).to_bits());
-    assert!(metal::cbrt(f32::INFINITY).eq(&f32::INFINITY));
-    assert!(metal::cbrt(f32::NEG_INFINITY).eq(&f32::NEG_INFINITY));
-    assert!(metal::cbrt(f32::NAN).is_nan());
+fn test_unary(
+    ours: impl Fn(f32) -> f32,
+    std_f32: impl Fn(f32) -> f32,
+    std_f64: impl Fn(f64) -> f64,
+    step: usize,
+) {
+    assert_eq!(ours(0.0).to_bits(), std_f32(0.0).to_bits());
+    assert_eq!(ours(-0.0).to_bits(), std_f32(-0.0).to_bits());
 
-    (0..u32::MAX).step_by(69).for_each(|i| {
+    assert_eq!(
+        ours(f32::INFINITY).to_bits(),
+        std_f32(f32::INFINITY).to_bits(),
+    );
+
+    assert_eq!(
+        ours(f32::NEG_INFINITY).to_bits(),
+        std_f32(f32::NEG_INFINITY).to_bits(),
+    );
+
+    (0..u32::MAX).step_by(step).for_each(|i| {
         let x = f32::from_bits(i);
-        assert!(is_faithful_rounding(metal::cbrt(x), f64::from(x).cbrt()));
+        assert!(is_faithful_rounding(ours(x), std_f64(f64::from(x))));
     });
 }
 
-#[test]
-fn test_exp() {
-    assert!(metal::exp(0.0).eq(&1.0));
-    assert!(metal::exp(-0.0).eq(&1.0));
-    assert!(metal::exp(f32::INFINITY).eq(&f32::INFINITY));
-    assert!(metal::exp(f32::NEG_INFINITY).to_bits() == 0);
-
-    (0..u32::MAX).step_by(69).for_each(|i| {
-        let x = f32::from_bits(i);
-        assert!(is_faithful_rounding(metal::exp(x), f64::from(x).exp()));
-    });
+macro_rules! test_unary {
+    ($name:ident, $step:expr) => {
+        #[test]
+        fn $name() {
+            test_unary(metal::$name, f32::$name, f64::$name, $step);
+        }
+    };
 }
 
+test_unary!(cbrt, 69);
+test_unary!(exp, 69);
+
 #[test]
-fn test_frexp() {
+fn frexp() {
     (0..u32::MAX).step_by(69).for_each(|i| {
         let x = f32::from_bits(i);
         let (significand, exponent) = metal::frexp(x);
