@@ -98,13 +98,8 @@ pub fn cbrt(x: f32) -> f32 {
     #[allow(clippy::cast_sign_loss)]
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
 
-    let x = f64::from(x);
-    let y = f64::from(f32::from_bits(u32::from(sign) << 31 | magnitude));
-    let y = y * (0.5 + 1.5 * x / (2.0 * y).mul_add(y * y, x));
-    let y = f64::recip(3.0).mul_add(x / (y * y) - y, y);
-
-    #[allow(clippy::cast_possible_truncation)]
-    return y as f32;
+    let iter = |y: f32| 3.0f32.recip().mul_add(x / (y * y) - y, y);
+    iter(iter(iter(f32::from_bits(u32::from(sign) << 31 | magnitude))))
 }
 
 /// The exponential function
