@@ -1,5 +1,6 @@
 metallic-rs
 ===========
+![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
 
