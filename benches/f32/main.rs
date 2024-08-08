@@ -1,5 +1,6 @@
 mod cbrt;
 mod exp;
+mod exp2;
 mod exp_m1;
 mod frexp;
 mod ldexp;
@@ -7,6 +8,7 @@ mod ldexp;
 criterion::criterion_main!(
     cbrt::benches,
     exp::benches,
+    exp2::benches,
     exp_m1::benches,
     frexp::benches,
     ldexp::benches

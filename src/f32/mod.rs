@@ -134,6 +134,43 @@ pub fn exp(x: f32) -> f32 {
     return kernel::fast_ldexp(y, n as i64) as f32;
 }
 
+/// Compute `2^x`
+#[must_use]
+#[inline]
+pub fn exp2(x: f32) -> f32 {
+    const P: [f32; 6] = [
+        6.931_472e-1,
+        2.402_265e-1,
+        5.550_357e-2,
+        9.618_031e-3,
+        1.339_086_7e-3,
+        1.546_973_5e-4,
+    ];
+
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
+    if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 {
+        return 0.0;
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    if x > f32::MAX_EXP as f32 {
+        return f32::INFINITY;
+    }
+
+    let n = x.round_ties_even();
+    let x = x - n;
+    let x = P[5]
+        .mul_add(x, P[4])
+        .mul_add(x, P[3])
+        .mul_add(x, P[2])
+        .mul_add(x, P[1])
+        .mul_add(x, P[0])
+        .mul_add(x, 1.0);
+
+    #[allow(clippy::cast_possible_truncation)]
+    return kernel::fast_ldexp(f64::from(x), n as i64) as f32;
+}
+
 /// Compute `exp(x) - 1` accurately especially for small `x`
 #[must_use]
 #[inline]
