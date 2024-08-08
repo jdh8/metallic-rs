@@ -1,5 +1,4 @@
 /// Fast C `ldexp` assuming normal argument and result
-#[inline]
 pub fn fast_ldexp(x: f64, n: i64) -> f64 {
     const SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
 
@@ -11,7 +10,6 @@ pub fn fast_ldexp(x: f64, n: i64) -> f64 {
 }
 
 /// Restriction of `(exp(x) - 1) / x` to [-0.5 ln 2, 0.5 ln 2]
-#[inline]
 pub fn exp(x: f64) -> f64 {
     const P: [f64; 6] = [
         1.000_000_010_775_500_7,

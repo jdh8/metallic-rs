@@ -14,6 +14,12 @@ criterion = "0.5.1"
 libm = "0.2.8"
 rand = "0.8.5"
 
+[profile.bench]
+lto = "thin"
+
+[profile.release]
+lto = "thin"
+
 [[bench]]
 name = "f32"
 harness = false
