@@ -33,6 +33,7 @@ enum Magnitude {
 
 /// Break a `f32` into its sign and magnitude
 #[allow(clippy::cast_possible_wrap)]
+#[inline]
 fn normalize(x: f32) -> (bool, Magnitude) {
     let sign = x.is_sign_negative();
     let magnitude = x.abs().to_bits() as i32;
@@ -57,6 +58,7 @@ fn normalize(x: f32) -> (bool, Magnitude) {
 /// This is a less careful version of [`f32::next_up`] regarding subnormal
 /// numbers.  This function is useful until `f32::next_up` gets stabilized.
 #[must_use]
+#[inline]
 pub fn next_up(x: f32) -> f32 {
     if x.is_nan() || x == f32::INFINITY {
         x
@@ -74,6 +76,7 @@ pub fn next_up(x: f32) -> f32 {
 /// This is a less careful version of [`f32::next_down`] regarding subnormal
 /// numbers.  This function is useful until `f32::next_down` gets stabilized.
 #[must_use]
+#[inline]
 pub fn next_down(x: f32) -> f32 {
     if x.is_nan() || x == f32::NEG_INFINITY {
         x
@@ -88,6 +91,7 @@ pub fn next_down(x: f32) -> f32 {
 
 /// The cube root
 #[must_use]
+#[inline]
 pub fn cbrt(x: f32) -> f32 {
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return x;
@@ -106,6 +110,7 @@ pub fn cbrt(x: f32) -> f32 {
 
 /// The exponential function
 #[must_use]
+#[inline]
 pub fn exp(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
@@ -131,6 +136,7 @@ pub fn exp(x: f32) -> f32 {
 
 /// Compute `2^x`
 #[must_use]
+#[inline]
 pub fn exp2(x: f32) -> f32 {
     const P: [f32; 6] = [
         6.931_472e-1,
@@ -167,6 +173,7 @@ pub fn exp2(x: f32) -> f32 {
 
 /// Compute `exp(x) - 1` accurately especially for small `x`
 #[must_use]
+#[inline]
 pub fn exp_m1(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
@@ -197,6 +204,7 @@ pub fn exp_m1(x: f32) -> f32 {
 
 /// Multiply `x` by 2 raised to the power of `n`
 #[must_use]
+#[inline]
 pub fn ldexp(x: f32, n: i32) -> f32 {
     const MIN_EXP: i32 = f64::MIN_EXP - 1;
     const MAX_EXP: i32 = f64::MAX_EXP;
@@ -220,6 +228,7 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
 /// nonzero finite `x` for historical reasons.  This function also explains how
 /// [`f32::MAX_EXP`] and [`f32::MIN_EXP`] are defined.
 #[must_use]
+#[inline]
 pub fn frexp(x: f32) -> (f32, i32) {
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return (x, 0);

@@ -1,6 +1,6 @@
 [package]
 name = "metallic"
-version = "0.0.3-alpha"
+version = "0.0.2"
 authors = ["Chen-Pang He (https://jdh8.org)"]
 edition = "2021"
 description = "C math functions from scratch"
@@ -13,12 +13,6 @@ keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "speci
 criterion = "0.5.1"
 libm = "0.2.8"
 rand = "0.8.5"
-
-[profile.bench]
-lto = "thin"
-
-[profile.release]
-lto = "thin"
 
 [[bench]]
 name = "f32"
