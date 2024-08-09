@@ -53,6 +53,22 @@ fn normalize(x: f32) -> (bool, Magnitude) {
     }
 }
 
+/// Fast multiply-add
+///
+/// This function picks the faster way to compute `x * y + a` depending on the
+/// target architecture.  The FMA instruction is used if available.  Otherwise,
+/// it falls back to `x * y + a` that is faster but gives less accurate results
+/// than [`f32::mul_add`]
+#[must_use]
+#[inline]
+pub fn mul_add(x: f32, y: f32, a: f32) -> f32 {
+    #[cfg(target_feature = "fma")]
+    return x.mul_add(y, a);
+
+    #[cfg(not(target_feature = "fma"))]
+    return x * y + a;
+}
+
 /// The least number greater than `x`
 ///
 /// This is a less careful version of [`f32::next_up`] regarding subnormal
@@ -102,7 +118,7 @@ pub fn cbrt(x: f32) -> f32 {
     #[allow(clippy::cast_sign_loss)]
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
 
-    let iter = |y: f32| 3.0f32.recip().mul_add(x / (y * y) - y, y);
+    let iter = |y: f32| mul_add(3.0f32.recip(), x / (y * y) - y, y);
     iter(iter(iter(f32::from_bits(
         u32::from(sign) << 31 | magnitude,
     ))))
@@ -127,8 +143,8 @@ pub fn exp(x: f32) -> f32 {
 
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even();
-    let x = n.mul_add(-consts::LN_2, x);
-    let y = kernel::exp(x).mul_add(x, 1.0);
+    let x = crate::f64::mul_add(n, -consts::LN_2, x);
+    let y = crate::f64::mul_add(kernel::exp(x), x, 1.0);
 
     #[allow(clippy::cast_possible_truncation)]
     return kernel::fast_ldexp(y, n as i64) as f32;
@@ -159,16 +175,15 @@ pub fn exp2(x: f32) -> f32 {
 
     let n = x.round_ties_even();
     let x = x - n;
-    let x = P[5]
-        .mul_add(x, P[4])
-        .mul_add(x, P[3])
-        .mul_add(x, P[2])
-        .mul_add(x, P[1])
-        .mul_add(x, P[0])
-        .mul_add(x, 1.0);
+    let y = mul_add(P[5], x, P[4]);
+    let y = mul_add(y, x, P[3]);
+    let y = mul_add(y, x, P[2]);
+    let y = mul_add(y, x, P[1]);
+    let y = mul_add(y, x, P[0]);
+    let y = mul_add(y, x, 1.0);
 
     #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(f64::from(x), n as i64) as f32;
+    return kernel::fast_ldexp(f64::from(y), n as i64) as f32;
 }
 
 /// Compute `exp(x) - 1` accurately especially for small `x`
@@ -190,7 +205,7 @@ pub fn exp_m1(x: f32) -> f32 {
 
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even() + 0.0;
-    let x = n.mul_add(-consts::LN_2, x);
+    let x = crate::f64::mul_add(n, -consts::LN_2, x);
     let y = kernel::exp(x);
 
     if n == 0.0 {
@@ -199,7 +214,7 @@ pub fn exp_m1(x: f32) -> f32 {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    return (kernel::fast_ldexp(y.mul_add(x, 1.0), n as i64) - 1.0) as f32;
+    return (kernel::fast_ldexp(crate::f64::mul_add(x, y, 1.0), n as i64) - 1.0) as f32;
 }
 
 /// Multiply `x` by 2 raised to the power of `n`

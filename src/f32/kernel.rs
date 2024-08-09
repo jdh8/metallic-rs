@@ -22,9 +22,12 @@ pub fn exp(x: f64) -> f64 {
         1.394_858_354_331_218_4e-3,
     ];
 
-    P[5].mul_add(x, P[4])
-        .mul_add(x, P[3])
-        .mul_add(x, P[2])
-        .mul_add(x, P[1])
-        .mul_add(x, P[0])
+    use crate::f64::mul_add;
+
+    let y = mul_add(P[5], x, P[4]);
+    let y = mul_add(y, x, P[3]);
+    let y = mul_add(y, x, P[2]);
+    let y = mul_add(y, x, P[1]);
+
+    mul_add(y, x, P[0])
 }
