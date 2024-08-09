@@ -1,10 +1,8 @@
-metallic-rs
-===========
-![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)
+Math functions from scratch
+===========================
+[![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jdh8/metallic-rs)
 [![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
-
-C math functions from scratch for Rust
 
 This library is a successor to [Metallic], my C library for WebAssembly
 started in 2017.  Its most wanted feature turned out to be math functions I
