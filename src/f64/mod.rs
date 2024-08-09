@@ -18,3 +18,17 @@ pub fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     #[cfg(not(target_feature = "fma"))]
     return x * y + a;
 }
+
+/// Polynomial evaluation with Horner's method
+///
+/// This function evaluates a polynomial with coefficients in `p` at `x`.
+/// This function calls [`mul_add`] for simplicity.
+#[must_use]
+#[inline]
+pub fn poly(x: f64, p: &[f64]) -> f64 {
+    p.iter()
+        .copied()
+        .rev()
+        .reduce(|y, c| mul_add(y, x, c))
+        .unwrap_or_default()
+}

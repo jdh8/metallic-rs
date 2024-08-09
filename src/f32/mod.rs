@@ -67,6 +67,20 @@ pub fn mul_add(x: f32, y: f32, a: f32) -> f32 {
     return x * y + a;
 }
 
+/// Polynomial evaluation with Horner's method
+///
+/// This function evaluates a polynomial with coefficients in `p` at `x`.
+/// This function calls [`mul_add`] for simplicity.
+#[must_use]
+#[inline]
+pub fn poly(x: f32, p: &[f32]) -> f32 {
+    p.iter()
+        .copied()
+        .rev()
+        .reduce(|y, c| mul_add(y, x, c))
+        .unwrap_or_default()
+}
+
 /// The least number greater than `x`
 ///
 /// This is a less careful version of [`f32::next_up`] regarding subnormal
@@ -152,15 +166,6 @@ pub fn exp(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn exp2(x: f32) -> f32 {
-    const P: [f32; 6] = [
-        6.931_472e-1,
-        2.402_265e-1,
-        5.550_357e-2,
-        9.618_031e-3,
-        1.339_086_7e-3,
-        1.546_973_5e-4,
-    ];
-
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 {
         return 0.0;
@@ -172,16 +177,21 @@ pub fn exp2(x: f32) -> f32 {
     }
 
     let n = x.round_ties_even();
-    let x = x - n;
-    let y = mul_add(P[5], x, P[4]);
-    let y = mul_add(y, x, P[3]);
-    let y = mul_add(y, x, P[2]);
-    let y = mul_add(y, x, P[1]);
-    let y = mul_add(y, x, P[0]);
-    let y = mul_add(y, x, 1.0);
+    let x = poly(
+        x - n,
+        &[
+            1.0,
+            6.931_472e-1,
+            2.402_265e-1,
+            5.550_357e-2,
+            9.618_031e-3,
+            1.339_086_7e-3,
+            1.546_973_5e-4,
+        ],
+    );
 
     #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(f64::from(y), n as i64) as f32;
+    return kernel::fast_ldexp(f64::from(x), n as i64) as f32;
 }
 
 /// Compute `exp(x) - 1` accurately especially for small `x`
