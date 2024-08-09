@@ -194,6 +194,41 @@ pub fn exp2(x: f32) -> f32 {
     return kernel::fast_ldexp(f64::from(x), n as i64) as f32;
 }
 
+/// Compute `10^x`
+#[must_use]
+#[inline]
+pub fn exp10(x: f32) -> f32 {
+    use core::f32::consts::LOG10_2;
+
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
+    if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LOG10_2 {
+        return 0.0;
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    if x > f32::MAX_EXP as f32 * LOG10_2 {
+        return f32::INFINITY;
+    }
+
+    let x = f64::from(x) * core::f64::consts::LOG2_10;
+    let n = x.round_ties_even();
+    let x = crate::f64::poly(
+        x - n,
+        &[
+            9.999_999_999_190_67e-1,
+            6.931_472_067_096_466e-1,
+            2.402_265_150_505_521e-1,
+            5.550_327_215_766_594e-2,
+            9.617_994_514_161_479e-3,
+            1.340_043_166_700_788_1e-3,
+            1.547_802_227_945_78e-4,
+        ],
+    );
+
+    #[allow(clippy::cast_possible_truncation)]
+    return kernel::fast_ldexp(x, n as i64) as f32;
+}
+
 /// Compute `exp(x) - 1` accurately especially for small `x`
 #[must_use]
 #[inline]

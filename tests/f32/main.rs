@@ -51,6 +51,33 @@ test_unary!(exp2);
 test_unary!(exp_m1);
 
 #[test]
+fn exp10() {
+    assert!(metal::exp10(1.0).eq(&1e1));
+    assert!(metal::exp10(2.0).eq(&1e2));
+    assert!(metal::exp10(3.0).eq(&1e3));
+    assert!(metal::exp10(4.0).eq(&1e4));
+    assert!(metal::exp10(5.0).eq(&1e5));
+    assert!(metal::exp10(6.0).eq(&1e6));
+    assert!(metal::exp10(7.0).eq(&1e7));
+    assert!(metal::exp10(8.0).eq(&1e8));
+    assert!(metal::exp10(9.0).eq(&1e9));
+    assert!(metal::exp10(10.0).eq(&1e10));
+
+    assert!(metal::exp10(-1.0).eq(&1e-1));
+    assert!(metal::exp10(-2.0).eq(&1e-2));
+    assert!(metal::exp10(-3.0).eq(&1e-3));
+    assert!(metal::exp10(-4.0).eq(&1e-4));
+    assert!(metal::exp10(-5.0).eq(&1e-5));
+    assert!(metal::exp10(-6.0).eq(&1e-6));
+    assert!(metal::exp10(-7.0).eq(&1e-7));
+    assert!(metal::exp10(-8.0).eq(&1e-8));
+    assert!(metal::exp10(-9.0).eq(&1e-9));
+    assert!(metal::exp10(-10.0).eq(&1e-10));
+
+    test_unary(metal::exp10, libm::exp10f, libm::exp10);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
