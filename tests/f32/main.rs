@@ -16,7 +16,6 @@ fn test_unary(
     ours: impl Fn(f32) -> f32,
     std_f32: impl Fn(f32) -> f32,
     std_f64: impl Fn(f64) -> f64,
-    step: usize,
 ) {
     assert_eq!(ours(0.0).to_bits(), std_f32(0.0).to_bits());
     assert_eq!(ours(-0.0).to_bits(), std_f32(-0.0).to_bits());
@@ -31,29 +30,29 @@ fn test_unary(
         std_f32(f32::NEG_INFINITY).to_bits(),
     );
 
-    (0..u32::MAX).step_by(step).for_each(|i| {
+    (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
         assert!(is_faithful_rounding(ours(x), std_f64(f64::from(x))));
     });
 }
 
 macro_rules! test_unary {
-    ($name:ident, $step:expr) => {
+    ($name:ident) => {
         #[test]
         fn $name() {
-            test_unary(metal::$name, f32::$name, f64::$name, $step);
+            test_unary(metal::$name, f32::$name, f64::$name);
         }
     };
 }
 
-test_unary!(cbrt, 69);
-test_unary!(exp, 69);
-test_unary!(exp2, 69);
-test_unary!(exp_m1, 69);
+test_unary!(cbrt);
+test_unary!(exp);
+test_unary!(exp2);
+test_unary!(exp_m1);
 
 #[test]
 fn frexp() {
-    (0..u32::MAX).step_by(69).for_each(|i| {
+    (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
         let (significand, exponent) = metal::frexp(x);
 
