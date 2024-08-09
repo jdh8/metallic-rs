@@ -10,6 +10,20 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 [Metallic]: https://github.com/jdh8/metallic
 
+Enable [fused multiply-add][fma] for best performance!
+------------------------------------------------------
+This crate extensively uses the fused multiply-add instruction if available.
+Sadly, Rust does not enable it in the default `generic` target.  To achieve best
+performance, add the following to your `.cargo/config.toml` either in **your**
+project or home directory:
+
+```toml
+[build]
+rustflags = ["-Ctarget-cpu=native"]
+```
+
+[fma]: https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation
+
 Assumptions
 -----------
 C libraries tend to have strict yet obsolete assumptions on math functions.
