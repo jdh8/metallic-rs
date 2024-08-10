@@ -4,11 +4,12 @@ mod exp10;
 mod exp2;
 mod exp_m1;
 mod frexp;
+mod hypot;
 mod ldexp;
 mod ln;
 mod ln_1p;
-mod log2;
 mod log10;
+mod log2;
 
 criterion::criterion_main!(
     cbrt::benches,
@@ -17,11 +18,12 @@ criterion::criterion_main!(
     exp10::benches,
     exp_m1::benches,
     frexp::benches,
+    hypot::benches,
     ldexp::benches,
     ln::benches,
     ln_1p::benches,
-    log2::benches,
     log10::benches,
+    log2::benches,
 );
 
 #[macro_export]

@@ -136,6 +136,21 @@ pub fn cbrt(x: f32) -> f32 {
     ))))
 }
 
+/// Hypotenuse of a right-angled triangle with sides `x` and `y`
+#[must_use]
+#[inline]
+pub fn hypot(x: f32, y: f32) -> f32 {
+    if x.is_infinite() || y.is_infinite() {
+        return f32::INFINITY;
+    }
+
+    let x: f64 = x.into();
+    let y: f64 = y.into();
+
+    #[allow(clippy::imprecise_flops, clippy::cast_possible_truncation)]
+    return (x * x + y * y).sqrt() as f32;
+}
+
 /// The exponential function
 #[must_use]
 #[inline]
