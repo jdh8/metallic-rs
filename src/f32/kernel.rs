@@ -27,6 +27,15 @@ pub fn exp(x: f64) -> f64 {
     )
 }
 
+/// Polynomial approximation of inverse hyperbolic tangent restricted to [-c,
+/// c], where
+///
+/// ```text
+///     √2 - 1                  1 + c
+/// c = ------  the solution to ----- = √2.
+///     √2 + 1,                 1 - c
+/// ```
+#[inline]
 pub fn atanh_f32(x: f64) -> f64 {
     let y = x * x;
     let y = y * crate::f64::poly(
