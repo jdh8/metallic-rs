@@ -302,3 +302,28 @@ pub fn frexp(x: f32) -> (f32, i32) {
         f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
     )
 }
+
+/// Natural logarithm
+#[must_use]
+#[inline]
+pub fn ln(x: f32) -> f32 {
+    match normalize(x) {
+        (false, Magnitude::Infinite) => f32::INFINITY,
+        (_, Magnitude::Zero) => f32::NEG_INFINITY,
+        (true, _) | (_, Magnitude::Nan) => f32::NAN,
+
+        (false, Magnitude::Normalized(i)) => {
+            let exponent = (i - 0x3F35_04F4) >> EXP_SHIFT;
+
+            #[allow(clippy::cast_sign_loss)]
+            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
+
+            #[allow(clippy::cast_possible_truncation)]
+            return crate::f64::mul_add(
+                core::f64::consts::LN_2,
+                f64::from(exponent),
+                2.0 * kernel::atanh_f32((x - 1.0) / (x + 1.0)),
+            ) as f32;
+        }
+    }
+}
