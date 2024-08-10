@@ -2,6 +2,9 @@ mod ldexp;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
+/// Potential zeros and poles
+const SINGULARITIES: [f32; 4] = [0.0, -0.0, f32::INFINITY, f32::NEG_INFINITY];
+
 /// Semantic identity like `Object.is` in JavaScript
 ///
 /// This function works around comparison issues with NaNs and signed zeros.
@@ -10,14 +13,23 @@ fn is(x: f32, y: f32) -> bool {
     x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
 }
 
+/// Check if the functions return the same value for the given inputs
+fn test_special_values(
+    f: impl Fn(f32) -> f32,
+    g: impl Fn(f32) -> f32,
+    values: impl Iterator<Item = f32>,
+) {
+    values.for_each(|x| assert!(is(f(x), g(x))));
+}
+
 /// Check if `result` is within the nearby `f32` representations of `expected`
 ///
 /// Due to [the Table Maker's Dilemma][dilemma], it is infeasible to implement a
 /// correctly-rounded (error < 0.5 ulp) transcendental function.  However,
 /// faithful rounding (error < 1 ulp) is usually achievable.
-/// 
+///
 /// [dilemma]: https://hal-lara.archives-ouvertes.fr/hal-02101765/document
-/// 
+///
 /// If `expected` has an exact `f32` representation, `result` must be that
 /// value.  Otherwise, `expected` has two `f32` neighbors, and `result` must be
 /// either of them.
@@ -32,28 +44,25 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     next_down < expected && expected < next_up
 }
 
-fn test_unary(
-    ours: impl Fn(f32) -> f32,
-    std_f32: impl Fn(f32) -> f32,
-    std_f64: impl Fn(f64) -> f64,
-) {
-    assert!(is(ours(0.0), std_f32(0.0)));
-    assert!(is(ours(-0.0), std_f32(-0.0)));
-    assert!(is(ours(f32::INFINITY), std_f32(f32::INFINITY)));
-    assert!(is(ours(f32::NEG_INFINITY), std_f32(f32::NEG_INFINITY)));
-
+/// Check if `f` is a faithful rounding of `g` for all `f32` values
+fn test_faithful_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f64) -> f64) {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
-        assert!(is_faithful_rounding(ours(x), std_f64(f64::from(x))));
+        assert!(is_faithful_rounding(f(x), g(f64::from(x))));
     });
 }
 
+/// Test suite for unary functions
 macro_rules! test_unary {
-    ($name:ident) => {
+    ($name:ident, $values:expr) => {
         #[test]
         fn $name() {
-            test_unary(metal::$name, f32::$name, f64::$name);
+            test_special_values(metal::$name, f32::$name, $values);
+            test_faithful_rounding(metal::$name, f64::$name);
         }
+    };
+    ($name:ident) => {
+        test_unary!($name, SINGULARITIES.into_iter());
     };
 }
 
@@ -61,34 +70,17 @@ test_unary!(cbrt);
 test_unary!(exp);
 test_unary!(exp2);
 test_unary!(exp_m1);
-test_unary!(ln);
-test_unary!(ln_1p);
+test_unary!(ln, core::iter::once(1.0).chain(SINGULARITIES));
+test_unary!(ln_1p, core::iter::once(-1.0).chain(SINGULARITIES));
 
 #[test]
 fn exp10() {
-    assert!(metal::exp10(1.0).eq(&1e1));
-    assert!(metal::exp10(2.0).eq(&1e2));
-    assert!(metal::exp10(3.0).eq(&1e3));
-    assert!(metal::exp10(4.0).eq(&1e4));
-    assert!(metal::exp10(5.0).eq(&1e5));
-    assert!(metal::exp10(6.0).eq(&1e6));
-    assert!(metal::exp10(7.0).eq(&1e7));
-    assert!(metal::exp10(8.0).eq(&1e8));
-    assert!(metal::exp10(9.0).eq(&1e9));
-    assert!(metal::exp10(10.0).eq(&1e10));
-
-    assert!(metal::exp10(-1.0).eq(&1e-1));
-    assert!(metal::exp10(-2.0).eq(&1e-2));
-    assert!(metal::exp10(-3.0).eq(&1e-3));
-    assert!(metal::exp10(-4.0).eq(&1e-4));
-    assert!(metal::exp10(-5.0).eq(&1e-5));
-    assert!(metal::exp10(-6.0).eq(&1e-6));
-    assert!(metal::exp10(-7.0).eq(&1e-7));
-    assert!(metal::exp10(-8.0).eq(&1e-8));
-    assert!(metal::exp10(-9.0).eq(&1e-9));
-    assert!(metal::exp10(-10.0).eq(&1e-10));
-
-    test_unary(metal::exp10, libm::exp10f, libm::exp10);
+    test_special_values(
+        metal::exp10,
+        libm::exp10f,
+        (-10i8..=10).map(f32::from).chain(SINGULARITIES),
+    );
+    test_faithful_rounding(metal::exp10, libm::exp10);
 }
 
 #[test]
