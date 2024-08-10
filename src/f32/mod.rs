@@ -191,7 +191,7 @@ pub fn exp2(x: f32) -> f32 {
     );
 
     #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(f64::from(x), n as i64) as f32;
+    return kernel::fast_ldexp(x.into(), n as i64) as f32;
 }
 
 /// Compute `10^x`
@@ -324,7 +324,7 @@ pub fn ln(x: f32) -> f32 {
             #[allow(clippy::cast_possible_truncation)]
             return crate::f64::mul_add(
                 core::f64::consts::LN_2,
-                f64::from(exponent),
+                exponent.into(),
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
             ) as f32;
         }
