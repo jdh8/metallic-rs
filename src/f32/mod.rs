@@ -322,7 +322,7 @@ pub fn ln(x: f32) -> f32 {
             return crate::f64::mul_add(
                 core::f64::consts::LN_2,
                 f64::from(exponent),
-                2.0 * kernel::atanh_f32((x - 1.0) / (x + 1.0)),
+                2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
             ) as f32;
         }
     }
