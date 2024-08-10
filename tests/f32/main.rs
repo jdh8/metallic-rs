@@ -10,14 +10,26 @@ fn is(x: f32, y: f32) -> bool {
     x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
 }
 
+/// Check if `result` is within the nearby `f32` representations of `expected`
+///
+/// Due to [the Table Maker's Dilemma][dilemma], it is infeasible to implement a
+/// correctly-rounded (error < 0.5 ulp) transcendental function.  However,
+/// faithful rounding (error < 1 ulp) is usually achievable.
+/// 
+/// [dilemma]: https://hal-lara.archives-ouvertes.fr/hal-02101765/document
+/// 
+/// If `expected` has an exact `f32` representation, `result` must be that
+/// value.  Otherwise, `expected` has two `f32` neighbors, and `result` must be
+/// either of them.
 fn is_faithful_rounding(result: f32, expected: f64) -> bool {
-    if expected.is_nan() {
-        return result.is_nan();
+    #[allow(clippy::cast_possible_truncation)]
+    if is(result, expected as f32) {
+        return true;
     }
 
     let next_up = f64::from(metal::next_up(result));
     let next_down = f64::from(metal::next_down(result));
-    (next_down..=next_up).contains(&expected)
+    next_down < expected && expected < next_up
 }
 
 fn test_unary(
