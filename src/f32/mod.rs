@@ -312,11 +312,13 @@ pub fn ln(x: f32) -> f32 {
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
         (true, _) | (_, Magnitude::Nan) => f32::NAN,
 
-        (false, Magnitude::Normalized(i)) => {
-            let exponent = (i - 0x3F35_04F4) >> EXP_SHIFT;
+        (false, Magnitude::Normalized(normal)) => {
+            #[allow(clippy::cast_possible_wrap)]
+            let threshold = core::f32::consts::FRAC_1_SQRT_2.to_bits() as i32 + 1;
+            let exponent = (normal - threshold) >> EXP_SHIFT;
 
             #[allow(clippy::cast_sign_loss)]
-            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
+            let x = f64::from(f32::from_bits((normal - (exponent << EXP_SHIFT)) as u32));
 
             #[allow(clippy::cast_possible_truncation)]
             return crate::f64::mul_add(
