@@ -130,7 +130,7 @@ pub fn cbrt(x: f32) -> f32 {
     #[allow(clippy::cast_sign_loss)]
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
 
-    let iter = |y: f32| mul_add(3.0f32.recip(), x / (y * y) - y, y);
+    let iter = |y: f32| mul_add(3.0_f32.recip(), x / (y * y) - y, y);
     iter(iter(iter(f32::from_bits(
         u32::from(sign) << 31 | magnitude,
     ))))
