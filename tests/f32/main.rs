@@ -81,6 +81,11 @@ test_unary!(
         .chain(SINGULARITIES)
 );
 
+test_unary!(
+    log10,
+    (0..11).map(|x| 10.0_f32.powi(x)).chain(SINGULARITIES)
+);
+
 #[test]
 fn exp10() {
     test_special_values(

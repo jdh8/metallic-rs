@@ -393,3 +393,32 @@ pub fn log2(x: f32) -> f32 {
         }
     }
 }
+
+/// Base 10 logarithm
+#[must_use]
+#[inline]
+pub fn log10(x: f32) -> f32 {
+    match normalize(x) {
+        (false, Magnitude::Infinite) => f32::INFINITY,
+        (_, Magnitude::Zero) => f32::NEG_INFINITY,
+        (true, _) | (_, Magnitude::Nan) => f32::NAN,
+
+        (false, Magnitude::Normalized(i)) => {
+            use core::f32::consts::FRAC_1_SQRT_2;
+            use core::f64::consts;
+
+            #[allow(clippy::cast_possible_wrap)]
+            let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
+
+            #[allow(clippy::cast_sign_loss)]
+            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
+
+            #[allow(clippy::cast_possible_truncation)]
+            return crate::f64::mul_add(
+                2.0 * consts::LOG10_E,
+                kernel::atanh((x - 1.0) / (x + 1.0)),
+                consts::LOG10_2 * f64::from(exponent),
+            ) as f32;
+        }
+    }
+}

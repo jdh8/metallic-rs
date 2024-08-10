@@ -8,6 +8,7 @@ mod ldexp;
 mod ln;
 mod ln_1p;
 mod log2;
+mod log10;
 
 criterion::criterion_main!(
     cbrt::benches,
@@ -20,6 +21,7 @@ criterion::criterion_main!(
     ln::benches,
     ln_1p::benches,
     log2::benches,
+    log10::benches,
 );
 
 #[macro_export]
