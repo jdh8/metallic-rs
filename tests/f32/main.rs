@@ -2,6 +2,14 @@ mod ldexp;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
+/// Semantic identity like `Object.is` in JavaScript
+///
+/// This function works around comparison issues with NaNs and signed zeros.
+/// To be specific, `is(f32::NAN, f32::NAN)` but not `is(0.0, -0.0)`.
+fn is(x: f32, y: f32) -> bool {
+    x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
+}
+
 fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     if expected.is_nan() {
         return result.is_nan();
@@ -17,18 +25,10 @@ fn test_unary(
     std_f32: impl Fn(f32) -> f32,
     std_f64: impl Fn(f64) -> f64,
 ) {
-    assert_eq!(ours(0.0).to_bits(), std_f32(0.0).to_bits());
-    assert_eq!(ours(-0.0).to_bits(), std_f32(-0.0).to_bits());
-
-    assert_eq!(
-        ours(f32::INFINITY).to_bits(),
-        std_f32(f32::INFINITY).to_bits(),
-    );
-
-    assert_eq!(
-        ours(f32::NEG_INFINITY).to_bits(),
-        std_f32(f32::NEG_INFINITY).to_bits(),
-    );
+    assert!(is(ours(0.0), std_f32(0.0)));
+    assert!(is(ours(-0.0), std_f32(-0.0)));
+    assert!(is(ours(f32::INFINITY), std_f32(f32::INFINITY)));
+    assert!(is(ours(f32::NEG_INFINITY), std_f32(f32::NEG_INFINITY)));
 
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);

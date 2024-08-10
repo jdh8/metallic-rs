@@ -1,7 +1,7 @@
 mod cbrt;
 mod exp;
-mod exp2;
 mod exp10;
+mod exp2;
 mod exp_m1;
 mod frexp;
 mod ldexp;
