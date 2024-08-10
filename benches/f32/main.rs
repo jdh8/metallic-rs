@@ -6,6 +6,7 @@ mod exp_m1;
 mod frexp;
 mod ldexp;
 mod ln;
+mod ln_1p;
 
 criterion::criterion_main!(
     cbrt::benches,
@@ -16,6 +17,7 @@ criterion::criterion_main!(
     frexp::benches,
     ldexp::benches,
     ln::benches,
+    ln_1p::benches
 );
 
 #[macro_export]

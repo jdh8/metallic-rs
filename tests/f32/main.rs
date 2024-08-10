@@ -50,6 +50,7 @@ test_unary!(exp);
 test_unary!(exp2);
 test_unary!(exp_m1);
 test_unary!(ln);
+test_unary!(ln_1p);
 
 #[test]
 fn exp10() {

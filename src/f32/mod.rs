@@ -1,5 +1,5 @@
 mod kernel;
-use core::num::FpCategory;
+use core::{f32, num::FpCategory};
 
 /// Explicitly stored significand bits in [`f32`]
 ///
@@ -312,13 +312,14 @@ pub fn ln(x: f32) -> f32 {
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
         (true, _) | (_, Magnitude::Nan) => f32::NAN,
 
-        (false, Magnitude::Normalized(normal)) => {
+        (false, Magnitude::Normalized(i)) => {
+            use core::f32::consts::FRAC_1_SQRT_2;
+
             #[allow(clippy::cast_possible_wrap)]
-            let threshold = core::f32::consts::FRAC_1_SQRT_2.to_bits() as i32 + 1;
-            let exponent = (normal - threshold) >> EXP_SHIFT;
+            let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
 
             #[allow(clippy::cast_sign_loss)]
-            let x = f64::from(f32::from_bits((normal - (exponent << EXP_SHIFT)) as u32));
+            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
             #[allow(clippy::cast_possible_truncation)]
             return crate::f64::mul_add(
@@ -326,6 +327,41 @@ pub fn ln(x: f32) -> f32 {
                 f64::from(exponent),
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
             ) as f32;
+        }
+    }
+}
+
+/// Compute `ln(1.0 + x)` accurately especially for small `x`
+#[must_use]
+#[inline]
+pub fn ln_1p(x: f32) -> f32 {
+    match x {
+        f32::INFINITY => f32::INFINITY,
+        -1.0 => f32::NEG_INFINITY,
+        x if x < -1.0 || x.is_nan() => f32::NAN,
+
+        // SAFETY: there is no wrap because `1.0 + x` is positive
+        #[allow(clippy::cast_possible_wrap)]
+        _ => {
+            use core::f64::consts::FRAC_1_SQRT_2;
+            let x = f64::from(x);
+            let i = (1.0 + x).to_bits() as i64;
+            let exponent = (i - FRAC_1_SQRT_2.to_bits() as i64) >> crate::f64::EXP_SHIFT;
+
+            #[allow(clippy::cast_possible_truncation)]
+            return (if exponent == 0 {
+                2.0 * kernel::atanh(x / (2.0 + x))
+            } else {
+                #[allow(clippy::cast_sign_loss)]
+                let y = f64::from_bits((i - (exponent << crate::f64::EXP_SHIFT)) as u64);
+
+                #[allow(clippy::cast_precision_loss)]
+                crate::f64::mul_add(
+                    core::f64::consts::LN_2,
+                    exponent as f64,
+                    2.0 * kernel::atanh((y - 1.0) / (y + 1.0)),
+                )
+            }) as f32;
         }
     }
 }
