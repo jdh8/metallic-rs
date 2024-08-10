@@ -1,5 +1,5 @@
 mod ldexp;
-use core::num::FpCategory;
+use core::{f32, num::FpCategory};
 use metallic::f32 as metal;
 
 /// Potential zeros and poles
@@ -72,6 +72,14 @@ test_unary!(exp2);
 test_unary!(exp_m1);
 test_unary!(ln, core::iter::once(1.0).chain(SINGULARITIES));
 test_unary!(ln_1p, core::iter::once(-1.0).chain(SINGULARITIES));
+
+test_unary!(
+    log2,
+    #[allow(clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+    (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32..f32::MAX_EXP)
+        .map(|x| (x as f32).exp2())
+        .chain(SINGULARITIES)
+);
 
 #[test]
 fn exp10() {
