@@ -69,6 +69,12 @@ Goals
 Milestones
 ----------
 - [ ] Real `f32`/`float` functions in [`<math.h>`][math]
+    + [x] Exponential functions
+    + [x] Logarithm with constant base
+    + [ ] Power and logarithm with arbitrary base
+    + [ ] Trigonometric and hyperbolic functions
+    + [x] Miscellaneous elementary functions
+    + [ ] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
 - [ ] Real `f64`/`double` functions in [`<math.h>`][math]
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
