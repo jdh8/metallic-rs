@@ -13,7 +13,7 @@ fn bench<M: Measurement>(group: &mut BenchmarkGroup<M>, name: &str, f: impl Fn(f
 }
 
 fn bench_exp_m1(criterion: &mut criterion::Criterion) {
-    let mut group = criterion.benchmark_group("exp_m1");
+    let mut group = criterion.benchmark_group("f32::exp_m1");
     crate::bench!(bench, &mut group, metallic::f32::exp_m1);
     crate::bench!(bench, &mut group, libm::expm1f);
     crate::bench!(bench, &mut group, f32::exp_m1);

@@ -13,7 +13,7 @@ fn bench<M: Measurement>(group: &mut BenchmarkGroup<M>, name: &str, f: impl Fn(f
 }
 
 fn bench_round(criterion: &mut criterion::Criterion) {
-    let mut group = criterion.benchmark_group("round");
+    let mut group = criterion.benchmark_group("f32::round");
     crate::bench!(bench, &mut group, metallic::f32::round);
     crate::bench!(bench, &mut group, libm::roundf);
     crate::bench!(bench, &mut group, f32::round);

@@ -15,7 +15,7 @@ fn bench<M: Measurement>(group: &mut BenchmarkGroup<M>, name: &str, f: impl Fn(f
 }
 
 fn bench_hypot(criterion: &mut criterion::Criterion) {
-    let mut group = criterion.benchmark_group("hypot");
+    let mut group = criterion.benchmark_group("f32::hypot");
     crate::bench!(bench, &mut group, metallic::f32::hypot);
     crate::bench!(bench, &mut group, libm::hypotf);
     crate::bench!(bench, &mut group, f32::hypot);
