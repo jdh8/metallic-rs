@@ -346,7 +346,7 @@ pub fn ln(x: f32) -> f32 {
     }
 }
 
-/// Compute `ln(1.0 + x)` accurately especially for small `x`
+/// Compute `ln(1 + x)` accurately especially for small `x`
 #[must_use]
 #[inline]
 pub fn ln_1p(x: f32) -> f32 {
