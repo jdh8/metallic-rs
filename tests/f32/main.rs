@@ -66,6 +66,7 @@ macro_rules! test_unary {
     };
 }
 
+test_unary!(round);
 test_unary!(cbrt);
 test_unary!(exp);
 test_unary!(exp2);

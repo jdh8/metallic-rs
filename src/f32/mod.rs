@@ -117,6 +117,16 @@ pub fn next_down(x: f32) -> f32 {
     }
 }
 
+/// Rounds half-way cases away from zero
+#[must_use]
+#[inline]
+pub fn round(x: f32) -> f32 {
+    let r = x.abs();
+    let i = r.trunc();
+
+    (i + f32::from(r - i >= 0.5)).copysign(x)
+}
+
 /// The cube root
 #[must_use]
 #[inline]
