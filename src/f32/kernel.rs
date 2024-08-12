@@ -52,3 +52,26 @@ pub fn atanh(x: f64) -> f64 {
 
     crate::f64::mul_add(y, x, x)
 }
+
+/// Base 2 logarithm for a finite positive `f64`
+#[inline]
+pub fn log2(x: f64) -> f64 {
+    use crate::f64::EXP_SHIFT;
+    use core::f64::consts;
+
+    #[allow(clippy::cast_possible_wrap)]
+    let i = x.to_bits() as i64;
+
+    #[allow(clippy::cast_possible_wrap)]
+    let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
+
+    #[allow(clippy::cast_sign_loss)]
+    let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+
+    #[allow(clippy::cast_precision_loss)]
+    crate::f64::mul_add(
+        2.0 * consts::LOG2_E,
+        atanh((x - 1.0) / (x + 1.0)),
+        exponent as f64,
+    )
+}

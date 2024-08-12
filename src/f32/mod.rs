@@ -447,3 +447,19 @@ pub fn log10(x: f32) -> f32 {
         }
     }
 }
+
+/// Logarithm with arbitrary base
+#[must_use]
+#[inline]
+pub fn log(x: f32, base: f32) -> f32 {
+    fn log2(x: f32) -> f64 {
+        match (x.is_sign_negative(), x.classify()) {
+            (false, FpCategory::Infinite) => f64::INFINITY,
+            (_, FpCategory::Zero) => f64::NEG_INFINITY,
+            (true, _) | (_, FpCategory::Nan) => f64::NAN,
+            _ => kernel::log2(x.into()),
+        }
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    return (log2(x) / log2(base)) as f32;
+}
