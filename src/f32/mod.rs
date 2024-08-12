@@ -181,7 +181,7 @@ pub fn exp(x: f32) -> f32 {
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even();
     let x = crate::f64::mul_add(n, -consts::LN_2, x);
-    let y = crate::f64::mul_add(kernel::exp(x), x, 1.0);
+    let y = crate::f64::mul_add(kernel::exp_slope(x), x, 1.0);
 
     #[allow(clippy::cast_possible_truncation)]
     return kernel::fast_ldexp(y, n as i64) as f32;
@@ -274,7 +274,7 @@ pub fn exp_m1(x: f32) -> f32 {
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even() + 0.0;
     let x = crate::f64::mul_add(n, -consts::LN_2, x);
-    let y = kernel::exp(x);
+    let y = kernel::exp_slope(x);
 
     if n == 0.0 {
         #[allow(clippy::cast_possible_truncation)]

@@ -12,8 +12,11 @@ pub fn fast_ldexp(x: f64, n: i64) -> f64 {
 
 /// Polynomial approximation of restriction of `(exp(x) - 1) / x`
 /// to [-0.5 ln 2, 0.5 ln 2]
+///
+/// In geometry, this function returns the slope of the secant line between the
+/// points `(0, 1)` and `(x, exp(x))` on the graph of the exponential function.
 #[inline]
-pub fn exp(x: f64) -> f64 {
+pub fn exp_slope(x: f64) -> f64 {
     crate::f64::poly(
         x,
         &[
