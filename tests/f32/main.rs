@@ -87,6 +87,7 @@ test_unary!(
     (0..11).map(|x| 10.0_f32.powi(x)).chain(SINGULARITIES)
 );
 
+test_unary!(asinh);
 test_unary!(atanh, [1.0, -1.0].into_iter().chain(SINGULARITIES));
 
 #[test]

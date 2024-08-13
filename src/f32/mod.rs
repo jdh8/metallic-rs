@@ -524,22 +524,58 @@ pub fn atanh(x: f32) -> f32 {
             let i = ((1.0 + x) / (1.0 - x)).to_bits() as i64;
             let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
 
+            #[allow(clippy::cast_possible_truncation)]
+            if exponent == 0 {
+                return kernel::atanh(x) as f32;
+            }
+
             #[allow(clippy::cast_sign_loss)]
             let y = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
-            #[allow(clippy::cast_possible_truncation)]
-            return (if exponent == 0 {
-                kernel::atanh(x)
-            } else {
-                #[allow(clippy::cast_precision_loss)]
-                crate::f64::mul_add(
-                    0.5 * consts::LN_2,
-                    exponent as f64,
-                    kernel::atanh((y - 1.0) / (y + 1.0)),
-                )
-            }) as f32;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+            return crate::f64::mul_add(
+                0.5 * consts::LN_2,
+                exponent as f64,
+                kernel::atanh((y - 1.0) / (y + 1.0)),
+            ) as f32;
         }
         Some(core::cmp::Ordering::Equal) => f32::INFINITY.copysign(x),
         _ => f32::NAN,
     }
+}
+
+/// Inverse hyperbolic sine
+#[must_use]
+#[inline]
+pub fn asinh(x: f32) -> f32 {
+    #[allow(clippy::cast_possible_wrap)]
+    fn magnitude(s: f64) -> f64 {
+        use crate::f64::EXP_SHIFT;
+        use core::f64::consts;
+
+        let c = crate::f64::mul_add(s, s, 1.0).sqrt();
+        let i = (c + s).to_bits() as i64;
+        let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
+
+        if exponent == 0 {
+            return 2.0 * kernel::atanh(s / (c + 1.0));
+        }
+
+        #[allow(clippy::cast_sign_loss)]
+        let y = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+
+        #[allow(clippy::cast_precision_loss)]
+        crate::f64::mul_add(
+            consts::LN_2,
+            exponent as f64,
+            2.0 * kernel::atanh((y - 1.0) / (y + 1.0)),
+        )
+    }
+
+    if !x.is_finite() {
+        return x;
+    };
+
+    #[allow(clippy::cast_possible_truncation)]
+    (magnitude(x.abs().into()) as f32).copysign(x)
 }
