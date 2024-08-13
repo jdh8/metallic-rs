@@ -1,5 +1,6 @@
 mod kernel;
-use core::{f32, num::FpCategory};
+use core::cmp::Ordering;
+use core::num::FpCategory;
 
 /// Explicitly stored significand bits in [`prim@f32`]
 ///
@@ -187,7 +188,7 @@ pub fn exp(x: f32) -> f32 {
     return kernel::fast_ldexp(y, n as i64) as f32;
 }
 
-/// Compute `2^x`
+/// Raise 2 to the power of `x`
 #[must_use]
 #[inline]
 pub fn exp2(x: f32) -> f32 {
@@ -219,7 +220,7 @@ pub fn exp2(x: f32) -> f32 {
     return kernel::fast_ldexp(x.into(), n as i64) as f32;
 }
 
-/// Compute `10^x`
+/// Raise 10 to the power of `x`
 #[must_use]
 #[inline]
 pub fn exp10(x: f32) -> f32 {
@@ -462,4 +463,49 @@ pub fn log(x: f32, base: f32) -> f32 {
     }
     #[allow(clippy::cast_possible_truncation)]
     return (log2(x) / log2(base)) as f32;
+}
+
+/// Raise to a floating-point power
+#[must_use]
+#[inline]
+pub fn powf(x: f32, y: f32) -> f32 {
+    fn magnitude(x: f32, y: f32) -> f32 {
+        match x.classify() {
+            FpCategory::Nan => f32::NAN,
+            FpCategory::Infinite => match y.partial_cmp(&0.0) {
+                Some(Ordering::Greater) => f32::INFINITY,
+                Some(Ordering::Less) => 0.0,
+                Some(Ordering::Equal) => 1.0,
+                None => f32::NAN,
+            },
+            FpCategory::Zero => match y.partial_cmp(&0.0) {
+                Some(Ordering::Greater) => 0.0,
+                Some(Ordering::Less) => f32::INFINITY,
+                Some(Ordering::Equal) => 1.0,
+                None => f32::NAN,
+            },
+            _ => match x {
+                1.0 => 1.0,
+                x if x.is_sign_negative() => f32::NAN,
+
+                #[allow(clippy::cast_possible_truncation)]
+                _ => kernel::exp2(f64::from(y) * kernel::log2(x.into())) as f32,
+            },
+        }
+    }
+
+    fn is_integer(x: f32) -> bool {
+        x.trunc().eq(&x)
+    }
+
+    if y == 0.0 {
+        return 1.0;
+    }
+
+    if x.is_sign_negative() && is_integer(y) {
+        let sign = if is_integer(0.5 * y) { 1.0 } else { -1.0 };
+        return sign * magnitude(-x, y);
+    }
+
+    magnitude(x, y)
 }

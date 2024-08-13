@@ -59,6 +59,21 @@ pub fn log2(x: f64) -> f64 {
     use crate::f64::EXP_SHIFT;
     use core::f64::consts;
 
+    fn atanh(x: f64) -> f64 {
+        let y = x * x;
+        let y = y * crate::f64::poly(
+            y,
+            &[
+                0.333_333_328_227_282_3,
+                0.200_001_675_954_362_63,
+                0.142_686_542_711_886_85,
+                0.117_910_756_496_814_14,
+            ],
+        );
+
+        crate::f64::mul_add(y, x, x)
+    }
+
     #[allow(clippy::cast_possible_wrap)]
     let i = x.to_bits() as i64;
 
@@ -74,4 +89,36 @@ pub fn log2(x: f64) -> f64 {
         atanh((x - 1.0) / (x + 1.0)),
         exponent as f64,
     )
+}
+
+/// [`f64::exp2`] with precision of `f32`
+///
+/// This function is especially useful for computing `x`<sup>`y`</sup> when
+/// combined with [`log2`].
+#[inline]
+pub fn exp2(x: f64) -> f64 {
+    if x < (f64::MIN_EXP - 1).into() {
+        return 0.0;
+    }
+
+    if x > f64::MAX_EXP.into() {
+        return f64::INFINITY;
+    }
+
+    let n = x.round_ties_even();
+    let x = crate::f64::poly(
+        x - n,
+        &[
+            1.0,
+            6.931_471_880_289_533e-1,
+            2.402_265_108_421_173_5e-1,
+            5.550_357_105_498_874_4e-2,
+            9.618_030_771_171_498e-3,
+            1.339_086_685_300_951e-3,
+            1.546_973_499_989_028_8e-4,
+        ],
+    );
+
+    #[allow(clippy::cast_possible_truncation)]
+    return fast_ldexp(x, n as i64);
 }

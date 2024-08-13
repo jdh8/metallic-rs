@@ -117,3 +117,19 @@ fn frexp() {
         }
     });
 }
+
+#[test]
+fn powf() {
+    (0..=0xFFFF).for_each(|i| {
+        let x = f32::from_bits(0x10001 * i);
+
+        (0..=0xFFFF).for_each(|j| {
+            let y = f32::from_bits(j << 16);
+
+            assert!(is_faithful_rounding(
+                metal::powf(x, y),
+                f64::from(x).powf(y.into()),
+            ));
+        });
+    });
+}

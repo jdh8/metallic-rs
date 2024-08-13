@@ -10,6 +10,7 @@ mod ln;
 mod ln_1p;
 mod log10;
 mod log2;
+mod powf;
 mod round;
 
 criterion::criterion_main!(
@@ -25,6 +26,7 @@ criterion::criterion_main!(
     ln_1p::benches,
     log10::benches,
     log2::benches,
+    powf::benches,
     round::benches,
 );
 
