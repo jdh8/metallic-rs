@@ -8,6 +8,7 @@ mod hypot;
 mod ldexp;
 mod ln;
 mod ln_1p;
+mod log;
 mod log10;
 mod log2;
 mod powf;
@@ -24,6 +25,7 @@ criterion::criterion_main!(
     ldexp::benches,
     ln::benches,
     ln_1p::benches,
+    log::benches,
     log10::benches,
     log2::benches,
     powf::benches,
