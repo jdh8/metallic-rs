@@ -1,3 +1,4 @@
+mod atanh;
 mod cbrt;
 mod exp;
 mod exp10;
@@ -15,6 +16,7 @@ mod powf;
 mod round;
 
 criterion::criterion_main!(
+    atanh::benches,
     cbrt::benches,
     exp::benches,
     exp2::benches,

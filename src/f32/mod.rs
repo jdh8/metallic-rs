@@ -509,3 +509,37 @@ pub fn powf(x: f32, y: f32) -> f32 {
 
     magnitude(x, y)
 }
+
+/// Inverse hyperbolic tangent
+#[must_use]
+#[inline]
+pub fn atanh(x: f32) -> f32 {
+    match x.abs().partial_cmp(&1.0) {
+        #[allow(clippy::cast_possible_wrap)]
+        Some(core::cmp::Ordering::Less) => {
+            use crate::f64::EXP_SHIFT;
+            use core::f64::consts;
+
+            let x: f64 = x.into();
+            let i = ((1.0 + x) / (1.0 - x)).to_bits() as i64;
+            let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
+
+            #[allow(clippy::cast_sign_loss)]
+            let y = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+
+            #[allow(clippy::cast_possible_truncation)]
+            return (if exponent == 0 {
+                kernel::atanh(x)
+            } else {
+                #[allow(clippy::cast_precision_loss)]
+                crate::f64::mul_add(
+                    0.5 * consts::LN_2,
+                    exponent as f64,
+                    kernel::atanh((y - 1.0) / (y + 1.0)),
+                )
+            }) as f32;
+        }
+        Some(core::cmp::Ordering::Equal) => f32::INFINITY.copysign(x),
+        _ => f32::NAN,
+    }
+}
