@@ -1,5 +1,6 @@
 mod kernel;
 use core::cmp::Ordering;
+use core::f32;
 use core::num::FpCategory;
 
 /// Explicitly stored significand bits in [`prim@f32`]
@@ -530,13 +531,13 @@ pub fn atanh(x: f32) -> f32 {
             }
 
             #[allow(clippy::cast_sign_loss)]
-            let y = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+            let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
             #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
             return crate::f64::mul_add(
                 0.5 * consts::LN_2,
                 exponent as f64,
-                kernel::atanh((y - 1.0) / (y + 1.0)),
+                kernel::atanh((x - 1.0) / (x + 1.0)),
             ) as f32;
         }
         Some(core::cmp::Ordering::Equal) => f32::INFINITY.copysign(x),
@@ -562,13 +563,13 @@ pub fn asinh(x: f32) -> f32 {
         }
 
         #[allow(clippy::cast_sign_loss)]
-        let y = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+        let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
         #[allow(clippy::cast_precision_loss)]
         crate::f64::mul_add(
             consts::LN_2,
             exponent as f64,
-            2.0 * kernel::atanh((y - 1.0) / (y + 1.0)),
+            2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
         )
     }
 
@@ -578,4 +579,36 @@ pub fn asinh(x: f32) -> f32 {
 
     #[allow(clippy::cast_possible_truncation)]
     (magnitude(x.abs().into()) as f32).copysign(x)
+}
+
+/// Inverse hyperbolic cosine
+#[must_use]
+#[inline]
+pub fn acosh(x: f32) -> f32 {
+    match x {
+        f32::INFINITY => f32::INFINITY,
+
+        #[allow(clippy::cast_possible_wrap)]
+        (1.0..) => {
+            use crate::f64::EXP_SHIFT;
+            use core::f64::consts;
+
+            let c: f64 = x.into();
+            let s = crate::f64::mul_add(c, c, -1.0).sqrt();
+            let i = (c + s).to_bits() as i64;
+            let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
+
+            #[allow(clippy::cast_sign_loss)]
+            let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+
+            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+            return crate::f64::mul_add(
+                consts::LN_2,
+                exponent as f64,
+                2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
+            ) as f32;
+        }
+
+        _ => f32::NAN,
+    }
 }

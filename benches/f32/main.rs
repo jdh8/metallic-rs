@@ -1,3 +1,4 @@
+mod acosh;
 mod asinh;
 mod atanh;
 mod cbrt;
@@ -17,6 +18,7 @@ mod powf;
 mod round;
 
 criterion::criterion_main!(
+    acosh::benches,
     asinh::benches,
     atanh::benches,
     cbrt::benches,
