@@ -46,7 +46,7 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
 
 /// Check if `f` is a faithful rounding of `g` for all `f32` values
 fn test_faithful_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f64) -> f64) {
-    (0..u32::MAX).for_each(|i| {
+    (0..=u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
         assert!(is_faithful_rounding(f(x), g(f64::from(x))));
     });
@@ -66,8 +66,24 @@ macro_rules! test_unary {
     };
 }
 
+/// Test suite for correctly-rounded unary functions
+macro_rules! test_correct_unary {
+    ($name:ident) => {
+        #[test]
+        #[allow(clippy::cast_possible_truncation)]
+        fn $name() {
+            (0..=u32::MAX).for_each(|i| {
+                let x = f32::from_bits(i);
+                assert!(is(metal::$name(x), f64::$name(x.into()) as f32));
+            });
+        }
+    };
+}
+
+test_correct_unary!(cbrt);
+
 test_unary!(round);
-test_unary!(cbrt);
+//test_unary!(cbrt);
 test_unary!(exp);
 test_unary!(exp2);
 test_unary!(exp_m1);

@@ -142,10 +142,13 @@ pub fn cbrt(x: f32) -> f32 {
     #[allow(clippy::cast_sign_loss)]
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
 
-    let iter = |y: f32| mul_add(3.0_f32.recip(), x / (y * y) - y, y);
-    iter(iter(iter(f32::from_bits(
-        u32::from(sign) << 31 | magnitude,
-    ))))
+    let x: f64 = x.into();
+    let y: f64 = f32::from_bits(u32::from(sign) << 31 | magnitude).into();
+    let y = y * (0.5 + 1.5 * x / crate::f64::mul_add(2.0 * y, y * y, x));
+    let y = y * (0.5 + 1.5 * x / crate::f64::mul_add(2.0 * y, y * y, x));
+
+    #[allow(clippy::cast_possible_truncation)]
+    return y as f32;
 }
 
 /// Hypotenuse of a right-angled triangle with sides `x` and `y`
