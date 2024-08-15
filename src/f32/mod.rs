@@ -187,19 +187,18 @@ pub fn hypot(x: f32, y: f32) -> f32 {
     let error = r - result + dr;
     let bits = result.to_bits();
 
-    #[allow(clippy::cast_possible_truncation)]
-    let result = result as f32;
-
-    if bits & MASK == 0 {
-        #[allow(clippy::cast_possible_truncation)]
+    let result = if bits & MASK == 0 {
         match error.partial_cmp(&0.0) {
-            Some(Ordering::Less) => f64::from_bits(bits - 1) as f32,
-            Some(Ordering::Greater) => f64::from_bits(bits + 1) as f32,
-            _ => result
+            Some(Ordering::Less) => f64::from_bits(bits - 1),
+            Some(Ordering::Greater) => f64::from_bits(bits + 1),
+            _ => result,
         }
     } else {
         result
-    }
+    };
+
+    #[allow(clippy::cast_possible_truncation)]
+    return result as f32;
 }
 
 /// The exponential function

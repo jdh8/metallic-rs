@@ -189,7 +189,7 @@ fn test_hypot() {
 
     for [x, y] in WORST_CASES {
         assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
-    };
+    }
 
     (0..=0xFFFF).for_each(|i| {
         let x = f32::from_bits(0x10001 * i);
