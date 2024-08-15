@@ -52,6 +52,16 @@ fn test_faithful_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f64) -> f64) {
     });
 }
 
+/// Check if `f` returns the same result as `g` for every `f32` values
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+fn test_correct_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
+    (0..=u32::MAX).for_each(|i| {
+        let x = f32::from_bits(i);
+        assert!(is(f(x), g(x)));
+    });
+}
+
 /// Test suite for unary functions
 macro_rules! test_unary {
     ($name:ident, $values:expr) => {
@@ -66,24 +76,16 @@ macro_rules! test_unary {
     };
 }
 
-/// Test suite for correctly-rounded unary functions
-macro_rules! test_correct_unary {
-    ($name:ident) => {
-        #[test]
-        #[allow(clippy::cast_possible_truncation)]
-        fn $name() {
-            (0..=u32::MAX).for_each(|i| {
-                let x = f32::from_bits(i);
-                assert!(is(metal::$name(x), f64::$name(x.into()) as f32));
-            });
-        }
-    };
+#[test]
+fn test_round() {
+    test_correct_rounding(metal::round, f32::round);
 }
 
-test_correct_unary!(cbrt);
+#[test]
+fn test_cbrt() {
+    test_correct_rounding(metal::cbrt, core_math::cbrtf);
+}
 
-test_unary!(round);
-//test_unary!(cbrt);
 test_unary!(exp);
 test_unary!(exp2);
 test_unary!(exp_m1);
