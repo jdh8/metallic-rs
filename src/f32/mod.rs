@@ -155,8 +155,6 @@ pub fn cbrt(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn hypot(x: f32, y: f32) -> f32 {
-    const MASK: u64 = 0x0FFF_FFFF;
-
     if x.is_infinite() || y.is_infinite() {
         return f32::INFINITY;
     }
@@ -187,7 +185,7 @@ pub fn hypot(x: f32, y: f32) -> f32 {
     let error = r - result + dr;
     let bits = result.to_bits();
 
-    let result = if bits & MASK == 0 {
+    let result = if bits.trailing_zeros() >= (f64::MANTISSA_DIGITS - f32::MANTISSA_DIGITS - 1) {
         match error.partial_cmp(&0.0) {
             Some(Ordering::Less) => f64::from_bits(bits - 1),
             Some(Ordering::Greater) => f64::from_bits(bits + 1),
