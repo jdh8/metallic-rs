@@ -155,15 +155,51 @@ pub fn cbrt(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn hypot(x: f32, y: f32) -> f32 {
+    const MASK: u64 = 0x0FFF_FFFF;
+
     if x.is_infinite() || y.is_infinite() {
         return f32::INFINITY;
     }
 
     let x: f64 = x.into();
     let y: f64 = y.into();
+    let xx = x * x;
+    let yy = y * y;
+    let rr = xx + yy;
+    let r = rr.sqrt();
 
-    #[allow(clippy::imprecise_flops, clippy::cast_possible_truncation)]
-    return (x * x + y * y).sqrt() as f32;
+    if r > 0.5_f64.mul_add(f32::MAX.into(), f64::exp2(127.0)) {
+        return f32::INFINITY;
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    let candidate = r as f32;
+    let c: f64 = candidate.into();
+    let (xx, yy) = (xx.max(yy), xx.min(yy));
+
+    if crate::f64::mul_add(c, c, -xx).eq(&yy) {
+        return candidate;
+    }
+
+    let error = xx - rr + yy - r.mul_add(r, -rr);
+    let dr = 0.5 / rr * r * error;
+    let result = r + dr;
+    let error = r - result + dr;
+    let bits = result.to_bits();
+
+    #[allow(clippy::cast_possible_truncation)]
+    let result = result as f32;
+
+    if bits & MASK == 0 {
+        #[allow(clippy::cast_possible_truncation)]
+        match error.partial_cmp(&0.0) {
+            Some(Ordering::Less) => f64::from_bits(bits - 1) as f32,
+            Some(Ordering::Greater) => f64::from_bits(bits + 1) as f32,
+            _ => result
+        }
+    } else {
+        result
+    }
 }
 
 /// The exponential function
