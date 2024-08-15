@@ -17,6 +17,7 @@ fn bench_ln_1p(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::ln_1p);
     crate::bench!(bench, &mut group, libm::log1pf);
     crate::bench!(bench, &mut group, f32::ln_1p);
+    crate::bench!(bench, &mut group, super::as_safe(core_math_sys::log1pf));
 }
 
 criterion::criterion_group!(benches, bench_ln_1p);

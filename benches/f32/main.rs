@@ -44,3 +44,7 @@ macro_rules! bench {
         $bench($criterion, stringify!($f), $f);
     };
 }
+
+fn as_safe(f: unsafe extern "C" fn(f32) -> f32) -> impl Fn(f32) -> f32 {
+    move |x| unsafe { f(x) }
+}

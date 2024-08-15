@@ -19,6 +19,7 @@ fn bench_powf(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::powf);
     crate::bench!(bench, &mut group, libm::powf);
     crate::bench!(bench, &mut group, f32::powf);
+    crate::bench!(bench, &mut group, |x, y| unsafe { core_math_sys::powf(x, y) });
 }
 
 criterion::criterion_group!(benches, bench_powf);

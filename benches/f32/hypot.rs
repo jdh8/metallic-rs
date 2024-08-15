@@ -19,6 +19,7 @@ fn bench_hypot(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::hypot);
     crate::bench!(bench, &mut group, libm::hypotf);
     crate::bench!(bench, &mut group, f32::hypot);
+    crate::bench!(bench, &mut group, |x, y| unsafe { core_math_sys::hypotf(x, y) });
 }
 
 criterion::criterion_group!(benches, bench_hypot);

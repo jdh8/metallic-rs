@@ -17,6 +17,7 @@ fn bench_asinh(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::asinh);
     crate::bench!(bench, &mut group, libm::asinhf);
     crate::bench!(bench, &mut group, f32::asinh);
+    crate::bench!(bench, &mut group, super::as_safe(core_math_sys::asinhf));
 }
 
 criterion::criterion_group!(benches, bench_asinh);

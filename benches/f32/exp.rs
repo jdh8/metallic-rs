@@ -17,6 +17,7 @@ fn bench_exp(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::exp);
     crate::bench!(bench, &mut group, libm::expf);
     crate::bench!(bench, &mut group, f32::exp);
+    crate::bench!(bench, &mut group, super::as_safe(core_math_sys::expf));
 }
 
 criterion::criterion_group!(benches, bench_exp);
