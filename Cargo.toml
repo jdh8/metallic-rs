@@ -10,7 +10,7 @@ categories = ["mathematics"]
 keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
 
 [dev-dependencies]
-core-math-sys = "0.1.2"
+core-math = "0.1.0"
 criterion = "0.5.1"
 libm = "0.2.8"
 rand = "0.8.5"

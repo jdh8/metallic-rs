@@ -17,7 +17,7 @@ fn bench_log10(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::log10);
     crate::bench!(bench, &mut group, libm::log10f);
     crate::bench!(bench, &mut group, f32::log10);
-    crate::bench!(bench, &mut group, super::as_safe(core_math_sys::cr_log10f));
+    crate::bench!(bench, &mut group, core_math::log10f);
 }
 
 criterion::criterion_group!(benches, bench_log10);

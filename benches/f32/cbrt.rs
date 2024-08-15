@@ -17,7 +17,7 @@ fn bench_cbrt(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::cbrt);
     crate::bench!(bench, &mut group, libm::cbrtf);
     crate::bench!(bench, &mut group, f32::cbrt);
-    crate::bench!(bench, &mut group, super::as_safe(core_math_sys::cr_cbrtf));
+    crate::bench!(bench, &mut group, core_math::cbrtf);
 }
 
 criterion::criterion_group!(benches, bench_cbrt);

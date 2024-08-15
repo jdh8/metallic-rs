@@ -17,7 +17,7 @@ fn bench_acosh(criterion: &mut criterion::Criterion) {
     crate::bench!(bench, &mut group, metallic::f32::acosh);
     crate::bench!(bench, &mut group, libm::acoshf);
     crate::bench!(bench, &mut group, f32::acosh);
-    crate::bench!(bench, &mut group, super::as_safe(core_math_sys::cr_acoshf));
+    crate::bench!(bench, &mut group, core_math::acoshf);
 }
 
 criterion::criterion_group!(benches, bench_acosh);
