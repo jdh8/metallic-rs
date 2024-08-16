@@ -18,6 +18,9 @@ rand = "0.8.5"
 [profile.dev]
 opt-level = 3
 
+[workspace]
+members = ["convert-wc"]
+
 [[bench]]
 name = "f32"
 harness = false
