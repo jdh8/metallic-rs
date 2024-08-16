@@ -1,5 +1,5 @@
 mod ldexp;
-use core::{f32, num::FpCategory};
+use core::num::FpCategory;
 use metallic::f32 as metal;
 
 /// Potential zeros and poles
@@ -162,35 +162,7 @@ macro_rules! test_binary {
 }
 
 #[test]
-fn test_hypot() {
-    // Worst cases taken from [CORE-MATH]/src/binary32/hypot/hypotf.wc
-    const WORST_CASES: [[f32; 2]; 20] = [
-        [3.824_151_8e-16, -1.006_103_66e-19],
-        [1.181_016_1e-10, 4.048_443e-14],
-        [2.989_237_4e29, -3.299_689_3e32],
-        [-8.334_588e-39, 1.667_698e-38],
-        [6.765_83e-39, -4.832_257e-39],
-        [1.814_624_1e20, -2.611_292_4e23],
-        [3.402_823_5e38, 8.307_674_5e34],
-        [3.402_823_5e38, 1e-45],
-        [6.710_95e7, 1.556_614_1e7],
-        [6.710_957_6e7, 1.386_722_9e7],
-        [6.710_965e7, 1.500_396_5e7],
-        [6.710_985e7, 9.827_915e6],
-        [6.710_989e7, 1.174_075_7e7],
-        [6.711_023e7, 1.268_156_5e7],
-        [6.711_025e7, 9.634_667e6],
-        [6.711_069_6e7, 9.967_029e6],
-        [6.711_069_6e7, 1.616_553_9e7],
-        [6.711_071e7, 1.133_352_5e7],
-        [6.711_075e7, 1.044_855_5e7],
-        [1.342_221_3e8, 1.156_074_7e7],
-    ];
-
-    for [x, y] in WORST_CASES {
-        assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
-    }
-
+fn test_hypot_usual() {
     (0..=0xFFFF).for_each(|i| {
         let x = f32::from_bits(0x10001 * i);
 
@@ -198,6 +170,15 @@ fn test_hypot() {
             let y = f32::from_bits(j << 16);
             assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
         });
+    });
+}
+
+#[test]
+fn test_hypot_worst_cases() {
+    include_bytes!("hypot.wc").chunks_exact(8).for_each(|chunk| {
+        let x = f32::from_le_bytes(chunk[..4].try_into().expect("4 bytes"));
+        let y = f32::from_le_bytes(chunk[4..].try_into().expect("4 bytes"));
+        assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
     });
 }
 
