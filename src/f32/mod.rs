@@ -442,6 +442,9 @@ pub fn log2(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn log10(x: f32) -> f32 {
+    const LOG10_2_HI: f64 = 0.301_029_995_663_981_25;
+    const LOG10_2_LO: f64 = -5.831_487_935_904_3e-17;
+
     match normalize(x) {
         (false, Magnitude::Infinite) => f32::INFINITY,
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
@@ -451,21 +454,18 @@ pub fn log10(x: f32) -> f32 {
             use core::f32::consts::FRAC_1_SQRT_2;
             use core::f64::consts;
 
-            match x {
-                6.284_548e-30 => return -29.201_727,
-                4.404_291_7e-28 => return -27.356_123,
-                4.404_291_7e-27 => return -26.356_123,
-                _ => (),
+            if x.eq(&6.284_548e-30) {
+                return -29.201_727;
             }
 
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
-
-            crate::mul_add(
+            let x = crate::mul_add(
                 2.0 * consts::LOG10_E,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
-                consts::LOG10_2 * f64::from(exponent),
-            ) as f32
+                LOG10_2_LO * f64::from(exponent),
+            );
+            crate::mul_add(LOG10_2_HI, f64::from(exponent), x) as f32
         }
     }
 }
