@@ -128,10 +128,10 @@ fn test_log2() {
     test_identity(metal::log2, core_math::log2f);
 }
 
-test_unary!(
-    log10,
-    (0..11).map(|x| 10.0_f32.powi(x)).chain(SINGULARITIES)
-);
+#[test]
+fn test_log10() {
+    test_identity(metal::log10, core_math::log10f);
+}
 
 test_unary!(acosh, core::iter::once(1.0).chain(SINGULARITIES));
 test_unary!(asinh);

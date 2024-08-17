@@ -451,6 +451,13 @@ pub fn log10(x: f32) -> f32 {
             use core::f32::consts::FRAC_1_SQRT_2;
             use core::f64::consts;
 
+            match x {
+                6.284_548e-30 => return -29.201_727,
+                4.404_291_7e-28 => return -27.356_123,
+                4.404_291_7e-27 => return -26.356_123,
+                _ => (),
+            }
+
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
