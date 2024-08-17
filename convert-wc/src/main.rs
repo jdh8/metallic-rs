@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
-use core::ops::Neg;
 use clap::{Parser, Subcommand};
+use core::ops::Neg;
 use hexf_parse::ParseHexfError;
 use regex::Regex;
 use std::fs::File;

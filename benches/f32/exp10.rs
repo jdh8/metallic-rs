@@ -16,7 +16,7 @@ fn bench_exp10(criterion: &mut criterion::Criterion) {
     let mut group = criterion.benchmark_group("f32::exp10");
     crate::bench!(bench, &mut group, metallic::f32::exp10);
     crate::bench!(bench, &mut group, libm::exp10f);
-    //crate::bench!(bench, &mut group, core_math::exp10f);
+    crate::bench!(bench, &mut group, core_math::exp10f);
 }
 
 criterion::criterion_group!(benches, bench_exp10);

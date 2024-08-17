@@ -56,14 +56,17 @@ fn test_faithful_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f64) -> f64) {
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
 fn test_correct_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
-    (0..=u32::MAX).for_each(|i| {
-        let x = f32::from_bits(i);
-        //assert!(is(f(x), g(x)), "{x}: {:e} != {:e}", f(x), g(x));
+    let count = (0..=u32::MAX)
+        .filter_map(|i| {
+            let x = f32::from_bits(i);
+            (!is(f(x), g(x))).then(|| {
+                println!("{x}: {:e} != {:e}", f(x), g(x));
+                Some(())
+            })
+        })
+        .count();
 
-        if !is(f(x), g(x)) {
-            println!("{x}: {:e} != {:e}", f(x), g(x));
-        }
-    });
+    assert_eq!(count, 0, "There are {count} mismatches");
 }
 
 /// Test suite for unary functions
@@ -100,6 +103,11 @@ fn test_exp2() {
     test_correct_rounding(metal::exp2, core_math::exp2f);
 }
 
+#[test]
+fn test_exp10() {
+    test_correct_rounding(metal::exp10, core_math::exp10f);
+}
+
 test_unary!(exp_m1);
 test_unary!(ln, core::iter::once(1.0).chain(SINGULARITIES));
 test_unary!(ln_1p, core::iter::once(-1.0).chain(SINGULARITIES));
@@ -120,16 +128,6 @@ test_unary!(
 test_unary!(acosh, core::iter::once(1.0).chain(SINGULARITIES));
 test_unary!(asinh);
 test_unary!(atanh, [1.0, -1.0].into_iter().chain(SINGULARITIES));
-
-#[test]
-fn exp10() {
-    test_special_values(
-        metal::exp10,
-        libm::exp10f,
-        (-10i8..=10).map(f32::from).chain(SINGULARITIES),
-    );
-    test_faithful_rounding(metal::exp10, libm::exp10);
-}
 
 #[test]
 fn frexp() {
@@ -187,11 +185,13 @@ fn test_hypot_usual() {
 
 #[test]
 fn test_hypot_worst_cases() {
-    include_bytes!("hypot.wc").chunks_exact(8).for_each(|chunk| {
-        let x = f32::from_le_bytes(chunk[..4].try_into().expect("4 bytes"));
-        let y = f32::from_le_bytes(chunk[4..].try_into().expect("4 bytes"));
-        assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
-    });
+    include_bytes!("hypot.wc")
+        .chunks_exact(8)
+        .for_each(|chunk| {
+            let x = f32::from_le_bytes(chunk[..4].try_into().expect("4 bytes"));
+            let y = f32::from_le_bytes(chunk[4..].try_into().expect("4 bytes"));
+            assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
+        });
 }
 
 test_binary!(log);

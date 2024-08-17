@@ -233,7 +233,7 @@ pub fn exp(x: f32) -> f32 {
 /// Raise 2 to the power of `x`
 #[must_use]
 #[inline]
-pub fn exp2(x: f32) -> f32 {    
+pub fn exp2(x: f32) -> f32 {
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 {
         return 0.0;
@@ -277,6 +277,8 @@ pub fn exp2(x: f32) -> f32 {
 #[inline]
 pub fn exp10(x: f32) -> f32 {
     use core::f32::consts::LOG10_2;
+    const LOG10_2_HI: f64 = 0.301_029_995_664_066_5;
+    const LOG10_2_LO: f64 = -8.532_344_317_057_107e-14;
 
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LOG10_2 {
@@ -288,18 +290,24 @@ pub fn exp10(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    let x = f64::from(x) * core::f64::consts::LOG2_10;
-    let n = x.round_ties_even();
+    let x: f64 = x.into();
+    let n = (x * core::f64::consts::LOG2_10).round_ties_even();
+    let x = crate::f64::mul_add(n, -LOG10_2_HI, x);
+    let x = crate::f64::mul_add(n, -LOG10_2_LO, x);
     let x = crate::f64::poly(
-        x - n,
+        x,
         &[
-            9.999_999_999_190_67e-1,
-            6.931_472_067_096_466e-1,
-            2.402_265_150_505_521e-1,
-            5.550_327_215_766_594e-2,
-            9.617_994_514_161_479e-3,
-            1.340_043_166_700_788_1e-3,
-            1.547_802_227_945_78e-4,
+            1.0,
+            2.302_585_092_994_048_6,
+            2.650_949_055_239_204_5,
+            2.034_678_592_287_247,
+            1.171_255_148_908_203,
+            5.393_829_313_950_126e-1,
+            2.069_958_495_746_965_8e-1,
+            6.808_909_329_404_776e-2,
+            1.959_761_565_686_179e-2,
+            5.027_633_471_110_143e-3,
+            1.157_655_379_074_781_8e-3,
         ],
     );
 
