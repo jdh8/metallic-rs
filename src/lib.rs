@@ -19,6 +19,7 @@ fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     return x.mul_add(y, a);
 
     #[cfg(not(target_feature = "fma"))]
+    #[allow(clippy::suboptimal_flops)]
     return x * y + a;
 }
 
@@ -26,11 +27,15 @@ fn mul_add(x: f64, y: f64, a: f64) -> f64 {
 ///
 /// This function evaluates a polynomial with coefficients in `p` at `x`.
 /// This function calls [`mul_add`] for simplicity.
-#[inline]
-fn poly(x: f64, p: &[f64]) -> f64 {
-    p.iter()
+fn poly<const N: usize>(x: f64, p: &[f64; N]) -> f64 {
+    #[cfg(target_feature = "fma")]
+    return p
+        .iter()
         .copied()
         .rev()
         .reduce(|y, c| mul_add(y, x, c))
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    #[cfg(not(target_feature = "fma"))]
+    return fast_polynomial::poly_array(x, p);
 }
