@@ -60,7 +60,7 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
         .filter_map(|i| {
             let x = f32::from_bits(i);
             (!is(f(x), g(x))).then(|| {
-                println!("{x:e}: {:e} != {:e}", f(x), g(x));
+                println!("{x:.9e}: {:.9e} != {:.9e}", f(x), g(x));
                 Some(())
             })
         })
@@ -138,7 +138,11 @@ fn test_acosh() {
     test_identity(metal::acosh, core_math::acoshf);
 }
 
-test_unary!(asinh);
+#[test]
+fn test_asinh() {
+    test_identity(metal::asinh, core_math::asinhf);
+}
+
 test_unary!(atanh, [1.0, -1.0].into_iter().chain(SINGULARITIES));
 
 #[test]

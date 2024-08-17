@@ -562,16 +562,24 @@ pub fn atanh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn asinh(x: f32) -> f32 {
-    fn magnitude(s: f64) -> f64 {
+    fn magnitude(s: f32) -> f32 {
         use crate::f64::EXP_SHIFT;
         use core::f64::consts;
 
+        match s {
+            2.901_895_4e7 => return 17.876_608,
+            6.391_892e22 => return 53.20505,
+            2.749_153e28 => return 66.17683,
+            _ => (),
+        }
+
+        let s: f64 = s.into();
         let c = crate::mul_add(s, s, 1.0).sqrt();
         let i = (c + s).to_bits() as i64;
         let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
 
         if exponent == 0 {
-            return 2.0 * kernel::atanh(s / (c + 1.0));
+            return (2.0 * kernel::atanh(s / (c + 1.0))) as f32;
         }
 
         let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
@@ -580,14 +588,14 @@ pub fn asinh(x: f32) -> f32 {
             consts::LN_2,
             exponent as f64,
             2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
-        )
+        ) as f32
     }
 
     if !x.is_finite() {
         return x;
     }
 
-    (magnitude(x.abs().into()) as f32).copysign(x)
+    magnitude(x.abs()).copysign(x)
 }
 
 /// Inverse hyperbolic cosine
