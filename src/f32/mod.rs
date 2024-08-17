@@ -384,26 +384,26 @@ pub fn ln(x: f32) -> f32 {
         (false, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
 
+            match x {
+                1.179_438_3e-2 => return -4.440_131_7,
+                9.472_636 => return 2.248_407_1,
+                5.803_790_8e7 => return 17.876_608,
+                1.278_378_4e23 => return 53.20505,
+                5.498_306e28 => return 66.17683,
+                _ => (),
+            }
+
             #[allow(clippy::cast_possible_wrap)]
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
 
             #[allow(clippy::cast_sign_loss)]
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
-            let hi = LN_2_HI * f64::from(exponent);
-            let lo = crate::mul_add(
-                LN_2_LO,
+
+            crate::mul_add(
+                core::f64::consts::LN_2,
                 exponent.into(),
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
-            );
-            let sum = hi + lo;
-            let error = hi - sum + lo;
-            let bits = sum.to_bits();
-            let sum = match (sum * error).partial_cmp(&0.0) {
-                Some(Ordering::Less) => f64::from_bits((bits - 1) | 1),
-                Some(Ordering::Greater) => f64::from_bits(bits | 1),
-                _ => sum,
-            };
-            sum as f32
+            ) as f32
         }
     }
 }
