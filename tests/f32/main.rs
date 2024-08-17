@@ -2,24 +2,12 @@ mod ldexp;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
-/// Potential zeros and poles
-const SINGULARITIES: [f32; 4] = [0.0, -0.0, f32::INFINITY, f32::NEG_INFINITY];
-
 /// Semantic identity like `Object.is` in JavaScript
 ///
 /// This function works around comparison issues with NaNs and signed zeros.
 /// To be specific, `is(f32::NAN, f32::NAN)` but not `is(0.0, -0.0)`.
 fn is(x: f32, y: f32) -> bool {
     x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
-}
-
-/// Check if the functions return the same value for the given inputs
-fn test_special_values(
-    f: impl Fn(f32) -> f32,
-    g: impl Fn(f32) -> f32,
-    values: impl Iterator<Item = f32>,
-) {
-    values.for_each(|x| assert!(is(f(x), g(x))));
 }
 
 /// Check if `result` is within the nearby `f32` representations of `expected`
@@ -44,14 +32,6 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     next_down < expected && expected < next_up
 }
 
-/// Check if `f` is a faithful rounding of `g` for all `f32` values
-fn test_faithful_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f64) -> f64) {
-    (0..=u32::MAX).for_each(|i| {
-        let x = f32::from_bits(i);
-        assert!(is_faithful_rounding(f(x), g(f64::from(x))));
-    });
-}
-
 /// Check if `f` returns the same result as `g` for every `f32` values
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
@@ -67,20 +47,6 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
         .count();
 
     assert_eq!(count, 0, "There are {count} mismatches");
-}
-
-/// Test suite for unary functions
-macro_rules! test_unary {
-    ($name:ident, $values:expr) => {
-        #[test]
-        fn $name() {
-            test_special_values(metal::$name, f32::$name, $values);
-            test_faithful_rounding(metal::$name, f64::$name);
-        }
-    };
-    ($name:ident) => {
-        test_unary!($name, SINGULARITIES.into_iter());
-    };
 }
 
 #[test]
@@ -143,7 +109,10 @@ fn test_asinh() {
     test_identity(metal::asinh, core_math::asinhf);
 }
 
-test_unary!(atanh, [1.0, -1.0].into_iter().chain(SINGULARITIES));
+#[test]
+fn test_atanh() {
+    test_identity(metal::atanh, core_math::atanhf);
+}
 
 #[test]
 fn frexp() {
