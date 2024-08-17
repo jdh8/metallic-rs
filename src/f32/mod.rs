@@ -445,11 +445,14 @@ pub fn log10(x: f32) -> f32 {
     const LOG10_2_HI: f64 = 0.301_029_995_663_981_25;
     const LOG10_2_LO: f64 = -5.831_487_935_904_3e-17;
 
+    if x.eq(&6.284_548e-30) {
+        return -29.201_727;
+    }
+
     match normalize(x) {
         (false, Magnitude::Infinite) => f32::INFINITY,
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
         (true, _) | (_, Magnitude::Nan) => f32::NAN,
-        (false, Magnitude::Normalized(0x0EFE_EE7A)) => -29.201_727,
 
         (false, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
