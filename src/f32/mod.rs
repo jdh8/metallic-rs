@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 mod kernel;
 use core::cmp::Ordering;
 use core::f32;
@@ -44,7 +46,6 @@ enum Magnitude {
 }
 
 /// Break a `f32` into its sign and magnitude
-#[allow(clippy::cast_possible_wrap)]
 #[inline]
 fn normalize(x: f32) -> (bool, Magnitude) {
     let sign = x.is_sign_negative();
@@ -117,18 +118,13 @@ pub fn cbrt(x: f32) -> f32 {
         return x;
     };
 
-    // SAFETY: the minimum magnitude is -0x0B00_0000, so the cast integer is
-    // always positive
-    #[allow(clippy::cast_sign_loss)]
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
-
     let x: f64 = x.into();
     let y: f64 = f32::from_bits(u32::from(sign) << 31 | magnitude).into();
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
 
-    #[allow(clippy::cast_possible_truncation)]
-    return y as f32;
+    y as f32
 }
 
 /// Hypotenuse of a right-angled triangle with sides `x` and `y`
@@ -150,7 +146,6 @@ pub fn hypot(x: f32, y: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    #[allow(clippy::cast_possible_truncation)]
     let candidate = r as f32;
     let c: f64 = candidate.into();
     let (xx, yy) = (xx.max(yy), xx.min(yy));
@@ -175,8 +170,7 @@ pub fn hypot(x: f32, y: f32) -> f32 {
         result
     };
 
-    #[allow(clippy::cast_possible_truncation)]
-    return result as f32;
+    result as f32
 }
 
 /// The exponential function
@@ -186,12 +180,10 @@ pub fn exp(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
 
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LN_2 {
         return 0.0;
     }
 
-    #[allow(clippy::cast_precision_loss)]
     if x > f32::MAX_EXP as f32 * LN_2 {
         return f32::INFINITY;
     }
@@ -202,20 +194,17 @@ pub fn exp(x: f32) -> f32 {
     let x = crate::mul_add(n, -LN_2_LO, x);
     let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
 
-    #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(y, n as i64) as f32;
+    kernel::fast_ldexp(y, n as i64) as f32
 }
 
 /// Raise 2 to the power of `x`
 #[must_use]
 #[inline]
 pub fn exp2(x: f32) -> f32 {
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 {
         return 0.0;
     }
 
-    #[allow(clippy::cast_precision_loss)]
     if x > f32::MAX_EXP as f32 {
         return f32::INFINITY;
     }
@@ -244,8 +233,7 @@ pub fn exp2(x: f32) -> f32 {
         ],
     );
 
-    #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(x, n as i64) as f32;
+    kernel::fast_ldexp(x, n as i64) as f32
 }
 
 /// Raise 10 to the power of `x`
@@ -256,12 +244,10 @@ pub fn exp10(x: f32) -> f32 {
     const LOG10_2_HI: f64 = 0.301_029_995_664_066_5;
     const LOG10_2_LO: f64 = -8.532_344_317_057_107e-14;
 
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LOG10_2 {
         return 0.0;
     }
 
-    #[allow(clippy::cast_precision_loss)]
     if x > f32::MAX_EXP as f32 * LOG10_2 {
         return f32::INFINITY;
     }
@@ -287,8 +273,7 @@ pub fn exp10(x: f32) -> f32 {
         ],
     );
 
-    #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(x, n as i64) as f32;
+    kernel::fast_ldexp(x, n as i64) as f32
 }
 
 /// Compute `exp(x) - 1` accurately especially for small `x`
@@ -298,12 +283,10 @@ pub fn exp_m1(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
 
-    #[allow(clippy::cast_precision_loss)]
     if x < -17.5 {
         return -1.0;
     }
 
-    #[allow(clippy::cast_precision_loss)]
     if x > f32::MAX_EXP as f32 * LN_2 {
         return f32::INFINITY;
     }
@@ -321,12 +304,10 @@ pub fn exp_m1(x: f32) -> f32 {
     let y = kernel::exp_slope(x);
 
     if n == 0.0 {
-        #[allow(clippy::cast_possible_truncation)]
         return (x * y) as f32;
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    return (kernel::fast_ldexp(crate::mul_add(x, y, 1.0), n as i64) - 1.0) as f32;
+    (kernel::fast_ldexp(crate::mul_add(x, y, 1.0), n as i64) - 1.0) as f32
 }
 
 /// Multiply `x` by 2 raised to the power of `n`
@@ -338,15 +319,11 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
 
     let coefficient = match n {
         ..MIN_EXP => 0.5 * f64::MIN_POSITIVE,
-
-        #[allow(clippy::cast_sign_loss)]
         n @ MIN_EXP..MAX_EXP => f64::from_bits(((MAX_EXP - 1 + n) as u64) << crate::f64::EXP_SHIFT),
-
         MAX_EXP.. => f64::MAX,
     };
 
-    #[allow(clippy::cast_possible_truncation)]
-    return (f64::from(x) * coefficient) as f32;
+    (f64::from(x) * coefficient) as f32
 }
 
 /// Decompose into a significand and an exponent
@@ -362,8 +339,6 @@ pub fn frexp(x: f32) -> (f32, i32) {
     };
 
     let mask = f32::MIN_POSITIVE.to_bits() - 1;
-
-    #[allow(clippy::cast_sign_loss)]
     let significand = magnitude as u32 & mask | 0.5f32.to_bits();
 
     (
@@ -393,10 +368,7 @@ pub fn ln(x: f32) -> f32 {
                 _ => (),
             }
 
-            #[allow(clippy::cast_possible_wrap)]
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
-
-            #[allow(clippy::cast_sign_loss)]
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
             crate::mul_add(
@@ -416,29 +388,23 @@ pub fn ln_1p(x: f32) -> f32 {
         f32::INFINITY => f32::INFINITY,
         -1.0 => f32::NEG_INFINITY,
         x if x < -1.0 || x.is_nan() => f32::NAN,
-
-        // SAFETY: there is no wrap because `1.0 + x` is positive
-        #[allow(clippy::cast_possible_wrap)]
         _ => {
             use core::f64::consts::FRAC_1_SQRT_2;
             let x = f64::from(x);
             let i = (1.0 + x).to_bits() as i64;
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i64) >> crate::f64::EXP_SHIFT;
-
-            #[allow(clippy::cast_possible_truncation)]
-            return (if exponent == 0 {
+            let result = if exponent == 0 {
                 2.0 * kernel::atanh(x / (2.0 + x))
             } else {
-                #[allow(clippy::cast_sign_loss)]
                 let y = f64::from_bits((i - (exponent << crate::f64::EXP_SHIFT)) as u64);
 
-                #[allow(clippy::cast_precision_loss)]
                 crate::mul_add(
                     core::f64::consts::LN_2,
                     exponent as f64,
                     2.0 * kernel::atanh((y - 1.0) / (y + 1.0)),
                 )
-            }) as f32;
+            };
+            result as f32
         }
     }
 }
@@ -454,19 +420,14 @@ pub fn log2(x: f32) -> f32 {
 
         (false, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
-
-            #[allow(clippy::cast_possible_wrap)]
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
-
-            #[allow(clippy::cast_sign_loss)]
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
-            #[allow(clippy::cast_possible_truncation)]
-            return crate::mul_add(
+            crate::mul_add(
                 2.0 * core::f64::consts::LOG2_E,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
                 exponent.into(),
-            ) as f32;
+            ) as f32
         }
     }
 }
@@ -484,18 +445,14 @@ pub fn log10(x: f32) -> f32 {
             use core::f32::consts::FRAC_1_SQRT_2;
             use core::f64::consts;
 
-            #[allow(clippy::cast_possible_wrap)]
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
-
-            #[allow(clippy::cast_sign_loss)]
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
-            #[allow(clippy::cast_possible_truncation)]
-            return crate::mul_add(
+            crate::mul_add(
                 2.0 * consts::LOG10_E,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
                 consts::LOG10_2 * f64::from(exponent),
-            ) as f32;
+            ) as f32
         }
     }
 }
@@ -512,8 +469,7 @@ pub fn log(x: f32, base: f32) -> f32 {
             _ => kernel::log2(x.into()),
         }
     }
-    #[allow(clippy::cast_possible_truncation)]
-    return (log2(x) / log2(base)) as f32;
+    (log2(x) / log2(base)) as f32
 }
 
 /// Raise to a floating-point power
@@ -538,8 +494,6 @@ pub fn powf(x: f32, y: f32) -> f32 {
             _ => match x {
                 1.0 => 1.0,
                 x if x.is_sign_negative() => f32::NAN,
-
-                #[allow(clippy::cast_possible_truncation)]
                 _ => kernel::exp2(f64::from(y) * kernel::log2(x.into())) as f32,
             },
         }
@@ -566,7 +520,6 @@ pub fn powf(x: f32, y: f32) -> f32 {
 #[inline]
 pub fn atanh(x: f32) -> f32 {
     match x.abs().partial_cmp(&1.0) {
-        #[allow(clippy::cast_possible_wrap)]
         Some(core::cmp::Ordering::Less) => {
             use crate::f64::EXP_SHIFT;
             use core::f64::consts;
@@ -575,20 +528,17 @@ pub fn atanh(x: f32) -> f32 {
             let i = ((1.0 + x) / (1.0 - x)).to_bits() as i64;
             let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
 
-            #[allow(clippy::cast_possible_truncation)]
             if exponent == 0 {
                 return kernel::atanh(x) as f32;
             }
 
-            #[allow(clippy::cast_sign_loss)]
             let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
-            #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-            return crate::mul_add(
+            crate::mul_add(
                 0.5 * consts::LN_2,
                 exponent as f64,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
-            ) as f32;
+            ) as f32
         }
         Some(core::cmp::Ordering::Equal) => f32::INFINITY.copysign(x),
         _ => f32::NAN,
@@ -599,7 +549,6 @@ pub fn atanh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn asinh(x: f32) -> f32 {
-    #[allow(clippy::cast_possible_wrap)]
     fn magnitude(s: f64) -> f64 {
         use crate::f64::EXP_SHIFT;
         use core::f64::consts;
@@ -612,10 +561,8 @@ pub fn asinh(x: f32) -> f32 {
             return 2.0 * kernel::atanh(s / (c + 1.0));
         }
 
-        #[allow(clippy::cast_sign_loss)]
         let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
-        #[allow(clippy::cast_precision_loss)]
         crate::mul_add(
             consts::LN_2,
             exponent as f64,
@@ -625,9 +572,8 @@ pub fn asinh(x: f32) -> f32 {
 
     if !x.is_finite() {
         return x;
-    };
+    }
 
-    #[allow(clippy::cast_possible_truncation)]
     (magnitude(x.abs().into()) as f32).copysign(x)
 }
 
@@ -638,7 +584,6 @@ pub fn acosh(x: f32) -> f32 {
     match x {
         f32::INFINITY => f32::INFINITY,
 
-        #[allow(clippy::cast_possible_wrap)]
         (1.0..) => {
             use crate::f64::EXP_SHIFT;
             use core::f64::consts;
@@ -648,15 +593,13 @@ pub fn acosh(x: f32) -> f32 {
             let i = (c + s).to_bits() as i64;
             let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
 
-            #[allow(clippy::cast_sign_loss)]
             let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
-            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-            return crate::mul_add(
+            crate::mul_add(
                 consts::LN_2,
                 exponent as f64,
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
-            ) as f32;
+            ) as f32
         }
 
         _ => f32::NAN,
