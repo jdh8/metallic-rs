@@ -283,7 +283,7 @@ pub fn exp_m1(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
 
-    if x < -17.5 {
+    if x < (f32::MANTISSA_DIGITS + 1) as f32 * -LN_2 {
         return -1.0;
     }
 
