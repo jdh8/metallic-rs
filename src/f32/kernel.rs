@@ -17,7 +17,7 @@ pub fn fast_ldexp(x: f64, n: i64) -> f64 {
 /// points `(0, 1)` and `(x, exp(x))` on the graph of the exponential function.
 #[inline]
 pub fn exp_slope(x: f64) -> f64 {
-    crate::f64::poly(
+    crate::poly(
         x,
         &[
             1.0,
@@ -46,7 +46,7 @@ pub fn exp_slope(x: f64) -> f64 {
 #[inline]
 pub fn atanh(x: f64) -> f64 {
     let y = x * x;
-    let y = y * crate::f64::poly(
+    let y = y * crate::poly(
         y,
         &[
             0.333_333_426_330_174_6,
@@ -55,7 +55,7 @@ pub fn atanh(x: f64) -> f64 {
         ],
     );
 
-    crate::f64::mul_add(y, x, x)
+    crate::mul_add(y, x, x)
 }
 
 /// Base 2 logarithm for a finite positive `f64`
@@ -66,7 +66,7 @@ pub fn log2(x: f64) -> f64 {
 
     fn atanh(x: f64) -> f64 {
         let y = x * x;
-        let y = y * crate::f64::poly(
+        let y = y * crate::poly(
             y,
             &[
                 0.333_333_328_227_282_3,
@@ -76,7 +76,7 @@ pub fn log2(x: f64) -> f64 {
             ],
         );
 
-        crate::f64::mul_add(y, x, x)
+        crate::mul_add(y, x, x)
     }
 
     #[allow(clippy::cast_possible_wrap)]
@@ -89,7 +89,7 @@ pub fn log2(x: f64) -> f64 {
     let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
     #[allow(clippy::cast_precision_loss)]
-    crate::f64::mul_add(
+    crate::mul_add(
         2.0 * consts::LOG2_E,
         atanh((x - 1.0) / (x + 1.0)),
         exponent as f64,
@@ -111,7 +111,7 @@ pub fn exp2(x: f64) -> f64 {
     }
 
     let n = x.round_ties_even();
-    let x = crate::f64::poly(
+    let x = crate::poly(
         x - n,
         &[
             1.0,

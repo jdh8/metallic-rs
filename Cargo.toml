@@ -1,6 +1,6 @@
 [package]
 name = "metallic"
-version = "0.0.7"
+version = "0.1.0"
 authors = ["Chen-Pang He (https://jdh8.org)"]
 edition = "2021"
 description = "C math functions from scratch"

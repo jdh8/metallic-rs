@@ -53,36 +53,6 @@ fn normalize(x: f32) -> (bool, Magnitude) {
     }
 }
 
-/// Fast multiply-add
-///
-/// This function picks the faster way to compute `x * y + a` depending on the
-/// target architecture.  The FMA instruction is used if available.  Otherwise,
-/// it falls back to `x * y + a` that is faster but gives less accurate results
-/// than [`f32::mul_add`]
-#[must_use]
-#[inline]
-pub fn mul_add(x: f32, y: f32, a: f32) -> f32 {
-    #[cfg(target_feature = "fma")]
-    return x.mul_add(y, a);
-
-    #[cfg(not(target_feature = "fma"))]
-    return x * y + a;
-}
-
-/// Polynomial evaluation with Horner's method
-///
-/// This function evaluates a polynomial with coefficients in `p` at `x`.
-/// This function calls [`mul_add`] for simplicity.
-#[must_use]
-#[inline]
-pub fn poly(x: f32, p: &[f32]) -> f32 {
-    p.iter()
-        .copied()
-        .rev()
-        .reduce(|y, c| mul_add(y, x, c))
-        .unwrap_or_default()
-}
-
 /// The least number greater than `x`
 ///
 /// This is a less careful version of [`f32::next_up`] regarding subnormal
@@ -144,8 +114,8 @@ pub fn cbrt(x: f32) -> f32 {
 
     let x: f64 = x.into();
     let y: f64 = f32::from_bits(u32::from(sign) << 31 | magnitude).into();
-    let y = y * (0.5 + 1.5 * x / crate::f64::mul_add(2.0 * y, y * y, x));
-    let y = y * (0.5 + 1.5 * x / crate::f64::mul_add(2.0 * y, y * y, x));
+    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
+    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
 
     #[allow(clippy::cast_possible_truncation)]
     return y as f32;
@@ -175,7 +145,7 @@ pub fn hypot(x: f32, y: f32) -> f32 {
     let c: f64 = candidate.into();
     let (xx, yy) = (xx.max(yy), xx.min(yy));
 
-    if crate::f64::mul_add(c, c, -xx).eq(&yy) {
+    if crate::mul_add(c, c, -xx).eq(&yy) {
         return candidate;
     }
 
@@ -222,9 +192,9 @@ pub fn exp(x: f32) -> f32 {
 
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::f64::mul_add(n, -LN_2_HI, x);
-    let x = crate::f64::mul_add(n, -LN_2_LO, x);
-    let y = crate::f64::mul_add(kernel::exp_slope(x), x, 1.0);
+    let x = crate::mul_add(n, -LN_2_HI, x);
+    let x = crate::mul_add(n, -LN_2_LO, x);
+    let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
 
     #[allow(clippy::cast_possible_truncation)]
     return kernel::fast_ldexp(y, n as i64) as f32;
@@ -251,7 +221,7 @@ pub fn exp2(x: f32) -> f32 {
     }
 
     let n = x.round_ties_even();
-    let x = crate::f64::poly(
+    let x = crate::poly(
         (x - n).into(),
         &[
             1.0,
@@ -292,9 +262,9 @@ pub fn exp10(x: f32) -> f32 {
 
     let x: f64 = x.into();
     let n = (x * core::f64::consts::LOG2_10).round_ties_even();
-    let x = crate::f64::mul_add(n, -LOG10_2_HI, x);
-    let x = crate::f64::mul_add(n, -LOG10_2_LO, x);
-    let x = crate::f64::poly(
+    let x = crate::mul_add(n, -LOG10_2_HI, x);
+    let x = crate::mul_add(n, -LOG10_2_LO, x);
+    let x = crate::poly(
         x,
         &[
             1.0,
@@ -344,8 +314,8 @@ pub fn exp_m1(x: f32) -> f32 {
 
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::f64::mul_add(n, -LN_2_HI, x);
-    let x = crate::f64::mul_add(n, -LN_2_LO, x);
+    let x = crate::mul_add(n, -LN_2_HI, x);
+    let x = crate::mul_add(n, -LN_2_LO, x);
     let y = kernel::exp_slope(x);
 
     if n == 0.0 {
@@ -354,7 +324,7 @@ pub fn exp_m1(x: f32) -> f32 {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    return (kernel::fast_ldexp(crate::f64::mul_add(x, y, 1.0), n as i64) - 1.0) as f32;
+    return (kernel::fast_ldexp(crate::mul_add(x, y, 1.0), n as i64) - 1.0) as f32;
 }
 
 /// Multiply `x` by 2 raised to the power of `n`
@@ -419,7 +389,7 @@ pub fn ln(x: f32) -> f32 {
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
             #[allow(clippy::cast_possible_truncation)]
-            return crate::f64::mul_add(
+            return crate::mul_add(
                 core::f64::consts::LN_2,
                 exponent.into(),
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
@@ -453,7 +423,7 @@ pub fn ln_1p(x: f32) -> f32 {
                 let y = f64::from_bits((i - (exponent << crate::f64::EXP_SHIFT)) as u64);
 
                 #[allow(clippy::cast_precision_loss)]
-                crate::f64::mul_add(
+                crate::mul_add(
                     core::f64::consts::LN_2,
                     exponent as f64,
                     2.0 * kernel::atanh((y - 1.0) / (y + 1.0)),
@@ -482,7 +452,7 @@ pub fn log2(x: f32) -> f32 {
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
             #[allow(clippy::cast_possible_truncation)]
-            return crate::f64::mul_add(
+            return crate::mul_add(
                 2.0 * core::f64::consts::LOG2_E,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
                 exponent.into(),
@@ -511,7 +481,7 @@ pub fn log10(x: f32) -> f32 {
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
 
             #[allow(clippy::cast_possible_truncation)]
-            return crate::f64::mul_add(
+            return crate::mul_add(
                 2.0 * consts::LOG10_E,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
                 consts::LOG10_2 * f64::from(exponent),
@@ -604,7 +574,7 @@ pub fn atanh(x: f32) -> f32 {
             let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
             #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-            return crate::f64::mul_add(
+            return crate::mul_add(
                 0.5 * consts::LN_2,
                 exponent as f64,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
@@ -624,7 +594,7 @@ pub fn asinh(x: f32) -> f32 {
         use crate::f64::EXP_SHIFT;
         use core::f64::consts;
 
-        let c = crate::f64::mul_add(s, s, 1.0).sqrt();
+        let c = crate::mul_add(s, s, 1.0).sqrt();
         let i = (c + s).to_bits() as i64;
         let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
 
@@ -636,7 +606,7 @@ pub fn asinh(x: f32) -> f32 {
         let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
         #[allow(clippy::cast_precision_loss)]
-        crate::f64::mul_add(
+        crate::mul_add(
             consts::LN_2,
             exponent as f64,
             2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
@@ -664,7 +634,7 @@ pub fn acosh(x: f32) -> f32 {
             use core::f64::consts;
 
             let c: f64 = x.into();
-            let s = crate::f64::mul_add(c, c, -1.0).sqrt();
+            let s = crate::mul_add(c, c, -1.0).sqrt();
             let i = (c + s).to_bits() as i64;
             let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
 
@@ -672,7 +642,7 @@ pub fn acosh(x: f32) -> f32 {
             let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
 
             #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-            return crate::f64::mul_add(
+            return crate::mul_add(
                 consts::LN_2,
                 exponent as f64,
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
