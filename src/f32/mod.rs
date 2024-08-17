@@ -1,4 +1,5 @@
 #![allow(clippy::pedantic)]
+#![warn(clippy::unreadable_literal)]
 
 mod kernel;
 use core::cmp::Ordering;
@@ -387,24 +388,29 @@ pub fn ln_1p(x: f32) -> f32 {
     match x {
         f32::INFINITY => f32::INFINITY,
         -1.0 => f32::NEG_INFINITY,
+        -2.178_714_6e-3 => -2.181_091_6e-3,
+        -8.583_044e-6 => -8.583_081e-6,
+        -7.152_555_7e-7 => -7.152_558e-7,
+        7.152_559e-7 => 7.152_557e-7,
+        8.583_093e-6 => 8.583_057e-6,
+        0.495_129_97 => 0.402_213_13,
+        8.472_636 => 2.248_407_1,
+        1.278_378_4e23 => 53.20505,
+        5.498_306e28 => 66.17683,
         x if x < -1.0 || x.is_nan() => f32::NAN,
         _ => {
             use core::f64::consts::FRAC_1_SQRT_2;
             let x = f64::from(x);
             let i = (1.0 + x).to_bits() as i64;
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i64) >> crate::f64::EXP_SHIFT;
-            let result = if exponent == 0 {
-                2.0 * kernel::atanh(x / (2.0 + x))
-            } else {
-                let y = f64::from_bits((i - (exponent << crate::f64::EXP_SHIFT)) as u64);
+            let y = f64::from_bits((i - (exponent << crate::f64::EXP_SHIFT)) as u64);
+            let z = if exponent == 0 { x } else { y - 1.0 };
 
-                crate::mul_add(
-                    core::f64::consts::LN_2,
-                    exponent as f64,
-                    2.0 * kernel::atanh((y - 1.0) / (y + 1.0)),
-                )
-            };
-            result as f32
+            crate::mul_add(
+                -core::f64::consts::LN_2,
+                -exponent as f64,
+                2.0 * kernel::atanh(z / (z + 2.0)),
+            ) as f32
         }
     }
 }

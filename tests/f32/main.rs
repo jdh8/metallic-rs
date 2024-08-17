@@ -118,7 +118,10 @@ fn test_ln() {
     test_correct_rounding(metal::ln, core_math::logf);
 }
 
-test_unary!(ln_1p, core::iter::once(-1.0).chain(SINGULARITIES));
+#[test]
+fn test_ln_1p() {
+    test_correct_rounding(metal::ln_1p, core_math::log1pf);
+}
 
 test_unary!(
     log2,
