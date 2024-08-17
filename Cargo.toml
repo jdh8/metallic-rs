@@ -9,7 +9,7 @@ license = "MIT"
 categories = ["mathematics"]
 keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
 
-[target.'cfg(not(target_feature = "fma"))'.dependencies]
+[dependencies]
 fast_polynomial = "0.3.0"
 
 [dev-dependencies]

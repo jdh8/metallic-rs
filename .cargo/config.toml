@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-Ctarget-cpu=generic"]
+rustflags = ["-Ctarget-cpu=native"]

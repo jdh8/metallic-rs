@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
+use fast_polynomial::poly_array as poly;
 
 /// Real functions for `f32`s
 pub mod f32;
@@ -21,21 +22,4 @@ fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     #[cfg(not(target_feature = "fma"))]
     #[allow(clippy::suboptimal_flops)]
     return x * y + a;
-}
-
-/// Polynomial evaluation with Horner's method
-///
-/// This function evaluates a polynomial with coefficients in `p` at `x`.
-/// This function calls [`mul_add`] for simplicity.
-fn poly<const N: usize>(x: f64, p: &[f64; N]) -> f64 {
-    #[cfg(target_feature = "fma")]
-    return p
-        .iter()
-        .copied()
-        .rev()
-        .reduce(|y, c| mul_add(y, x, c))
-        .unwrap_or_default();
-
-    #[cfg(not(target_feature = "fma"))]
-    return fast_polynomial::poly_array(x, p);
 }
