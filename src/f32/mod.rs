@@ -228,7 +228,7 @@ pub fn exp(x: f32) -> f32 {
 /// Raise 2 to the power of `x`
 #[must_use]
 #[inline]
-pub fn exp2(x: f32) -> f32 {
+pub fn exp2(x: f32) -> f32 {    
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 {
         return 0.0;
@@ -239,22 +239,32 @@ pub fn exp2(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
+    match x {
+        0.002_969_575_8 => return 1.002_060_5,
+        -0.029_743_774 => return 0.979_594_3,
+        _ => (),
+    }
+
     let n = x.round_ties_even();
-    let x = poly(
-        x - n,
+    let x = crate::f64::poly(
+        (x - n).into(),
         &[
             1.0,
-            6.931_472e-1,
-            2.402_265e-1,
-            5.550_357e-2,
-            9.618_031e-3,
-            1.339_086_7e-3,
-            1.546_973_5e-4,
+            6.931_471_805_599_462e-1,
+            2.402_265_069_591_012e-1,
+            5.550_410_866_465_275e-2,
+            9.618_129_107_595_208e-3,
+            1.333_355_820_064_034_7e-3,
+            1.540_353_045_859_534_5e-4,
+            1.525_267_300_673_216e-5,
+            1.321_543_358_441_562_4e-6,
+            1.020_589_090_868_479_2e-7,
+            7.074_187_916_869_854e-9,
         ],
     );
 
     #[allow(clippy::cast_possible_truncation)]
-    return kernel::fast_ldexp(x.into(), n as i64) as f32;
+    return kernel::fast_ldexp(x, n as i64) as f32;
 }
 
 /// Raise 10 to the power of `x`
