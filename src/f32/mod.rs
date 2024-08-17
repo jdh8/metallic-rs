@@ -206,6 +206,10 @@ pub fn exp(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
 
+    const LN_2_HI: f64 = 0.693_147_180_560_117_7;
+    const LN_2_LO: f64 = -1.723_944_452_561_483_5e-13;
+    const _: () = assert!(LN_2_HI + LN_2_LO == consts::LN_2);
+
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LN_2 {
         return 0.0;
@@ -218,7 +222,8 @@ pub fn exp(x: f32) -> f32 {
 
     let x = f64::from(x);
     let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::f64::mul_add(n, -consts::LN_2, x);
+    let x = crate::f64::mul_add(n, -LN_2_HI, x);
+    let x = crate::f64::mul_add(n, -LN_2_LO, x);
     let y = crate::f64::mul_add(kernel::exp_slope(x), x, 1.0);
 
     #[allow(clippy::cast_possible_truncation)]
