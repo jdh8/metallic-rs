@@ -389,13 +389,21 @@ pub fn ln(x: f32) -> f32 {
 
             #[allow(clippy::cast_sign_loss)]
             let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
-
-            #[allow(clippy::cast_possible_truncation)]
-            return crate::mul_add(
-                core::f64::consts::LN_2,
+            let hi = LN_2_HI * f64::from(exponent);
+            let lo = crate::mul_add(
+                LN_2_LO,
                 exponent.into(),
                 2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
-            ) as f32;
+            );
+            let sum = hi + lo;
+            let error = hi - sum + lo;
+            let bits = sum.to_bits();
+            let sum = match (sum * error).partial_cmp(&0.0) {
+                Some(Ordering::Less) => f64::from_bits((bits - 1) | 1),
+                Some(Ordering::Greater) => f64::from_bits(bits | 1),
+                _ => sum,
+            };
+            sum as f32
         }
     }
 }

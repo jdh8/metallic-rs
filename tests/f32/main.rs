@@ -60,7 +60,7 @@ fn test_correct_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
         .filter_map(|i| {
             let x = f32::from_bits(i);
             (!is(f(x), g(x))).then(|| {
-                println!("{x}: {:e} != {:e}", f(x), g(x));
+                println!("{x:e}: {:e} != {:e}", f(x), g(x));
                 Some(())
             })
         })
@@ -113,7 +113,11 @@ fn test_exp_m1() {
     test_correct_rounding(metal::exp_m1, core_math::expm1f);
 }
 
-test_unary!(ln, core::iter::once(1.0).chain(SINGULARITIES));
+#[test]
+fn test_ln() {
+    test_correct_rounding(metal::ln, core_math::logf);
+}
+
 test_unary!(ln_1p, core::iter::once(-1.0).chain(SINGULARITIES));
 
 test_unary!(
