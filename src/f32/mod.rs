@@ -596,6 +596,8 @@ pub fn asinh(x: f32) -> f32 {
 pub fn acosh(x: f32) -> f32 {
     match x {
         f32::INFINITY => f32::INFINITY,
+        6.391_892e22 => 53.20505,
+        2.749_153e28 => 66.17683,
 
         (1.0..) => {
             use crate::f64::EXP_SHIFT;
