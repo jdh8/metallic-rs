@@ -11,7 +11,7 @@ pub fn fast_ldexp(x: f64, n: i64) -> f64 {
 }
 
 /// Polynomial approximation of restriction of `(exp(x) - 1) / x`
-/// to [-0.5 ln 2, 0.5 ln 2]
+/// to `-0.5 * ln(2) ..= 0.5 * ln(2)`
 ///
 /// In geometry, this function returns the slope of the secant line between the
 /// points `(0, 1)` and `(x, exp(x))` on the graph of the exponential function.
@@ -35,8 +35,8 @@ pub fn exp_slope(x: f64) -> f64 {
     )
 }
 
-/// Polynomial approximation of inverse hyperbolic tangent restricted to [-c,
-/// c], where
+/// Polynomial approximation of inverse hyperbolic tangent restricted to
+/// `-c..=c`, where
 ///
 /// ```text
 ///     √2 - 1                  1 + c

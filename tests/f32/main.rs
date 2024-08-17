@@ -108,7 +108,11 @@ fn test_exp10() {
     test_correct_rounding(metal::exp10, core_math::exp10f);
 }
 
-test_unary!(exp_m1);
+#[test]
+fn test_exp_m1() {
+    test_correct_rounding(metal::exp_m1, core_math::expm1f);
+}
+
 test_unary!(ln, core::iter::once(1.0).chain(SINGULARITIES));
 test_unary!(ln_1p, core::iter::once(-1.0).chain(SINGULARITIES));
 

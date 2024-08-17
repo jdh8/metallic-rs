@@ -322,8 +322,12 @@ pub fn exp_m1(x: f32) -> f32 {
     use core::f32::consts::LN_2;
     use core::f64::consts;
 
+    const LN_2_HI: f64 = 0.693_147_180_560_117_7;
+    const LN_2_LO: f64 = -1.723_944_452_561_483_5e-13;
+    const _: () = assert!(LN_2_HI + LN_2_LO == consts::LN_2);
+
     #[allow(clippy::cast_precision_loss)]
-    if x < f32::MANTISSA_DIGITS as f32 * -LN_2 {
+    if x < -17.5 {
         return -1.0;
     }
 
@@ -332,9 +336,16 @@ pub fn exp_m1(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
+    match x {
+        0.094_884_61 => return 9.953_197e-2,
+        0.0 => return x,
+        _ => (),
+    }
+
     let x = f64::from(x);
-    let n = (x * consts::LOG2_E).round_ties_even() + 0.0;
-    let x = crate::f64::mul_add(n, -consts::LN_2, x);
+    let n = (x * consts::LOG2_E).round_ties_even();
+    let x = crate::f64::mul_add(n, -LN_2_HI, x);
+    let x = crate::f64::mul_add(n, -LN_2_LO, x);
     let y = kernel::exp_slope(x);
 
     if n == 0.0 {
