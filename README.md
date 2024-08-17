@@ -1,8 +1,10 @@
-Math functions from scratch
-===========================
+metallic
+========
 [![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jdh8/metallic-rs)
 [![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
+
+A fast correctly rounded math library in Rust!
 
 This library is a successor to [Metallic], my C library for WebAssembly
 started in 2017.  Its most wanted feature turned out to be math functions I
@@ -42,8 +44,11 @@ The assumptions beyond the four basic arithmetic operations creates dependency
 on the [Rust standard library](https://doc.rust-lang.org/std/).
 
 Besides, I ignore the floating-point environment, which is not available in
-Rust.  It is also mostly unused in C and C++ because it requires
-`#pragma STDC FENV_ACCESS ON` and compiler support.
+Rust.  It is also mostly unused in C and C++ because it requires `#pragma STDC
+FENV_ACCESS ON` and compiler support.  Therefore, the only rounding mode in this
+library is the default [rounding half to even][round-even].
+
+[round-even]: https://en.wikipedia.org/wiki/Rounding#Rounding_half_to_even
 
 Goals
 -----
@@ -71,7 +76,7 @@ Milestones
 - [ ] Real `f32`/`float` functions in [`<math.h>`][math]
     - [x] Exponential functions
     - [x] Logarithm with constant base
-    - [x] Power and logarithm with arbitrary base
+    - [ ] Power and logarithm with arbitrary base
     - [ ] Trigonometric and hyperbolic functions
     - [x] Miscellaneous elementary functions
     - [ ] Non-elementary functions (optional)
