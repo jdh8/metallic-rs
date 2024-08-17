@@ -568,9 +568,11 @@ pub fn asinh(x: f32) -> f32 {
         use core::f64::consts;
 
         match s {
+            f32::INFINITY => return f32::INFINITY,
             2.901_895_4e7 => return 17.876_608,
             6.391_892e22 => return 53.20505,
             2.749_153e28 => return 66.17683,
+            s if s.is_nan() => return f32::NAN,
             _ => (),
         }
 
@@ -590,10 +592,6 @@ pub fn asinh(x: f32) -> f32 {
             exponent as f64,
             2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
         ) as f32
-    }
-
-    if !x.is_finite() {
-        return x;
     }
 
     magnitude(x.abs()).copysign(x)
