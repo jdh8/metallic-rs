@@ -55,7 +55,7 @@ fn test_faithful_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f64) -> f64) {
 /// Check if `f` returns the same result as `g` for every `f32` values
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
-fn test_correct_rounding(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
+fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
     let count = (0..=u32::MAX)
         .filter_map(|i| {
             let x = f32::from_bits(i);
@@ -85,42 +85,42 @@ macro_rules! test_unary {
 
 #[test]
 fn test_round() {
-    test_correct_rounding(metal::round, f32::round);
+    test_identity(metal::round, f32::round);
 }
 
 #[test]
 fn test_cbrt() {
-    test_correct_rounding(metal::cbrt, core_math::cbrtf);
+    test_identity(metal::cbrt, core_math::cbrtf);
 }
 
 #[test]
 fn test_exp() {
-    test_correct_rounding(metal::exp, core_math::expf);
+    test_identity(metal::exp, core_math::expf);
 }
 
 #[test]
 fn test_exp2() {
-    test_correct_rounding(metal::exp2, core_math::exp2f);
+    test_identity(metal::exp2, core_math::exp2f);
 }
 
 #[test]
 fn test_exp10() {
-    test_correct_rounding(metal::exp10, core_math::exp10f);
+    test_identity(metal::exp10, core_math::exp10f);
 }
 
 #[test]
 fn test_exp_m1() {
-    test_correct_rounding(metal::exp_m1, core_math::expm1f);
+    test_identity(metal::exp_m1, core_math::expm1f);
 }
 
 #[test]
 fn test_ln() {
-    test_correct_rounding(metal::ln, core_math::logf);
+    test_identity(metal::ln, core_math::logf);
 }
 
 #[test]
 fn test_ln_1p() {
-    test_correct_rounding(metal::ln_1p, core_math::log1pf);
+    test_identity(metal::ln_1p, core_math::log1pf);
 }
 
 test_unary!(
