@@ -123,13 +123,10 @@ fn test_ln_1p() {
     test_identity(metal::ln_1p, core_math::log1pf);
 }
 
-test_unary!(
-    log2,
-    #[allow(clippy::cast_possible_wrap, clippy::cast_precision_loss)]
-    (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32..f32::MAX_EXP)
-        .map(|x| (x as f32).exp2())
-        .chain(SINGULARITIES)
-);
+#[test]
+fn test_log2() {
+    test_identity(metal::log2, core_math::log2f);
+}
 
 test_unary!(
     log10,
