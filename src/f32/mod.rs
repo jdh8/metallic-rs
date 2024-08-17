@@ -558,6 +558,7 @@ pub fn atanh(x: f32) -> f32 {
     }
 }
 
+// XXX: Try optimizing `asinh`
 /// Inverse hyperbolic sine
 #[must_use]
 #[inline]
