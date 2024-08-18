@@ -561,7 +561,6 @@ pub fn atanh(x: f32) -> f32 {
     }
 }
 
-// XXX: Try optimizing `asinh`
 /// Inverse hyperbolic sine
 #[must_use]
 #[inline]
@@ -584,17 +583,17 @@ pub fn asinh(x: f32) -> f32 {
         let c = crate::mul_add(s, s, 1.0).sqrt();
         let i = (c + s).to_bits() as i64;
         let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
-
-        if exponent == 0 {
-            return (2.0 * kernel::atanh(s / (c + 1.0))) as f32;
-        }
-
-        let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+        let (s, c) = if exponent == 0 {
+            (s, c)
+        } else {
+            let c = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+            (c - 1.0, c)
+        };
 
         crate::mul_add(
             consts::LN_2,
             exponent as f64,
-            2.0 * kernel::atanh((x - 1.0) / (x + 1.0)),
+            2.0 * kernel::atanh(s / (c + 1.0)),
         ) as f32
     }
 
