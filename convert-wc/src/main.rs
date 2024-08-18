@@ -85,7 +85,7 @@ fn parse_f64(s: &str) -> Result<f64, ParseHexfError> {
 /// Convert CSV to binary
 ///
 /// - Whitespace is ignored
-/// - Lines starting with `#` are ignored
+/// - Comments start with `#`
 /// - Each line is split by `,`
 /// - Each field is parsed by `kernel` and produces `N` bytes
 fn convert<const N: usize>(
@@ -98,9 +98,9 @@ fn convert<const N: usize>(
 
     for line in stream.lines() {
         let line = line?;
-        let line = line.trim_ascii_start();
+        let line = line[..line.find('#').unwrap_or(line.len())].trim_ascii();
 
-        if matches!(line.bytes().next(), Some(b'#') | None) {
+        if line.is_empty() {
             continue;
         }
         for s in SEPARATOR.split(line) {
