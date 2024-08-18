@@ -474,6 +474,7 @@ pub fn log10(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn log(x: f32, base: f32) -> f32 {
+    #[inline]
     fn log2(x: f32) -> f64 {
         match (x.is_sign_negative(), x.classify()) {
             (false, FpCategory::Infinite) => f64::INFINITY,
@@ -489,6 +490,7 @@ pub fn log(x: f32, base: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn powf(x: f32, y: f32) -> f32 {
+    #[inline]
     fn magnitude(x: f32, y: f32) -> f32 {
         match x.classify() {
             FpCategory::Nan => f32::NAN,
@@ -512,6 +514,7 @@ pub fn powf(x: f32, y: f32) -> f32 {
         }
     }
 
+    #[inline]
     fn is_integer(x: f32) -> bool {
         x.trunc().eq(&x)
     }
@@ -563,6 +566,7 @@ pub fn atanh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn asinh(x: f32) -> f32 {
+    #[inline]
     fn magnitude(s: f32) -> f32 {
         use crate::f64::EXP_SHIFT;
         use core::f64::consts;

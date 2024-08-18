@@ -67,6 +67,7 @@ pub fn log2(x: f64) -> f64 {
     use crate::f64::EXP_SHIFT;
     use core::f64::consts;
 
+    #[inline]
     fn atanh(x: f64) -> f64 {
         let y = x * x;
         let y = y * crate::poly(
