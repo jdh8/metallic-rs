@@ -8,6 +8,7 @@ repository = "https://github.com/jdh8/metallic-rs"
 license = "MIT"
 categories = ["mathematics"]
 keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
+exclude = ["/tests/*/huge"]
 
 [dependencies]
 fast_polynomial = "0.3.0"
@@ -15,14 +16,13 @@ fast_polynomial = "0.3.0"
 [dev-dependencies]
 core-math = "0.1.1"
 criterion = "0.5.1"
+hexf-parse = "0.2.1"
 libm = "0.2.8"
 rand = "0.8.5"
+regex = "1.10.6"
 
 [profile.dev]
 opt-level = 3
-
-[workspace]
-members = ["convert-wc"]
 
 [[bench]]
 name = "f32"

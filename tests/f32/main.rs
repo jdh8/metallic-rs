@@ -1,3 +1,4 @@
+mod huge;
 mod ldexp;
 use core::num::FpCategory;
 use metallic::f32 as metal;
@@ -114,7 +115,7 @@ fn frexp() {
 }
 
 #[test]
-fn test_hypot_usual() {
+fn test_hypot() {
     (0..=0xFFFF).for_each(|i| {
         let x = f32::from_bits(0x10001 * i);
 
@@ -123,15 +124,4 @@ fn test_hypot_usual() {
             assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
         });
     });
-}
-
-#[test]
-fn test_hypot_worst_cases() {
-    include_bytes!("hypot.wc")
-        .chunks_exact(8)
-        .for_each(|chunk| {
-            let x = f32::from_le_bytes(chunk[..4].try_into().expect("4 bytes"));
-            let y = f32::from_le_bytes(chunk[4..].try_into().expect("4 bytes"));
-            assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
-        });
 }
