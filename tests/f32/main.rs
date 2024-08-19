@@ -18,7 +18,7 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
         .filter_map(|i| {
             let x = f32::from_bits(i);
             (!is(f(x), g(x))).then(|| {
-                println!("{x:.9e}: {:.9e} != {:.9e}", f(x), g(x));
+                println!("{x:e}: {:e} != {:e}", f(x), g(x));
                 Some(())
             })
         })
