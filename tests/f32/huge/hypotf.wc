@@ -1,3 +1,5 @@
+# This file was src/binary32/hypot/hypotf.wc in the CORE-MATH project
+
 # worst cases for different libraries
 0x1.b8e50ap-52,-0x1.db1e78p-64
 0x1.03b54cp-33,0x1.6ca6bep-45
