@@ -52,7 +52,8 @@ fn parse_pairs_from(filename: impl AsRef<std::ffi::OsStr>) -> impl Iterator<Item
 
 #[test]
 fn test_parser() {
-    assert!(parse_pairs_from("hypotf.wc").count() > 6800);
+    assert!(parse_pairs_from("hypotf.wc").count() == 6882);
+    assert!(parse_pairs_from("powf.wc").count() == 133_216);
 }
 
 #[test]
