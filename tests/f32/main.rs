@@ -18,14 +18,11 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
     let count = (0..=u32::MAX)
         .filter_map(|i| {
             let x = f32::from_bits(i);
-            (!is(f(x), g(x))).then(|| {
-                println!("{x:e}: {:e} != {:e}", f(x), g(x));
-                Some(())
-            })
+            (!is(f(x), g(x))).then(|| Some(println!("{x:e}: {:e} != {:e}", f(x), g(x))))
         })
         .count();
 
-    assert_eq!(count, 0, "There are {count} mismatches");
+    assert!(count == 0, "There are {count} mismatches");
 }
 
 #[test]
@@ -114,14 +111,34 @@ fn frexp() {
     });
 }
 
+fn test_bivariate(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
+    let count = (0..=u32::MAX)
+        .filter_map(|bits| {
+            let x = f32::from_bits(0x10001 * (bits >> 16));
+            let y = f32::from_bits(bits << 16);
+
+            (!is(f(x, y), g(x, y)))
+                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y))))
+        })
+        .count();
+
+    assert!(count == 0, "There are {count} mismatches");
+}
+
 #[test]
 fn test_hypot() {
-    (0..=0xFFFF).for_each(|i| {
-        let x = f32::from_bits(0x10001 * i);
+    test_bivariate(metal::hypot, core_math::hypotf);
+}
 
-        (0..=0xFFFF).for_each(|j| {
-            let y = f32::from_bits(j << 16);
-            assert!(is(metal::hypot(x, y), core_math::hypotf(x, y)));
-        });
+#[test]
+fn test_log() {
+    #[allow(clippy::cast_possible_truncation)]
+    test_bivariate(metal::log, |x, y| {
+        (core_math::log(x.into()) / core_math::log(y.into())) as f32
     });
+}
+
+#[test]
+fn test_powf() {
+    test_bivariate(metal::powf, core_math::powf);
 }

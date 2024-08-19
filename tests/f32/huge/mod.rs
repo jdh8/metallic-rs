@@ -50,6 +50,19 @@ fn parse_pairs_from(filename: impl AsRef<std::ffi::OsStr>) -> impl Iterator<Item
         .flatten()
 }
 
+fn test_bivariate(
+    f: impl Fn(f32, f32) -> f32,
+    g: impl Fn(f32, f32) -> f32,
+    data: impl Iterator<Item = [f32; 2]>,
+) {
+    let count = data
+        .filter(|&[x, y]| (!super::is(f(x, y), g(x, y))))
+        .map(|[x, y]| println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y)))
+        .count();
+
+    assert!(count == 0, "There are {count} mismatches");
+}
+
 #[test]
 fn test_parser() {
     assert!(parse_pairs_from("hypotf.wc").count() == 6882);
@@ -58,7 +71,14 @@ fn test_parser() {
 
 #[test]
 fn test_hypot() {
-    parse_pairs_from("hypotf.wc").for_each(|[x, y]| {
-        assert!(super::is(metal::hypot(x, y), core_math::hypotf(x, y)));
-    });
+    test_bivariate(
+        metal::hypot,
+        core_math::hypotf,
+        parse_pairs_from("hypotf.wc"),
+    );
+}
+
+#[test]
+fn test_powf() {
+    test_bivariate(metal::powf, core_math::powf, parse_pairs_from("powf.wc"));
 }
