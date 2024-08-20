@@ -3,6 +3,9 @@ mod ldexp;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x87;
+
 /// Semantic identity like `Object.is` in JavaScript
 ///
 /// This function works around comparison issues with NaNs and signed zeros.
@@ -109,36 +112,4 @@ fn frexp() {
             }
         }
     });
-}
-
-fn test_bivariate(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
-    let count = (0..=u32::MAX)
-        .filter_map(|bits| {
-            let x = f32::from_bits(0x10001 * (bits >> 16));
-            let y = f32::from_bits(bits << 16);
-
-            (!is(f(x, y), g(x, y)))
-                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y))))
-        })
-        .count();
-
-    assert!(count == 0, "There are {count} mismatches");
-}
-
-#[test]
-fn test_hypot() {
-    test_bivariate(metal::hypot, core_math::hypotf);
-}
-
-#[test]
-fn test_log() {
-    #[allow(clippy::cast_possible_truncation)]
-    test_bivariate(metal::log, |x, y| {
-        (core_math::log(x.into()) / core_math::log(y.into())) as f32
-    });
-}
-
-#[test]
-fn test_powf() {
-    test_bivariate(metal::powf, core_math::powf);
 }
