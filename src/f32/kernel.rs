@@ -67,22 +67,6 @@ pub fn log2(x: f64) -> f64 {
     use crate::f64::EXP_SHIFT;
     use core::f64::consts;
 
-    #[inline]
-    fn atanh(x: f64) -> f64 {
-        let y = x * x;
-        let y = y * crate::poly(
-            y,
-            &[
-                0.333_333_328_227_282_3,
-                0.200_001_675_954_362_63,
-                0.142_686_542_711_886_85,
-                0.117_910_756_496_814_14,
-            ],
-        );
-
-        crate::mul_add(y, x, x)
-    }
-
     #[allow(clippy::cast_possible_wrap)]
     let i = x.to_bits() as i64;
 
