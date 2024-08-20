@@ -29,18 +29,5 @@ fn test_precise_log() {
 
 #[test]
 fn test_log() {
-    const F: fn(f32, f32) -> f32 = metallic::f32::log;
-    const G: fn(f32, f32) -> f32 = precise_log;
-
-    let count = (0..=u32::MAX)
-        .filter_map(|bits| {
-            let x = f32::from_bits(0x10001 * (bits >> 16));
-            let y = f32::from_bits(bits << 16);
-
-            (!super::is(F(x, y), G(x, y)))
-                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", F(x, y), G(x, y))))
-        })
-        .count();
-
-    assert!(count == 0, "There are {count} mismatches");
+    super::test_bivariate_usual(metallic::f32::log, precise_log);
 }

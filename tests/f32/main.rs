@@ -113,3 +113,27 @@ fn frexp() {
         }
     });
 }
+
+fn test_bivariate_usual(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
+    let count = (0..=u32::MAX)
+        .filter_map(|bits| {
+            let x = f32::from_bits(0x10001 * (bits >> 16));
+            let y = f32::from_bits(bits << 16);
+
+            (!is(f(x, y), g(x, y)))
+                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y))))
+        })
+        .count();
+
+    assert!(count == 0, "There are {count} mismatches");
+}
+
+#[test]
+fn test_hypot() {
+    test_bivariate_usual(metal::hypot, core_math::hypotf);
+}
+
+#[test]
+fn test_powf() {
+    test_bivariate_usual(metal::powf, core_math::powf);
+}
