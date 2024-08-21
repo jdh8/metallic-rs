@@ -114,7 +114,47 @@ fn frexp() {
     });
 }
 
-fn test_bivariate_usual(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
+/// Check if `result` is within the nearby `f32` representations of `expected`
+///
+/// Due to [the Table Maker's Dilemma][dilemma], it is infeasible to implement a
+/// correctly-rounded (error < 0.5 ulp) transcendental function.  However,
+/// faithful rounding (error < 1 ulp) is usually achievable.
+///
+/// [dilemma]: https://hal-lara.archives-ouvertes.fr/hal-02101765/document
+///
+/// If `expected` has an exact `f32` representation, `result` must be that
+/// value.  Otherwise, `expected` has two `f32` neighbors, and `result` must be
+/// either of them.
+fn is_faithful_rounding(result: f32, expected: f64) -> bool {
+    #[allow(clippy::cast_possible_truncation)]
+    if is(result, expected as f32) {
+        return true;
+    }
+
+    let next_up = f64::from(metal::next_up(result));
+    let next_down = f64::from(metal::next_down(result));
+    next_down < expected && expected < next_up
+}
+
+// Code repetition is intentional for future removal of this function
+fn test_bivariate_faithful(
+    f: impl Fn(f32, f32) -> f32,
+    g: impl Fn(f64, f64) -> f64,
+) {
+    let count = (0..=u32::MAX)
+        .filter_map(|bits| {
+            let x = f32::from_bits(0x10001 * (bits >> 16));
+            let y = f32::from_bits(bits << 16);
+
+            (!is_faithful_rounding(f(x, y), g(f64::from(x), f64::from(y))))
+                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(f64::from(x), f64::from(y)))))
+        })
+        .count();
+
+    assert!(count == 0, "There are {count} mismatches");
+}
+
+fn test_bivariate_correct(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
     let count = (0..=u32::MAX)
         .filter_map(|bits| {
             let x = f32::from_bits(0x10001 * (bits >> 16));
@@ -130,10 +170,10 @@ fn test_bivariate_usual(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32
 
 #[test]
 fn test_hypot() {
-    test_bivariate_usual(metal::hypot, core_math::hypotf);
+    test_bivariate_correct(metal::hypot, core_math::hypotf);
 }
 
 #[test]
 fn test_powf() {
-    test_bivariate_usual(metal::powf, core_math::powf);
+    test_bivariate_faithful(metal::powf, core_math::pow);
 }

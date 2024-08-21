@@ -77,6 +77,8 @@ Milestones
     - [x] Exponential functions
     - [x] Logarithm with constant base
     - [ ] Power and logarithm with arbitrary base
+      - [x] Faithful rounding
+      - [ ] Correct rounding
     - [ ] Trigonometric and hyperbolic functions
     - [x] Miscellaneous elementary functions
     - [ ] Non-elementary functions (optional)

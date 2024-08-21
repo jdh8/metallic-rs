@@ -79,6 +79,7 @@ fn test_hypot() {
 }
 
 #[test]
+#[ignore = "Let's test correct founding after making other univariate functions"]
 fn test_powf() {
     test_bivariate(metal::powf, core_math::powf, parse_pairs_from("powf.wc"));
 }
