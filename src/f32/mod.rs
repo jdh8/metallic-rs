@@ -174,12 +174,22 @@ pub fn hypot(x: f32, y: f32) -> f32 {
     result as f32
 }
 
+/// Finite `exp` for correctly-rounded `f32`
+#[inline]
+fn finite_exp(x: f64) -> f64 {
+    let n = (x * core::f64::consts::LOG2_E).round_ties_even();
+    let x = crate::mul_add(n, -LN_2_HI, x);
+    let x = crate::mul_add(n, -LN_2_LO, x);
+    let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
+
+    kernel::fast_ldexp(y, n as i64)
+}
+
 /// The exponential function
 #[must_use]
 #[inline]
 pub fn exp(x: f32) -> f32 {
     use core::f32::consts::LN_2;
-    use core::f64::consts;
 
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LN_2 {
         return 0.0;
@@ -189,13 +199,7 @@ pub fn exp(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    let x: f64 = x.into();
-    let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::mul_add(n, -LN_2_HI, x);
-    let x = crate::mul_add(n, -LN_2_LO, x);
-    let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
-
-    kernel::fast_ldexp(y, n as i64) as f32
+    finite_exp(x.into()) as f32
 }
 
 /// Raise 2 to the power of `x`
@@ -635,20 +639,49 @@ pub fn acosh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn cosh(x: f32) -> f32 {
-    use core::f64::consts;
-
     let x = x.abs();
 
     if x > (f32::MAX_EXP + 1) as f32 * core::f32::consts::LN_2 {
         return f32::INFINITY;
     }
 
-    let x: f64 = x.into();
-    let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::mul_add(n, -LN_2_HI, x);
-    let x = crate::mul_add(n, -LN_2_LO, x);
-    let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
-    let y = kernel::fast_ldexp(y, n as i64);
-
+    let y = finite_exp(x.into());
     (0.5 * (y + y.recip())) as f32
+}
+
+/// Hyperbolic sine
+#[must_use]
+#[inline]
+pub fn sinh(x: f32) -> f32 {
+    #[inline]
+    fn magnitude(x: f32) -> f32 {
+        use core::f32::consts::LN_2;
+        const BIG: f32 = (f32::MAX_EXP + 1) as f32 * LN_2;
+        const SMALL: f32 = 0.5 * LN_2;
+
+        match x {
+            5.589_425e-4 => x,
+            (BIG..) => f32::INFINITY,
+            (..=SMALL) => {
+                let x: f64 = x.into();
+                (x * crate::poly(
+                    x * x,
+                    &[
+                        1.0,
+                        1.666_666_666_666_666_9e-1,
+                        8.333_333_333_330_063e-3,
+                        1.984_126_986_304_303_6e-4,
+                        2.755_726_847_699_198e-6,
+                        2.510_037_721_378_323_2e-8,
+                    ],
+                )) as f32
+            }
+            _ => {
+                let y = finite_exp(x.into());
+                0.5 * (y - y.recip()) as f32
+            }
+        }
+    }
+
+    magnitude(x.abs()).copysign(x)
 }

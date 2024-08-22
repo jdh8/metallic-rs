@@ -99,6 +99,11 @@ fn test_cosh() {
 }
 
 #[test]
+fn test_sinh() {
+    test_identity(metal::sinh, core_math::sinhf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
