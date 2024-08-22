@@ -630,3 +630,25 @@ pub fn acosh(x: f32) -> f32 {
         _ => f32::NAN,
     }
 }
+
+/// Hyperbolic cosine
+#[must_use]
+#[inline]
+pub fn cosh(x: f32) -> f32 {
+    use core::f64::consts;
+
+    let x = x.abs();
+
+    if x > (f32::MAX_EXP + 1) as f32 * core::f32::consts::LN_2 {
+        return f32::INFINITY;
+    }
+
+    let x: f64 = x.into();
+    let n = (x * consts::LOG2_E).round_ties_even();
+    let x = crate::mul_add(n, -LN_2_HI, x);
+    let x = crate::mul_add(n, -LN_2_LO, x);
+    let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
+    let y = kernel::fast_ldexp(y, n as i64);
+
+    (0.5 * (y + y.recip())) as f32
+}

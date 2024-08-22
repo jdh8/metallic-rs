@@ -94,6 +94,11 @@ fn test_atanh() {
 }
 
 #[test]
+fn test_cosh() {
+    test_identity(metal::cosh, core_math::coshf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
@@ -137,17 +142,19 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
 }
 
 // Code repetition is intentional for future removal of this function
-fn test_bivariate_faithful(
-    f: impl Fn(f32, f32) -> f32,
-    g: impl Fn(f64, f64) -> f64,
-) {
+fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64) -> f64) {
     let count = (0..=u32::MAX)
         .filter_map(|bits| {
             let x = f32::from_bits(0x10001 * (bits >> 16));
             let y = f32::from_bits(bits << 16);
 
-            (!is_faithful_rounding(f(x, y), g(f64::from(x), f64::from(y))))
-                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(f64::from(x), f64::from(y)))))
+            (!is_faithful_rounding(f(x, y), g(f64::from(x), f64::from(y)))).then(|| {
+                Some(println!(
+                    "{x:e}, {y:e}: {:e} != {:e}",
+                    f(x, y),
+                    g(f64::from(x), f64::from(y))
+                ))
+            })
         })
         .count();
 

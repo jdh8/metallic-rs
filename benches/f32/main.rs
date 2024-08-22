@@ -2,6 +2,7 @@ mod acosh;
 mod asinh;
 mod atanh;
 mod cbrt;
+mod cosh;
 mod exp;
 mod exp10;
 mod exp2;
@@ -22,6 +23,7 @@ criterion::criterion_main!(
     asinh::benches,
     atanh::benches,
     cbrt::benches,
+    cosh::benches,
     exp::benches,
     exp2::benches,
     exp10::benches,
