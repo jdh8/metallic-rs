@@ -189,7 +189,7 @@ pub fn exp(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    let x = f64::from(x);
+    let x: f64 = x.into();
     let n = (x * consts::LOG2_E).round_ties_even();
     let x = crate::mul_add(n, -LN_2_HI, x);
     let x = crate::mul_add(n, -LN_2_LO, x);
@@ -298,7 +298,7 @@ pub fn exp_m1(x: f32) -> f32 {
         _ => (),
     }
 
-    let x = f64::from(x);
+    let x: f64 = x.into();
     let n = (x * consts::LOG2_E).round_ties_even();
     let x = crate::mul_add(n, -LN_2_HI, x);
     let x = crate::mul_add(n, -LN_2_LO, x);
@@ -370,7 +370,7 @@ pub fn ln(x: f32) -> f32 {
             }
 
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
-            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
+            let x: f64 = f32::from_bits((i - (exponent << EXP_SHIFT)) as u32).into();
 
             crate::mul_add(
                 core::f64::consts::LN_2,
@@ -400,7 +400,7 @@ pub fn ln_1p(x: f32) -> f32 {
         x if x < -1.0 || x.is_nan() => f32::NAN,
         _ => {
             use core::f64::consts::FRAC_1_SQRT_2;
-            let x = f64::from(x);
+            let x: f64 = x.into();
             let i = (1.0 + x).to_bits() as i64;
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i64) >> crate::f64::EXP_SHIFT;
             let y = f64::from_bits((i - (exponent << crate::f64::EXP_SHIFT)) as u64);
@@ -427,7 +427,7 @@ pub fn log2(x: f32) -> f32 {
         (false, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
-            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
+            let x: f64 = f32::from_bits((i - (exponent << EXP_SHIFT)) as u32).into();
 
             crate::mul_add(
                 2.0 * core::f64::consts::LOG2_E,
@@ -459,13 +459,13 @@ pub fn log10(x: f32) -> f32 {
             use core::f64::consts;
 
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
-            let x = f64::from(f32::from_bits((i - (exponent << EXP_SHIFT)) as u32));
+            let x: f64 = f32::from_bits((i - (exponent << EXP_SHIFT)) as u32).into();
             let x = crate::mul_add(
                 2.0 * consts::LOG10_E,
                 kernel::atanh((x - 1.0) / (x + 1.0)),
                 LOG10_2_LO * f64::from(exponent),
             );
-            crate::mul_add(LOG10_2_HI, f64::from(exponent), x) as f32
+            crate::mul_add(LOG10_2_HI, exponent.into(), x) as f32
         }
     }
 }
