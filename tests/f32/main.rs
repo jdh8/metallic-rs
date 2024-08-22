@@ -104,6 +104,11 @@ fn test_sinh() {
 }
 
 #[test]
+fn test_tanh() {
+    test_identity(metal::tanh, core_math::tanhf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);

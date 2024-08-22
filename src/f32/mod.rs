@@ -686,3 +686,37 @@ pub fn sinh(x: f32) -> f32 {
 
     magnitude(x.abs()).copysign(x)
 }
+
+/// Hyperbolic tangent
+#[must_use]
+#[inline]
+pub fn tanh(x: f32) -> f32 {
+    #[inline]
+    fn magnitude(x: f32) -> f32 {
+        if x > 9.010_913 {
+            return 1.0;
+        }
+
+        if x < 0.5 * core::f32::consts::LN_2 {
+            let x: f64 = x.into();
+            return (x * crate::poly(
+                x * x,
+                &[
+                     1.0,
+                    -3.333_333_333_333_119e-1,
+                     1.333_333_333_157_016_9e-1,
+                    -5.396_825_160_238_46e-2,
+                     2.186_936_931_569_829_4e-2,
+                    -8.860_365_790_156_083e-3,
+                     3.556_430_171_413_512_5e-3,
+                    -1.231_841_430_186_171e-3,
+                ],
+            )) as f32;
+        }
+
+        let y = finite_exp((2.0 * x).into());
+        ((y - 1.0) / (y + 1.0)) as f32
+    }
+
+    magnitude(x.abs()).copysign(x)
+}

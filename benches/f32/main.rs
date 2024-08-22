@@ -18,6 +18,7 @@ mod log2;
 mod powf;
 mod round;
 mod sinh;
+mod tanh;
 
 criterion::criterion_main!(
     acosh::benches,
@@ -40,6 +41,7 @@ criterion::criterion_main!(
     powf::benches,
     round::benches,
     sinh::benches,
+    tanh::benches,
 );
 
 #[macro_export]
