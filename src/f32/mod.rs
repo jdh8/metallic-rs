@@ -656,31 +656,32 @@ pub fn sinh(x: f32) -> f32 {
     #[inline]
     fn magnitude(x: f32) -> f32 {
         use core::f32::consts::LN_2;
-        const BIG: f32 = (f32::MAX_EXP as f32 + 1.001) * LN_2;
-        const SMALL: f32 = 0.5 * LN_2;
 
-        match x {
-            5.589_425e-4 => x,
-            (BIG..) => f32::INFINITY,
-            (..=SMALL) => {
-                let x: f64 = x.into();
-                (x * crate::poly(
-                    x * x,
-                    &[
-                        1.0,
-                        1.666_666_666_666_666_9e-1,
-                        8.333_333_333_330_063e-3,
-                        1.984_126_986_304_303_6e-4,
-                        2.755_726_847_699_198e-6,
-                        2.510_037_721_378_323_2e-8,
-                    ],
-                )) as f32
-            }
-            _ => {
-                let y = finite_exp(x.into());
-                (0.5 * (y - y.recip())) as f32
-            }
+        if x == 5.589_425e-4 {
+            return x;
         }
+
+        if x > 89.415_985 {
+            return f32::INFINITY;
+        }
+
+        if x <= 0.5 * LN_2 {
+            let x: f64 = x.into();
+            return (x * crate::poly(
+                x * x,
+                &[
+                    1.0,
+                    1.666_666_666_666_666_9e-1,
+                    8.333_333_333_330_063e-3,
+                    1.984_126_986_304_303_6e-4,
+                    2.755_726_847_699_198e-6,
+                    2.510_037_721_378_323_2e-8,
+                ],
+            )) as f32;
+        }
+
+        let y = finite_exp(x.into());
+        (0.5 * (y - y.recip())) as f32
     }
 
     magnitude(x.abs()).copysign(x)
