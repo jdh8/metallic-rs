@@ -656,7 +656,7 @@ pub fn sinh(x: f32) -> f32 {
     #[inline]
     fn magnitude(x: f32) -> f32 {
         use core::f32::consts::LN_2;
-        const BIG: f32 = (f32::MAX_EXP + 1) as f32 * LN_2;
+        const BIG: f32 = (f32::MAX_EXP as f32 + 1.001) * LN_2;
         const SMALL: f32 = 0.5 * LN_2;
 
         match x {
@@ -678,7 +678,7 @@ pub fn sinh(x: f32) -> f32 {
             }
             _ => {
                 let y = finite_exp(x.into());
-                0.5 * (y - y.recip()) as f32
+                (0.5 * (y - y.recip())) as f32
             }
         }
     }
