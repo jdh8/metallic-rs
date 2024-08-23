@@ -21,7 +21,10 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
     let count = (0..=u32::MAX)
         .filter_map(|i| {
             let x = f32::from_bits(i);
-            (!is(f(x), g(x))).then(|| Some(println!("{x:e}: {:e} != {:e}", f(x), g(x))))
+            let f = f(x);
+            let g = g(x);
+
+            (!is(f, g)).then(|| Some(println!("{x:e}: {f:e} != {g:e}")))
         })
         .count();
 
@@ -157,14 +160,10 @@ fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64) -> 
         .filter_map(|bits| {
             let x = f32::from_bits(0x10001 * (bits >> 16));
             let y = f32::from_bits(bits << 16);
+            let f = f(x, y);
+            let g = g(x.into(), y.into());
 
-            (!is_faithful_rounding(f(x, y), g(f64::from(x), f64::from(y)))).then(|| {
-                Some(println!(
-                    "{x:e}, {y:e}: {:e} != {:e}",
-                    f(x, y),
-                    g(f64::from(x), f64::from(y))
-                ))
-            })
+            (!is_faithful_rounding(f, g)).then(|| Some(println!("{x:e}, {y:e}: {f:e} != {g:e}")))
         })
         .count();
 
@@ -176,9 +175,10 @@ fn test_bivariate_correct(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f
         .filter_map(|bits| {
             let x = f32::from_bits(0x10001 * (bits >> 16));
             let y = f32::from_bits(bits << 16);
+            let f = f(x, y);
+            let g = g(x, y);
 
-            (!is(f(x, y), g(x, y)))
-                .then(|| Some(println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y))))
+            (!is(f, g)).then(|| Some(println!("{x:e}, {y:e}: {f:e} != {g:e}")))
         })
         .count();
 
