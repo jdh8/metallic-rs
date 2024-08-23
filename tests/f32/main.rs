@@ -112,6 +112,11 @@ fn test_tanh() {
 }
 
 #[test]
+fn test_acos() {
+    test_identity(metal::acos, core_math::acosf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);

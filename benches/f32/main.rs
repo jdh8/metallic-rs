@@ -1,3 +1,4 @@
+mod acos;
 mod acosh;
 mod asinh;
 mod atanh;
@@ -21,6 +22,7 @@ mod sinh;
 mod tanh;
 
 criterion::criterion_main!(
+    acos::benches,
     acosh::benches,
     asinh::benches,
     atanh::benches,
