@@ -117,6 +117,11 @@ fn test_acos() {
 }
 
 #[test]
+fn test_asin() {
+    test_identity(metal::asin, core_math::asinf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
