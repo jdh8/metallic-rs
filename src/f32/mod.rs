@@ -294,15 +294,9 @@ pub fn exp_m1(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    match x {
-        0.094_884_61 => return 9.953_197e-2,
-        0.0 => return x,
-        _ => (),
-    }
-
     let x: f64 = x.into();
     let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::mul_add(n, -LN_2_HI, x);
+    let x = crate::mul_add(n + 0.0, -LN_2_HI, x);
     let x = crate::mul_add(n, -LN_2_LO, x);
     let y = kernel::exp_slope(x);
 
