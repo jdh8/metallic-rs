@@ -1,3 +1,5 @@
+use core::num::Wrapping;
+
 /// Fast C `ldexp` assuming normal argument and result
 #[inline]
 pub fn fast_ldexp(x: f64, n: i64) -> f64 {
@@ -114,4 +116,88 @@ pub fn exp2(x: f64) -> f64 {
 
     #[allow(clippy::cast_possible_truncation)]
     return fast_ldexp(x, n as i64);
+}
+
+/// Argument reduction for trigonometric functions
+///
+/// The prototype of this function resembles `__rem_pio2` in GCC, but this
+/// function is only for `f32`.  Pseudocode is as follows.
+///
+/// ```text
+/// quotient = nearest integer of x / (π/2)
+/// y = x - quotient * (π/2) // IEEE remainder of x / (π/2)
+/// (quotient, y)
+/// ```
+///
+/// The returned quotient has accurate sign and last 2 bits.
+#[inline]
+fn rem_pio2(x: f32) -> (i32, f64) {
+    /// Get 96 bits of 2/π with `offset` bits skipped
+    #[inline]
+    const fn segment(offset: usize) -> (Wrapping<u64>, Wrapping<u32>) {
+        const FRAC_2_PI: [u64; 4] = [
+            0xA2F9_836E_4E44_1529,
+            0xFC27_57D1_F534_DDC0,
+            0xDB62_9599_3C43_9041,
+            0xFE51_63AB_DEBB_C561,
+        ];
+
+        let (index, shift) = (offset / 64, offset % 64);
+
+        let high = if shift == 0 {
+            FRAC_2_PI[index]
+        } else {
+            FRAC_2_PI[index] << shift | FRAC_2_PI[index + 1] >> (64 - shift)
+        };
+
+        let low = if shift > 32 {
+            FRAC_2_PI[index + 1] << (shift - 32) | FRAC_2_PI[index + 2] >> (96 - shift)
+        } else {
+            FRAC_2_PI[index + 1] >> (32 - shift)
+        };
+
+        (Wrapping(high), Wrapping(low as u32))
+    }
+
+    /// π/2 with the highest [`f32::MANTISSA_DIGITS`] (24) bits
+    const PI_2_HI: f64 = 1.570_796_310_901_641_8;
+
+    /// Bits of π/2 below [`PI_2_HI`]
+    const PI_2_LO: f64 = 1.589_325_477_352_819_6e-8;
+
+    /// π * 2^-65
+    const PI_2_65: f64 = 8.515_303_950_216_386e-20;
+    const {
+        const SHIFT_32: f64 = (1u64 << 32) as f64;
+        const _: () = assert!(SHIFT_32 * SHIFT_32 * PI_2_65 == core::f64::consts::FRAC_PI_2);
+    }
+
+    let magnitude = x.abs().to_bits();
+
+    // Non-finite
+    if magnitude >= 0x7F80_0000 {
+        return (0, f64::NAN);
+    }
+
+    // |x| < π * 2^27
+    if magnitude < 0x4DC9_0FDB {
+        let x: f64 = x.into();
+        let q = (core::f64::consts::FRAC_2_PI * x).round_ties_even() + 0.0;
+        let y = crate::mul_add(q, -PI_2_HI, x);
+        let y = crate::mul_add(q, -PI_2_LO, y);
+        return (q as i32, y);
+    }
+
+    let (high, low) = segment((magnitude >> super::EXP_SHIFT) as usize - 152);
+    let low: Wrapping<u64> = Wrapping(low.0.into());
+    let significand: Wrapping<u64> = Wrapping(((magnitude & 0x007F_FFFF) | 0x0080_0000).into());
+
+    // First 64 bits of fractional part of x/(2π)
+    let product = significand * high + ((significand * low) >> 32);
+    let r = (product.0 << 2) as i64;
+    let q = (product.0 >> 62) as i32 + i32::from(r < 0);
+    let q = if x.is_sign_negative() { -q } else { q };
+    let y = PI_2_65.copysign(x.into()) * (r as f64);
+
+    (q, y)
 }
