@@ -2,6 +2,7 @@ mod acos;
 mod acosh;
 mod asin;
 mod asinh;
+mod atan;
 mod atanh;
 mod cbrt;
 mod cosh;
@@ -27,6 +28,7 @@ criterion::criterion_main!(
     acosh::benches,
     asin::benches,
     asinh::benches,
+    atan::benches,
     atanh::benches,
     cbrt::benches,
     cosh::benches,

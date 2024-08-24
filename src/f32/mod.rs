@@ -831,3 +831,44 @@ pub fn asin(x: f32) -> f32 {
         outer(r).copysign(x)
     }
 }
+
+/// Arctangent
+#[must_use]
+#[inline]
+pub fn atan(x: f32) -> f32 {
+    #[inline]
+    fn kernel(x: f64) -> f64 {
+        fast_polynomial::rational_array(
+            x * x,
+            &[
+                3.300_049_005_002_112e-1,
+                8.269_936_280_545_194e-1,
+                7.536_692_262_484_512e-1,
+                3.041_250_192_035_205_3e-1,
+                5.258_546_450_061_43e-2,
+                3.092_811_576_351_314e-3,
+                2.668_044_628_603_543_2e-5,
+            ],
+            &[
+                3.300_049_005_002_111_4e-1,
+                9.369_952_615_545_891e-1,
+                1.0,
+                4.972_028_574_382_380_6e-1,
+                1.155_090_051_164_766_6e-1,
+                1.090_224_520_186_812_4e-2,
+                2.732_269_307_955_130_4e-4,
+            ],
+        )
+    }
+
+    let use_outer = x.abs() > 1.0;
+    let x: f64 = x.into();
+
+    if use_outer {
+        use core::f64::consts::FRAC_PI_2;
+        let recip = x.recip();
+        crate::mul_add(-recip, kernel(recip), FRAC_PI_2.copysign(x)) as f32
+    } else {
+        (x * kernel(x)) as f32
+    }
+}
