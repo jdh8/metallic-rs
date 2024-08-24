@@ -18,10 +18,19 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
-  
+ 
   bench:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Run benchmarks
       run: cargo bench
+
+  test-without-fma:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run tests without FMA
+      run: cargo test --verbose
+      env:
+        RUSTFLAGS: "-C target-feature=-fma"
