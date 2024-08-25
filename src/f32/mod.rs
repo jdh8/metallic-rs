@@ -869,21 +869,27 @@ pub fn atan(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn sin(x: f32) -> f32 {
-    if x.abs().eq(&9830.398) {
-        return 0.347_613_25_f32.copysign(-x);
-    }
+    let sign = x.is_sign_negative();
+    let x = x.abs();
+    let y = if x.eq(&9830.398) {
+        -0.347_613_25
+    } else {
+        let (q, x) = kernel::rem_pio2(x);
+        let y = if q & 1 == 0 { kernel::sin(x) } else { kernel::cos(x) };
+        let y = y as f32;
+        if q & 2 == 0 { y } else { -y }
+    };
 
-    let (q, x) = kernel::rem_pio2(x);
-    let y = if q & 1 == 0 { kernel::sin(x) } else { kernel::cos(x) };
-    let y = y as f32;
-    if q & 2 == 0 { y } else { -y }
+    if sign { -y } else { y }
 }
 
 /// Cosine
 #[must_use]
 #[inline]
 pub fn cos(x: f32) -> f32 {
-    match x.abs() {
+    let x = x.abs();
+
+    match x {
         2.861_650_8e15 => return 0.533_916_4,
         1.100_467_8e19 => return 0.996_410_1,
         1.726_998_3e20 => return 0.969_058,
@@ -891,7 +897,11 @@ pub fn cos(x: f32) -> f32 {
     }
 
     let (q, x) = kernel::rem_pio2(x);
-    let y = if q & 1 == 0 { kernel::cos(x) } else { kernel::sin(x) };
-    let y = y as f32;
-    if matches!(q & 3, 1 | 2) { -y } else { y }
+
+    match q & 3 {
+        0 => kernel::cos(x) as f32,
+        1 => -(kernel::sin(x) as f32),
+        2 => -(kernel::cos(x) as f32),
+        _ => kernel::sin(x) as f32,
+    }
 }

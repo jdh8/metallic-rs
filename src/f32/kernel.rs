@@ -161,7 +161,7 @@ pub fn rem_pio2(x: f32) -> (i32, f64) {
     // |x| < π * 2^27
     if magnitude < 0x4DC9_0FDB {
         let x: f64 = x.into();
-        let q = crate::mul_add(x, consts::FRAC_2_PI, 0.0).round_ties_even();
+        let q = (x * consts::FRAC_2_PI).round_ties_even();
         let y = crate::mul_add(q, -PI_2_HI, x);
         let y = crate::mul_add(q, -PI_2_LO, y);
         return (q as i32, y);
@@ -169,7 +169,6 @@ pub fn rem_pio2(x: f32) -> (i32, f64) {
 
     let segment = segment((magnitude >> super::EXP_SHIFT) as usize - 152);
     let significand = ((magnitude & 0x007F_FFFF) | 0x0080_0000) as i32;
-    let significand = if x.is_sign_negative() { -significand } else { significand };
     let product = segment * Wrapping(significand as u128);
     let r = (product.0 << 2 >> 64) as u64 as i64;
     let q = (product.0 >> 126) as i32 + i32::from(r < 0);
@@ -197,9 +196,9 @@ pub fn cos(x: f64) -> f64 {
 /// Sine restricted to `-π/4..=π/4`
 #[inline]
 pub fn sin(x: f64) -> f64 {
-    let xx = x * x;
-    let y = crate::poly(
-        xx,
+    let y = x * x;
+    let y = y * crate::poly(
+        y,
         &[
             -1.666_666_666_666_663e-1,
             8.333_333_333_321_917e-3,
@@ -209,5 +208,5 @@ pub fn sin(x: f64) -> f64 {
             1.589_594_452_434_234_8e-10,
         ],
     );
-    crate::mul_add(crate::mul_add(y, xx, 0.0), x, x)
+    crate::mul_add(y, x, x)
 }
