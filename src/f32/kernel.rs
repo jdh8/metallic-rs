@@ -166,10 +166,8 @@ pub fn rem_pio2(x: f32) -> (i32, f64) {
 
     /// π * 2^-65
     const PI_2_65: f64 = 8.515_303_950_216_386e-20;
-    const {
-        const SHIFT_32: f64 = (1u64 << 32) as f64;
-        const _: () = assert!(SHIFT_32 * SHIFT_32 * PI_2_65 == core::f64::consts::FRAC_PI_2);
-    }
+    const _2_32: f64 = (1u64 << 32) as f64;
+    const _: () = assert!(_2_32 * _2_32 * PI_2_65 == core::f64::consts::FRAC_PI_2);
 
     let magnitude = x.abs().to_bits();
 
