@@ -870,6 +870,17 @@ pub fn atan(x: f32) -> f32 {
 #[inline]
 pub fn sin(x: f32) -> f32 {
     let (q, x) = kernel::rem_pio2(x);
-    let f = if q & 1 == 0 { kernel::sin } else { kernel::cos };
-    (if q & 2 == 0 { f(x) } else { -f(x) }) as f32
+    let y = if q & 1 == 0 { kernel::sin(x) } else { kernel::cos(x) };
+    let y = y as f32;
+    if q & 2 == 0 { y } else { -y }
+}
+
+/// Cosine
+#[must_use]
+#[inline]
+pub fn cos(x: f32) -> f32 {
+    let (q, x) = kernel::rem_pio2(x);
+    let y = if q & 1 == 0 { kernel::cos(x) } else { kernel::sin(x) };
+    let y = y as f32;
+    if matches!(q & 3, 1 | 2) { -y } else { y }
 }

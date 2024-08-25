@@ -127,6 +127,11 @@ fn test_atan() {
 }
 
 #[test]
+fn test_cos() {
+    test_identity(metal::cos, core_math::cosf);
+}
+
+#[test]
 fn test_sin() {
     test_identity(metal::sin, core_math::sinf);
 }
