@@ -221,9 +221,9 @@ pub fn cos(x: f64) -> f64 {
 /// Sine restricted to `-π/4..=π/4`
 #[inline]
 pub fn sin(x: f64) -> f64 {
-    let y = x * x;
-    let y = y * crate::poly(
-        y,
+    let xx = x * x;
+    let y = crate::poly(
+        xx,
         &[
             -1.666_666_666_666_663e-1,
             8.333_333_333_321_917e-3,
@@ -233,5 +233,5 @@ pub fn sin(x: f64) -> f64 {
             1.589_594_452_434_234_8e-10,
         ],
     );
-    crate::mul_add(y, x, x)
+    crate::mul_add(crate::mul_add(y, xx, 0.0), x, x)
 }
