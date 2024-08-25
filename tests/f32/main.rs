@@ -127,6 +127,11 @@ fn test_atan() {
 }
 
 #[test]
+fn test_sin() {
+    test_identity(metal::sin, core_math::sinf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);

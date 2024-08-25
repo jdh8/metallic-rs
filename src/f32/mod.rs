@@ -864,3 +864,12 @@ pub fn atan(x: f32) -> f32 {
         (x * kernel(x)) as f32
     }
 }
+
+/// Sine
+#[must_use]
+#[inline]
+pub fn sin(x: f32) -> f32 {
+    let (q, x) = kernel::rem_pio2(x);
+    let f = if q & 1 == 0 { kernel::sin } else { kernel::cos };
+    (if q & 2 == 0 { f(x) } else { -f(x) }) as f32
+}

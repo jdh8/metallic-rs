@@ -130,7 +130,7 @@ pub fn exp2(x: f64) -> f64 {
 ///
 /// The returned quotient has accurate sign and last 2 bits.
 #[inline]
-fn rem_pio2(x: f32) -> (i32, f64) {
+pub fn rem_pio2(x: f32) -> (i32, f64) {
     /// Get 96 bits of 2/π with `offset` bits skipped
     #[inline]
     const fn segment(offset: usize) -> (Wrapping<u64>, Wrapping<u32>) {
