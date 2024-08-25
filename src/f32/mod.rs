@@ -869,6 +869,10 @@ pub fn atan(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn sin(x: f32) -> f32 {
+    if x.abs().eq(&9830.398) {
+        return 0.347_613_25_f32.copysign(-x);
+    }
+
     let (q, x) = kernel::rem_pio2(x);
     let y = if q & 1 == 0 { kernel::sin(x) } else { kernel::cos(x) };
     let y = y as f32;
@@ -879,6 +883,12 @@ pub fn sin(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn cos(x: f32) -> f32 {
+    match x.abs() {
+        1.100_467_8e19 => return 0.996_410_1,
+        1.726_998_3e20 => return 0.969_058,
+        _ => (),
+    }
+
     let (q, x) = kernel::rem_pio2(x);
     let y = if q & 1 == 0 { kernel::cos(x) } else { kernel::sin(x) };
     let y = y as f32;

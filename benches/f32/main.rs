@@ -5,6 +5,7 @@ mod asinh;
 mod atan;
 mod atanh;
 mod cbrt;
+mod cos;
 mod cosh;
 mod exp;
 mod exp10;
@@ -20,6 +21,7 @@ mod log10;
 mod log2;
 mod powf;
 mod round;
+mod sin;
 mod sinh;
 mod tanh;
 
@@ -31,6 +33,7 @@ criterion::criterion_main!(
     atan::benches,
     atanh::benches,
     cbrt::benches,
+    cos::benches,
     cosh::benches,
     exp::benches,
     exp2::benches,
@@ -47,6 +50,7 @@ criterion::criterion_main!(
     powf::benches,
     round::benches,
     sinh::benches,
+    sin::benches,
     tanh::benches,
 );
 
