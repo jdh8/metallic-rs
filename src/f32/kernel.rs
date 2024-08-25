@@ -161,7 +161,7 @@ pub fn rem_pio2(x: f32) -> (i32, f64) {
     // |x| < π * 2^27
     if magnitude < 0x4DC9_0FDB {
         let x: f64 = x.into();
-        let q = (consts::FRAC_2_PI * x).round_ties_even() + 0.0;
+        let q = crate::mul_add(x, consts::FRAC_2_PI, 0.0).round_ties_even();
         let y = crate::mul_add(q, -PI_2_HI, x);
         let y = crate::mul_add(q, -PI_2_LO, y);
         return (q as i32, y);
