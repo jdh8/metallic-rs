@@ -717,7 +717,7 @@ pub fn tanh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn acos(x: f32) -> f32 {
-    /// Arccosine restricted to [0, 1]
+    /// Arccosine restricted to `0.0..=1.0`
     ///
     /// If x > 1, this function returns NaN to indicate complex result.
     /// If x < 0, the result is inaccurate.
@@ -761,7 +761,7 @@ pub fn acos(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn asin(x: f32) -> f32 {
-    /// Arcsine restricted to [0.5, 1]
+    /// Arcsine restricted to `0.5..=1.0`
     ///
     /// If x > 1, this function returns NaN to indicate complex result.
     /// If x < 0.5, the result is inaccurate.
@@ -791,7 +791,7 @@ pub fn asin(x: f32) -> f32 {
         crate::mul_add((1.0 - x).sqrt(), y, core::f64::consts::FRAC_PI_2) as f32
     }
 
-    /// Arcsine restricted to [-0.5, 0.5]
+    /// Arcsine restricted to `-0.5..=0.5`
     #[inline]
     fn inner(x: f32) -> f32 {
         let x: f64 = x.into();
