@@ -561,39 +561,37 @@ pub fn atanh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn asinh(x: f32) -> f32 {
-    #[inline]
-    fn magnitude(s: f32) -> f32 {
-        use crate::f64::EXP_SHIFT;
-        use core::f64::consts;
+    use crate::f64::EXP_SHIFT;
+    use core::f64::consts;
+    let s = x.abs();
 
-        match s {
-            f32::INFINITY => return f32::INFINITY,
-            2.901_895_4e7 => return 17.876_608,
-            6.391_892e22 => return 53.20505,
-            2.749_153e28 => return 66.17683,
-            s if s.is_nan() => return f32::NAN,
-            _ => (),
+    let magnitude = match s {
+        f32::INFINITY => f32::INFINITY,
+        2.901_895_4e7 => 17.876_608,
+        6.391_892e22 => 53.20505,
+        2.749_153e28 => 66.17683,
+        s if s.is_nan() => f32::NAN,
+        _ => {
+            let s: f64 = s.into();
+            let c = crate::mul_add(s, s, 1.0).sqrt();
+            let i = (c + s).to_bits() as i64;
+            let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
+            let (s, c) = if exponent == 0 {
+                (s, c)
+            } else {
+                let c = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+                (c - 1.0, c)
+            };
+        
+            crate::mul_add(
+                consts::LN_2,
+                exponent as f64,
+                2.0 * kernel::atanh(s / (c + 1.0)),
+            ) as f32
         }
+    };
 
-        let s: f64 = s.into();
-        let c = crate::mul_add(s, s, 1.0).sqrt();
-        let i = (c + s).to_bits() as i64;
-        let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
-        let (s, c) = if exponent == 0 {
-            (s, c)
-        } else {
-            let c = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
-            (c - 1.0, c)
-        };
-
-        crate::mul_add(
-            consts::LN_2,
-            exponent as f64,
-            2.0 * kernel::atanh(s / (c + 1.0)),
-        ) as f32
-    }
-
-    magnitude(x.abs()).copysign(x)
+    magnitude.copysign(x)
 }
 
 /// Inverse hyperbolic cosine
@@ -645,9 +643,9 @@ pub fn cosh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn sinh(x: f32) -> f32 {
-    #[inline]
-    fn magnitude(x: f32) -> f32 {
+    let magnitude = {
         use core::f32::consts::LN_2;
+        let x = x.abs();
 
         if x == 5.589_425e-4 {
             return x;
@@ -674,17 +672,18 @@ pub fn sinh(x: f32) -> f32 {
 
         let y = finite_exp(x.into());
         (0.5 * (y - y.recip())) as f32
-    }
+    };
 
-    magnitude(x.abs()).copysign(x)
+    magnitude.copysign(x)
 }
 
 /// Hyperbolic tangent
 #[must_use]
 #[inline]
 pub fn tanh(x: f32) -> f32 {
-    #[inline]
-    fn magnitude(x: f32) -> f32 {
+    let magnitude = {
+        let x = x.abs();
+
         if x > 9.010_913 {
             return 1.0;
         }
@@ -708,21 +707,17 @@ pub fn tanh(x: f32) -> f32 {
 
         let y = finite_exp((2.0 * x).into());
         ((y - 1.0) / (y + 1.0)) as f32
-    }
+    };
 
-    magnitude(x.abs()).copysign(x)
+    magnitude.copysign(x)
 }
 
 /// Arccosine
 #[must_use]
 #[inline]
 pub fn acos(x: f32) -> f32 {
-    /// Arccosine restricted to `0.0..=1.0`
-    ///
-    /// If x > 1, this function returns NaN to indicate complex result.
-    /// If x < 0, the result is inaccurate.
-    #[inline]
-    fn kernel(x: f64) -> f64 {
+    let y = {
+        let x: f64 = x.abs().into();
         crate::poly(
             x,
             &[
@@ -745,9 +740,7 @@ pub fn acos(x: f32) -> f32 {
                 1.275_454_772_275_258_2e-5,
             ],
         ) * (1.0 - x).sqrt()
-    }
-
-    let y = kernel(x.abs().into());
+    };
 
     match x {
         1.589_325_5e-8 => 1.570_796_4,
@@ -761,39 +754,9 @@ pub fn acos(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn asin(x: f32) -> f32 {
-    /// Arcsine restricted to `0.5..=1.0`
-    ///
-    /// If x > 1, this function returns NaN to indicate complex result.
-    /// If x < 0.5, the result is inaccurate.
-    #[inline]
-    fn outer(x: f32) -> f32 {
-        if x.eq(&0.532_136_56) {
-            return 0.561_122_06;
-        }
+    let sin = x.abs();
 
-        let x: f64 = x.into();
-        let y = crate::poly(
-            x,
-            &[
-                -1.570_795_268_727_950_5,
-                2.145_844_720_538_429_6e-1,
-                -8.891_815_130_471_556e-2,
-                5.019_724_059_139_869e-2,
-                -3.183_089_187_114_656e-2,
-                2.021_070_346_378_044_8e-2,
-                -1.159_335_145_410_863_3e-2,
-                5.441_837_134_625_65e-3,
-                -1.883_759_349_016_505e-3,
-                4.174_581_850_783_569e-4,
-                -4.385_109_488_852_58e-5,
-            ],
-        );
-        crate::mul_add((1.0 - x).sqrt(), y, core::f64::consts::FRAC_PI_2) as f32
-    }
-
-    /// Arcsine restricted to `-0.5..=0.5`
-    #[inline]
-    fn inner(x: f32) -> f32 {
+    if sin < 0.5 {
         let x: f64 = x.into();
         let y = x * x;
         let y = y * crate::poly(
@@ -812,16 +775,34 @@ pub fn asin(x: f32) -> f32 {
                 0.028_097_370_567_441_11,
             ],
         );
-        crate::mul_add(y, x, x) as f32
+
+        return crate::mul_add(y, x, x) as f32
     }
 
-    let r = x.abs();
-
-    if r < 0.5 {
-        inner(x)
+    let y = if sin.eq(&0.532_136_56) {
+        0.561_122_06
     } else {
-        outer(r).copysign(x)
-    }
+        let sin: f64 = sin.into();
+        let y = crate::poly(
+            sin,
+            &[
+                -1.570_795_268_727_950_5,
+                2.145_844_720_538_429_6e-1,
+                -8.891_815_130_471_556e-2,
+                5.019_724_059_139_869e-2,
+                -3.183_089_187_114_656e-2,
+                2.021_070_346_378_044_8e-2,
+                -1.159_335_145_410_863_3e-2,
+                5.441_837_134_625_65e-3,
+                -1.883_759_349_016_505e-3,
+                4.174_581_850_783_569e-4,
+                -4.385_109_488_852_58e-5,
+            ],
+        );
+        crate::mul_add((1.0 - sin).sqrt(), y, core::f64::consts::FRAC_PI_2) as f32
+    };
+
+    y.copysign(x)
 }
 
 /// Arctangent
