@@ -884,6 +884,7 @@ pub fn sin(x: f32) -> f32 {
 #[inline]
 pub fn cos(x: f32) -> f32 {
     match x.abs() {
+        2.861_650_8e15 => return 0.533_916_4,
         1.100_467_8e19 => return 0.996_410_1,
         1.726_998_3e20 => return 0.969_058,
         _ => (),
