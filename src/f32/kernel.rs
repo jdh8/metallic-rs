@@ -117,19 +117,6 @@ pub fn exp2(x: f64) -> f64 {
     return fast_ldexp(x, n as i64);
 }
 
-/// Remainder from division by π/2
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TrigRemainder {
-    /// The numerator is small, so the remainder as `f64` is accurate.
-    /// 
-    /// This field should be in `-π/4..=π/4`.
-    Small(f64),
-
-    /// The numerator is large, so the result is a fixed-point number of the
-    /// fractional part of the quotient.
-    Big(Wrapping<i64>),
-}
-
 /// Argument reduction for trigonometric functions
 ///
 /// The prototype of this function resembles `__rem_pio2` in GCC, but this
@@ -143,7 +130,9 @@ pub enum TrigRemainder {
 ///
 /// The lowest 2 bits of the returned quotient are accurate.
 #[inline]
-pub fn rem_pio2(x: f32) -> (i32, TrigRemainder) {
+pub fn rem_pio2(x: f32) -> (i32, f64) {
+    use core::f64::consts;
+
     /// Get 128 bits of 2/π with `offset` bits skipped
     #[inline]
     const fn segment(offset: usize) -> Wrapping<u128> {
@@ -159,20 +148,23 @@ pub fn rem_pio2(x: f32) -> (i32, TrigRemainder) {
     /// Bits of π/2 below [`PI_2_HI`]
     const PI_2_LO: f64 = 1.589_325_477_352_819_6e-8;
 
+    /// π * 2^-65
+    const PI_2_65: f64 = consts::PI / (1u128 << 65) as f64;
+
     let magnitude = x.abs().to_bits();
 
     // Non-finite
     if magnitude >= 0x7F80_0000 {
-        return (0, TrigRemainder::Small(f64::NAN));
+        return (0, f64::NAN);
     }
 
     // |x| < π * 2^27
     if magnitude < 0x4DC9_0FDB {
         let x: f64 = x.into();
-        let q = (core::f64::consts::FRAC_2_PI * x).round_ties_even() + 0.0;
+        let q = (consts::FRAC_2_PI * x).round_ties_even() + 0.0;
         let y = crate::mul_add(q, -PI_2_HI, x);
         let y = crate::mul_add(q, -PI_2_LO, y);
-        return (q as i32, TrigRemainder::Small(y));
+        return (q as i32, y);
     }
 
     let segment = segment((magnitude >> super::EXP_SHIFT) as usize - 152);
@@ -182,20 +174,12 @@ pub fn rem_pio2(x: f32) -> (i32, TrigRemainder) {
     let r = (product.0 << 2 >> 64) as u64 as i64;
     let q = (product.0 >> 126) as i32 + i32::from(r < 0);
 
-    (q, TrigRemainder::Big(Wrapping(r)))
+    (q, PI_2_65 * r as f64)
 }
-
-/// π * 2^-65
-const PI_2_65: f64 = 8.515_303_950_216_386e-20;
-const _: () = assert!(PI_2_65 * (1u128 << 64) as f64 == core::f64::consts::FRAC_PI_2);
 
 /// Cosine restricted to `-π/4..=π/4`
 #[inline]
-pub fn cos(x: TrigRemainder) -> f64 {
-    let x = match x {
-        TrigRemainder::Small(x) => x,
-        TrigRemainder::Big(r) => PI_2_65 * r.0 as f64,
-    };
+pub fn cos(x: f64) -> f64 {
     crate::poly(
         x * x,
         &[
@@ -212,11 +196,7 @@ pub fn cos(x: TrigRemainder) -> f64 {
 
 /// Sine restricted to `-π/4..=π/4`
 #[inline]
-pub fn sin(x: TrigRemainder) -> f64 {
-    let x = match x {
-        TrigRemainder::Small(x) => x,
-        TrigRemainder::Big(r) => PI_2_65 * r.0 as f64,
-    };
+pub fn sin(x: f64) -> f64 {
     let xx = x * x;
     let y = crate::poly(
         xx,
