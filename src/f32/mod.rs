@@ -850,18 +850,32 @@ pub fn atan(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn sin(x: f32) -> f32 {
+    #[inline]
+    fn apply_sign(x: f32, sign: bool) -> f32 {
+        if sign {
+            -x
+        } else {
+            x
+        }
+    }
+
     let sign = x.is_sign_negative();
     let x = x.abs();
     let y = if x.eq(&9830.398) {
         -0.347_613_25
     } else {
         let (q, x) = kernel::rem_pio2(x);
-        let y = if q & 1 == 0 { kernel::sin(x) } else { kernel::cos(x) };
-        let y = y as f32;
-        if q & 2 == 0 { y } else { -y }
+
+        let y = if q & 1 == 0 {
+            kernel::sin(x)
+        } else {
+            kernel::cos(x)
+        };
+
+        apply_sign(y as f32, q & 2 == 2)
     };
 
-    if sign { -y } else { y }
+    apply_sign(y, sign)
 }
 
 /// Cosine
