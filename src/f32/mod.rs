@@ -582,7 +582,7 @@ pub fn asinh(x: f32) -> f32 {
                 let c = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
                 (c - 1.0, c)
             };
-        
+
             crate::mul_add(
                 consts::LN_2,
                 exponent as f64,
@@ -776,7 +776,7 @@ pub fn asin(x: f32) -> f32 {
             ],
         );
 
-        return crate::mul_add(y, x, x) as f32
+        return crate::mul_add(y, x, x) as f32;
     }
 
     let y = if sin.eq(&0.532_136_56) {
