@@ -31,7 +31,11 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
         .take(LIMIT)
         .count();
 
-    assert!(count < LIMIT, "Too many (>= {LIMIT}) mismatches!  Aborting...");
+    assert!(
+        count < LIMIT,
+        "Too many (>= {LIMIT}) mismatches!  Aborting...",
+    );
+
     assert!(count == 0, "There are {count} mismatches");
 }
 

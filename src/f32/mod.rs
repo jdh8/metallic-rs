@@ -643,21 +643,14 @@ pub fn cosh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn sinh(x: f32) -> f32 {
-    let magnitude = {
-        use core::f32::consts::LN_2;
-        let x = x.abs();
+    let magnitude = match x.abs() {
+        5.589_425e-4 => 5.589_425e-4,
+        x if x > 89.415_985 => f32::INFINITY,
 
-        if x == 5.589_425e-4 {
-            return x;
-        }
-
-        if x > 89.415_985 {
-            return f32::INFINITY;
-        }
-
-        if x <= 0.5 * LN_2 {
+        x if x <= 0.5 * core::f32::consts::LN_2 => {
             let x: f64 = x.into();
-            return (x * crate::poly(
+
+            (x * crate::poly(
                 x * x,
                 &[
                     1.0,
@@ -667,11 +660,12 @@ pub fn sinh(x: f32) -> f32 {
                     2.755_726_847_699_198e-6,
                     2.510_037_721_378_323_2e-8,
                 ],
-            )) as f32;
+            )) as f32
         }
-
-        let y = finite_exp(x.into());
-        (0.5 * (y - y.recip())) as f32
+        x => {
+            let y = finite_exp(x.into());
+            (0.5 * (y - y.recip())) as f32
+        }
     };
 
     magnitude.copysign(x)
@@ -681,16 +675,13 @@ pub fn sinh(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn tanh(x: f32) -> f32 {
-    let magnitude = {
-        let x = x.abs();
+    let magnitude = match x.abs() {
+        x if x > 9.010_913 => 1.0,
 
-        if x > 9.010_913 {
-            return 1.0;
-        }
-
-        if x < 0.5 * core::f32::consts::LN_2 {
+        x if x < 0.5 * core::f32::consts::LN_2 => {
             let x: f64 = x.into();
-            return (x * crate::poly(
+
+            (x * crate::poly(
                 x * x,
                 &[
                     1.0,
@@ -702,11 +693,12 @@ pub fn tanh(x: f32) -> f32 {
                     3.556_430_171_413_512_5e-3,
                     -1.231_841_430_186_171e-3,
                 ],
-            )) as f32;
+            )) as f32
         }
-
-        let y = finite_exp((2.0 * x).into());
-        ((y - 1.0) / (y + 1.0)) as f32
+        x => {
+            let y = finite_exp((2.0 * x).into());
+            ((y - 1.0) / (y + 1.0)) as f32
+        }
     };
 
     magnitude.copysign(x)
