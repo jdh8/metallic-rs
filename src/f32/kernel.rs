@@ -1,5 +1,3 @@
-use core::num::Wrapping;
-
 /// Fast C `ldexp` assuming normal argument and result
 #[inline]
 pub fn fast_ldexp(x: f64, n: i64) -> f64 {
@@ -119,6 +117,8 @@ pub fn exp2(x: f64) -> f64 {
 
 /// Argument reduction for trigonometric functions
 ///
+/// - `x`: radians with a positive sign bit (0)
+///
 /// The prototype of this function resembles `__rem_pio2` in GCC, but this
 /// function is only for `f32`.  Pseudocode is as follows.
 ///
@@ -130,17 +130,9 @@ pub fn exp2(x: f64) -> f64 {
 ///
 /// The lowest 2 bits of the returned quotient are accurate.
 #[inline]
-pub fn rem_pio2(x: f32) -> (i32, f64) {
+pub fn rem_pio2(x: f32) -> (i64, f64) {
     use core::f64::consts;
-
-    /// Get 128 bits of 2/π with `offset` bits skipped
-    #[inline]
-    const fn segment(offset: usize) -> Wrapping<u128> {
-        const FRAC_2_PI_HI: u128 = 0xA2F9_836E_4E44_1529_FC27_57D1_F534_DDC0;
-        const FRAC_2_PI_LO: u128 = 0xDB62_9599_3C43_9041_FE51_63AB_DEBB_C561;
-        debug_assert!(0 < offset && offset < 128);
-        Wrapping(FRAC_2_PI_HI << offset | FRAC_2_PI_LO >> (128 - offset))
-    }
+    debug_assert!(x.is_sign_positive());
 
     /// π/2 with the highest [`f32::MANTISSA_DIGITS`] (24) bits
     const PI_2_HI: f64 = 1.570_796_310_901_641_8;
@@ -148,10 +140,18 @@ pub fn rem_pio2(x: f32) -> (i32, f64) {
     /// Bits of π/2 below [`PI_2_HI`]
     const PI_2_LO: f64 = 1.589_325_477_352_819_6e-8;
 
+    /// Little-endian 256 bits of 2/π
+    const FRAC_2_PI: [u64; 4] = [
+        0xFE51_63AB_DEBB_C561,
+        0xDB62_9599_3C43_9041,
+        0xFC27_57D1_F534_DDC0,
+        0xA2F9_836E_4E44_1529,
+    ];
+
     /// π * 2^-65
     const PI_2_65: f64 = consts::PI / (1u128 << 65) as f64;
 
-    let magnitude = x.abs().to_bits();
+    let magnitude = x.to_bits();
 
     // Non-finite
     if magnitude >= 0x7F80_0000 {
@@ -164,16 +164,21 @@ pub fn rem_pio2(x: f32) -> (i32, f64) {
         let q = (x * consts::FRAC_2_PI).round_ties_even();
         let y = crate::mul_add(q, -PI_2_HI, x);
         let y = crate::mul_add(q, -PI_2_LO, y);
-        return (q as i32, y);
+        return (q as i64, y);
     }
 
-    let segment = segment((magnitude >> super::EXP_SHIFT) as usize - 152);
-    let significand = ((magnitude & 0x007F_FFFF) | 0x0080_0000) as i32;
-    let product = segment * Wrapping(significand as u128);
-    let r = (product.0 << 2 >> 64) as u64 as i64;
-    let q = (product.0 >> 126) as i32 + i32::from(r < 0);
+    let significand: u128 = ((magnitude & 0x007F_FFFF) | 0x0080_0000).into();
+    let p0 = significand * u128::from(FRAC_2_PI[0]);
+    let p1 = significand * u128::from(FRAC_2_PI[1]) + (p0 >> 64);
+    let p2 = significand * u128::from(FRAC_2_PI[2]) + (p1 >> 64);
+    let high = significand * u128::from(FRAC_2_PI[3]) + (p2 >> 64);
+    let low = p2 << 64 | p1 << 64 >> 64;
+    let shift = (magnitude >> super::EXP_SHIFT) - 150;
+    let product = high << shift | low >> (128 - shift);
+    let r = (product << 64 >> 64) as u64 as i64;
+    let q = (product >> 64) as u64 as i64;
 
-    (q, PI_2_65 * r as f64)
+    (q.wrapping_sub(r >> 63), r as f64 * PI_2_65)
 }
 
 /// Cosine restricted to `-π/4..=π/4`
