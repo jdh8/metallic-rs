@@ -18,6 +18,8 @@ fn is(x: f32, y: f32) -> bool {
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
 fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
+    const LIMIT: usize = 100;
+
     let count = (0..=u32::MAX)
         .filter_map(|i| {
             let x = f32::from_bits(i);
@@ -26,8 +28,10 @@ fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
 
             (!is(f, g)).then(|| Some(println!("{x:e}: {f:e} != {g:e}")))
         })
+        .take(LIMIT)
         .count();
 
+    assert!(count < LIMIT, "Too many (>= {LIMIT}) mismatches!  Aborting...");
     assert!(count == 0, "There are {count} mismatches");
 }
 
