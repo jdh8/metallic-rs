@@ -851,23 +851,19 @@ pub fn sin(x: f32) -> f32 {
         }
     }
 
-    let sign = x.is_sign_negative();
-    let x = x.abs();
-    let y = if x.eq(&9830.398) {
-        -0.347_613_25
-    } else {
-        let (q, x) = kernel::rem_pio2(x);
-
-        let y = if q & 1 == 0 {
-            kernel::sin(x)
-        } else {
-            kernel::cos(x)
-        };
-
-        apply_sign(y as f32, q & 2 == 2)
+    let y = match x.abs() {
+        9830.398 => -0.347_613_25,
+        x => {
+            let (q, x) = kernel::rem_pio2(x);
+            let y = match q & 1 {
+                0 => kernel::sin(x),
+                _ => kernel::cos(x),
+            };
+            apply_sign(y as f32, q & 2 == 2)
+        }
     };
 
-    apply_sign(y, sign)
+    apply_sign(y, x.is_sign_negative())
 }
 
 /// Cosine
