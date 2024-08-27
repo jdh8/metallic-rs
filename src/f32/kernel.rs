@@ -117,7 +117,7 @@ pub fn exp2(x: f64) -> f64 {
 
 /// Argument reduction for trigonometric functions
 ///
-/// - `x`: radians with a positive sign bit (0)
+/// - `x`: finite radians with a positive sign bit
 ///
 /// The prototype of this function resembles `__rem_pio2` in GCC, but this
 /// function is only for `f32`.  Pseudocode is as follows.
@@ -152,11 +152,6 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
     const PI_2_65: f64 = consts::PI / (1u128 << 65) as f64;
 
     let magnitude = x.to_bits();
-
-    // Non-finite
-    if magnitude >= 0x7F80_0000 {
-        return (0, f64::NAN);
-    }
 
     // |x| < π * 2^27
     if magnitude < 0x4DC9_0FDB {
