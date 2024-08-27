@@ -170,8 +170,8 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
     let low = p2 << 64 | p1 << 64 >> 64;
     let shift = (magnitude >> super::EXP_SHIFT) - 150;
     let product = high << shift | low >> (128 - shift);
-    let r = (product << 64 >> 64) as u64 as i64;
-    let q = (product >> 64) as u64 as i64;
+    let r = product as i64;
+    let q = (product >> 64) as i64;
 
     (q.wrapping_sub(r >> 63), r as f64 * PI_2_65)
 }
