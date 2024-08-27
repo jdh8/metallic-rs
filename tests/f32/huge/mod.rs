@@ -1,3 +1,4 @@
+use super::Identity as _;
 use metallic::f32 as metal;
 use regex::Regex;
 use std::path::PathBuf;
@@ -56,7 +57,7 @@ fn test_bivariate(
     data: impl Iterator<Item = [f32; 2]>,
 ) {
     let count = data
-        .filter(|&[x, y]| (!super::is(f(x, y), g(x, y))))
+        .filter(|&[x, y]| (!f(x, y).is(&g(x, y))))
         .map(|[x, y]| println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y)))
         .count();
 

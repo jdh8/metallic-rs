@@ -842,15 +842,6 @@ pub fn atan(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn sin(x: f32) -> f32 {
-    #[inline]
-    fn apply_sign(x: f32, sign: bool) -> f32 {
-        if sign {
-            -x
-        } else {
-            x
-        }
-    }
-
     let y = match x.abs() {
         9830.398 => -0.347_613_25,
         x if x.to_bits() >= f32::INFINITY.to_bits() => f32::NAN,
@@ -860,11 +851,11 @@ pub fn sin(x: f32) -> f32 {
                 0 => kernel::sin(x),
                 _ => kernel::cos(x),
             };
-            apply_sign(y as f32, q & 2 == 2)
+            kernel::apply_sign(y, q & 2 == 2)
         }
     };
 
-    apply_sign(y, x.is_sign_negative())
+    kernel::apply_sign(y, x.is_sign_negative())
 }
 
 /// Cosine
@@ -884,9 +875,36 @@ pub fn cos(x: f32) -> f32 {
     let (q, x) = kernel::rem_pio2(x);
 
     match q & 3 {
-        0 => kernel::cos(x) as f32,
-        1 => -(kernel::sin(x) as f32),
-        2 => -(kernel::cos(x) as f32),
-        _ => kernel::sin(x) as f32,
+        0 => kernel::cos(x),
+        1 => -kernel::sin(x),
+        2 => -kernel::cos(x),
+        _ => kernel::sin(x),
     }
+}
+
+/// Compute sine and cosine simultaneously
+#[must_use]
+#[inline]
+pub fn sin_cos(x: f32) -> (f32, f32) {
+    let (s, c) = match x.abs() {
+        9830.398 => (-0.347_613_25, -0.937_638),
+        2.861_650_8e15 => (-0.845_537_3, 0.533_916_4),
+        1.100_467_8e19 => (0.084_657_6, 0.996_410_1),
+        1.726_998_3e20 => (-0.246_833_34, 0.969_058),
+        x if x.to_bits() >= f32::INFINITY.to_bits() => (f32::NAN, f32::NAN),
+        x => {
+            let (q, x) = kernel::rem_pio2(x);
+            let s = kernel::sin(x);
+            let c = kernel::cos(x);
+
+            match q & 3 {
+                0 => (s, c),
+                1 => (c, -s),
+                2 => (-s, -c),
+                _ => (-c, s),
+            }
+        }
+    };
+
+    (kernel::apply_sign(s, x.is_sign_negative()), c)
 }

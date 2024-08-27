@@ -180,7 +180,7 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
 
 /// Cosine restricted to `-π/4..=π/4`
 #[inline]
-pub fn cos(x: f64) -> f64 {
+pub fn cos(x: f64) -> f32 {
     crate::poly(
         x * x,
         &[
@@ -192,12 +192,12 @@ pub fn cos(x: f64) -> f64 {
             -2.755_529_138_739_507_4e-7,
             2.063_333_980_512_758_6e-9,
         ],
-    )
+    ) as f32
 }
 
 /// Sine restricted to `-π/4..=π/4`
 #[inline]
-pub fn sin(x: f64) -> f64 {
+pub fn sin(x: f64) -> f32 {
     let y = x * x;
     let y = y * crate::poly(
         y,
@@ -210,5 +210,14 @@ pub fn sin(x: f64) -> f64 {
             1.589_594_452_434_234_8e-10,
         ],
     );
-    crate::mul_add(y, x, x)
+    crate::mul_add(y, x, x) as f32
+}
+
+#[inline]
+pub fn apply_sign(x: f32, sign: bool) -> f32 {
+    if sign {
+        -x
+    } else {
+        x
+    }
 }

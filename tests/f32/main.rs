@@ -10,33 +10,47 @@ mod x87;
 ///
 /// This function works around comparison issues with NaNs and signed zeros.
 /// To be specific, `is(f32::NAN, f32::NAN)` but not `is(0.0, -0.0)`.
-fn is(x: f32, y: f32) -> bool {
-    x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
+trait Identity {
+    fn is(&self, other: &Self) -> bool;
 }
 
-/// Check if `f` returns the same result as `g` for every `f32` values
+impl Identity for f32 {
+    fn is(&self, other: &Self) -> bool {
+        self.to_bits() == other.to_bits() || (self.is_nan() && other.is_nan())
+    }
+}
+
+impl<T: Identity, U: Identity> Identity for (T, U) {
+    fn is(&self, other: &Self) -> bool {
+        self.0.is(&other.0) && self.1.is(&other.1)
+    }
+}
+
+/// Exhaustively test for every `u32` value
 ///
-/// By "same result", I mean semantic identity as defined by [`is`].
-fn test_identity(f: impl Fn(f32) -> f32, g: impl Fn(f32) -> f32) {
-    const LIMIT: usize = 100;
-
-    let count = (0..=u32::MAX)
-        .filter_map(|i| {
-            let x = f32::from_bits(i);
-            let f = f(x);
-            let g = g(x);
-
-            (!is(f, g)).then(|| Some(println!("{x:e}: {f:e} != {g:e}")))
-        })
-        .take(LIMIT)
-        .count();
+/// - `error`: function returning `Some` if there is an error
+fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
+    const LIMIT: usize = 250;
+    let count = (0..=u32::MAX).filter_map(error).take(LIMIT).count();
 
     assert!(
         count < LIMIT,
         "Too many (>= {LIMIT}) mismatches!  Aborting...",
     );
-
     assert!(count == 0, "There are {count} mismatches");
+}
+
+/// Check if `f` returns the same result as `g` for every `f32` values
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+fn test_identity<T: Identity + core::fmt::Debug>(f: impl Fn(f32) -> T, g: impl Fn(f32) -> T) {
+    exhaustively_test_u32(|i| {
+        let x = f32::from_bits(i);
+        let f = f(x);
+        let g = g(x);
+
+        (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
+    });
 }
 
 #[test]
@@ -145,6 +159,11 @@ fn test_sin() {
 }
 
 #[test]
+fn test_sin_cos() {
+    test_identity(metal::sin_cos, core_math::sincosf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);
@@ -178,7 +197,7 @@ fn frexp() {
 /// either of them.
 fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     #[allow(clippy::cast_possible_truncation)]
-    if is(result, expected as f32) {
+    if result.is(&(expected as f32)) {
         return true;
     }
 
@@ -189,33 +208,25 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
 
 // Code repetition is intentional for future removal of this function
 fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64) -> f64) {
-    let count = (0..=u32::MAX)
-        .filter_map(|bits| {
-            let x = f32::from_bits(0x10001 * (bits >> 16));
-            let y = f32::from_bits(bits << 16);
-            let f = f(x, y);
-            let g = g(x.into(), y.into());
+    exhaustively_test_u32(|bits| {
+        let x = f32::from_bits(0x10001 * (bits >> 16));
+        let y = f32::from_bits(bits << 16);
+        let f = f(x, y);
+        let g = g(x.into(), y.into());
 
-            (!is_faithful_rounding(f, g)).then(|| Some(println!("{x:e}, {y:e}: {f:e} != {g:e}")))
-        })
-        .count();
-
-    assert!(count == 0, "There are {count} mismatches");
+        (!is_faithful_rounding(f, g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
+    });
 }
 
 fn test_bivariate_correct(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
-    let count = (0..=u32::MAX)
-        .filter_map(|bits| {
-            let x = f32::from_bits(0x10001 * (bits >> 16));
-            let y = f32::from_bits(bits << 16);
-            let f = f(x, y);
-            let g = g(x, y);
+    exhaustively_test_u32(|bits| {
+        let x = f32::from_bits(0x10001 * (bits >> 16));
+        let y = f32::from_bits(bits << 16);
+        let f = f(x, y);
+        let g = g(x, y);
 
-            (!is(f, g)).then(|| Some(println!("{x:e}, {y:e}: {f:e} != {g:e}")))
-        })
-        .count();
-
-    assert!(count == 0, "There are {count} mismatches");
+        (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
+    });
 }
 
 #[test]

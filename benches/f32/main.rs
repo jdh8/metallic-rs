@@ -22,6 +22,7 @@ mod log2;
 mod powf;
 mod round;
 mod sin;
+mod sin_cos;
 mod sinh;
 mod tanh;
 
@@ -49,8 +50,9 @@ criterion::criterion_main!(
     log2::benches,
     powf::benches,
     round::benches,
-    sinh::benches,
     sin::benches,
+    sin_cos::benches,
+    sinh::benches,
     tanh::benches,
 );
 
