@@ -153,13 +153,15 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
 
     let magnitude = x.to_bits();
 
-    // |x| < π * 2^27
+    // x < π * 2^27
     if magnitude < 0x4DC9_0FDB {
         let x: f64 = x.into();
         let q = (x * consts::FRAC_2_PI).round_ties_even();
         let y = crate::mul_add(q, -PI_2_HI, x);
         let y = crate::mul_add(q, -PI_2_LO, y);
-        return (q as i64, y);
+
+        // SAFETY: q < 2^28
+        return (unsafe { q.to_int_unchecked() }, y);
     }
 
     let significand: u128 = ((magnitude & 0x007F_FFFF) | 0x0080_0000).into();
