@@ -144,10 +144,7 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
         0xA2F9_836E_4E44_1529,
     ];
 
-    let magnitude = x.to_bits();
-
-    // x < π * 2^27
-    if magnitude < 0x4DC9_0FDB {
+    if x < core::f32::consts::PI * crate::exp2i(27) as f32 {
         let x: f64 = x.into();
         let q = (x * consts::FRAC_2_PI).round_ties_even();
         let y = crate::mul_add(q, -PI_2_HI, x);
@@ -157,6 +154,7 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
         return (unsafe { q.to_int_unchecked() }, y);
     }
 
+    let magnitude = x.to_bits();
     let significand: u128 = ((magnitude & 0x007F_FFFF) | 0x0080_0000).into();
     let p0 = significand * u128::from(FRAC_2_PI[0]);
     let p1 = significand * u128::from(FRAC_2_PI[1]) + (p0 >> 64);
