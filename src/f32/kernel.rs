@@ -1,13 +1,9 @@
 /// Fast C `ldexp` assuming normal argument and result
 #[inline]
-pub fn fast_ldexp(x: f64, n: i64) -> f64 {
+pub const fn fast_ldexp(x: f64, n: i64) -> f64 {
     const SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
-
-    #[allow(clippy::cast_possible_wrap)]
-    let wrapped = x.to_bits() as i64;
-
-    #[allow(clippy::cast_sign_loss)]
-    return f64::from_bits((wrapped + (n << SHIFT)) as u64);
+    let wrapped: i64 = unsafe { core::mem::transmute(x) };
+    unsafe { core::mem::transmute(wrapped + (n << SHIFT)) }
 }
 
 /// Polynomial approximation of restriction of `(exp(x) - 1) / x`
@@ -148,9 +144,6 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
         0xA2F9_836E_4E44_1529,
     ];
 
-    /// π * 2^-65
-    const PI_2_65: f64 = consts::PI / (1u128 << 65) as f64;
-
     let magnitude = x.to_bits();
 
     // x < π * 2^27
@@ -175,7 +168,10 @@ pub fn rem_pio2(x: f32) -> (i64, f64) {
     let r = product as i64;
     let q = (product >> 64) as i64;
 
-    (q.wrapping_sub(r >> 63), r as f64 * PI_2_65)
+    (
+        q.wrapping_sub(r >> 63),
+        consts::PI * crate::exp2i(-65) * r as f64,
+    )
 }
 
 /// Cosine restricted to `-π/4..=π/4`
