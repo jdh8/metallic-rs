@@ -1,6 +1,6 @@
 [package]
 name = "metallic"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Chen-Pang He (https://jdh8.org)"]
 edition = "2021"
 description = "C math functions from scratch"
@@ -11,6 +11,7 @@ keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "speci
 exclude = ["/tests/*/huge"]
 
 [dependencies]
+core-math = { version = "0.2.0", optional = true }
 fast_polynomial = "0.3.0"
 
 [dev-dependencies]
@@ -20,6 +21,9 @@ hexf-parse = "0.2.1"
 libm = "0.2.8"
 rand = "0.8.5"
 regex = "1.10.6"
+
+[features]
+core-math = ["dep:core-math"]
 
 [profile.dev]
 opt-level = 3

@@ -26,6 +26,24 @@ rustflags = ["-Ctarget-cpu=native"]
 
 [fma]: https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation
 
+Using faster functions from [CORE-MATH]
+---------------------------------------
+I struggle to make some functions faster than [CORE-MATH].  You can enable the
+[`core-math`](crate) feature in your `Cargo.toml`:
+
+```toml
+[dependencies]
+metallic = { version = "0.1.2", features = ["core-math"] }
+```
+
+This would replace the following functions with those from
+[`core-math`][crate]:
+
+- Trigonometric functions for `f32`
+
+[CORE-MATH]: https://core-math.gitlabpages.inria.fr/
+[crate]: https://crates.io/crates/core-math
+
 Assumptions
 -----------
 C libraries tend to have strict yet obsolete assumptions on math functions.
@@ -80,6 +98,7 @@ Milestones
       - [x] Faithful rounding
       - [ ] Correct rounding
     - [ ] Trigonometric and hyperbolic functions
+      - [ ] Make trigonometric functions faster than [CORE-MATH]
     - [x] Miscellaneous elementary functions
     - [ ] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
