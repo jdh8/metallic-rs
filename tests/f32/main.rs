@@ -164,6 +164,11 @@ fn test_sin_cos() {
 }
 
 #[test]
+fn test_tan() {
+    test_identity(metal::tan, core_math::tanf);
+}
+
+#[test]
 fn frexp() {
     (0..u32::MAX).for_each(|i| {
         let x = f32::from_bits(i);

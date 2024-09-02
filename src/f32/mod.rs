@@ -920,3 +920,43 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
 
     (kernel::apply_sign(s, x.is_sign_negative()), c)
 }
+
+#[cfg(feature = "core-math")]
+pub use core_math::tanf as tan;
+
+/// Tangent function
+#[cfg(not(feature = "core-math"))]
+#[must_use]
+#[inline]
+pub fn tan(x: f32) -> f32 {
+    let y = match x.abs() {
+        3013.517 => 0.894_440_53,
+        2.898_609_4e37 => 0.792_096_8,
+        x if x.to_bits() >= f32::INFINITY.to_bits() => f32::NAN,
+        x => {
+            let (q, x) = kernel::rem_pio2(x);
+            let xcotx = crate::poly(
+                x * x,
+                &[
+                    9.999_999_999_999_997e-1,
+                    -3.333_333_333_332_465_5e-1,
+                    -2.222_222_222_589_263_8e-2,
+                    -2.116_402_056_643_148_4e-3,
+                    -2.116_406_990_379_701_1e-4,
+                    -2.137_556_903_554_936_4e-5,
+                    -2.170_374_883_723_272e-6,
+                    -2.100_327_091_903_891_5e-7,
+                    -2.970_220_949_700_791e-8,
+                ],
+            );
+
+            let y = match q & 1 {
+                0 => x / xcotx,
+                _ => xcotx / -x,
+            };
+            y as f32
+        }
+    };
+
+    kernel::apply_sign(y, x.is_sign_negative())
+}

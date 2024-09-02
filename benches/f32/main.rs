@@ -24,6 +24,7 @@ mod round;
 mod sin;
 mod sin_cos;
 mod sinh;
+mod tan;
 mod tanh;
 
 criterion::criterion_main!(
@@ -53,6 +54,7 @@ criterion::criterion_main!(
     sin::benches,
     sin_cos::benches,
     sinh::benches,
+    tan::benches,
     tanh::benches,
 );
 
