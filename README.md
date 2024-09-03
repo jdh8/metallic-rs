@@ -40,6 +40,7 @@ This would replace the following functions with those from
 [`core-math`][crate]:
 
 - Trigonometric functions for `f32`
+- `f32::powf` for correct rounding
 
 [CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 [crate]: https://crates.io/crates/core-math
