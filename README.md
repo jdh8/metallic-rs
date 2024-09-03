@@ -97,7 +97,7 @@ Milestones
     - [ ] Power and logarithm with arbitrary base
       - [x] Faithful rounding
       - [ ] Correct rounding
-    - [ ] Trigonometric and hyperbolic functions
+    - [x] Trigonometric and hyperbolic functions
       - [ ] Make trigonometric functions faster than [CORE-MATH]
     - [x] Miscellaneous elementary functions
     - [ ] Non-elementary functions (optional)
