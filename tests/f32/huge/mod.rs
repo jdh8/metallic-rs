@@ -56,11 +56,17 @@ fn test_bivariate(
     g: impl Fn(f32, f32) -> f32,
     data: impl Iterator<Item = [f32; 2]>,
 ) {
+    const LIMIT: usize = 250;
     let count = data
         .filter(|&[x, y]| (!f(x, y).is(&g(x, y))))
         .map(|[x, y]| println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y)))
+        .take(LIMIT)
         .count();
 
+    assert!(
+        count < LIMIT,
+        "Too many (>= {LIMIT}) mismatches!  Aborting...",
+    );
     assert!(count == 0, "There are {count} mismatches");
 }
 
