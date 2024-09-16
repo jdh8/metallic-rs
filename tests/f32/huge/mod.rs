@@ -86,7 +86,8 @@ fn test_hypot() {
 }
 
 #[test]
-#[should_panic] // Signal when we achieve correct founding
+// Signal when precision improves
+#[should_panic = "Too many (>= 250) mismatches!  Aborting..."]
 fn test_powf() {
     test_bivariate(metal::powf, core_math::powf, parse_pairs_from("powf.wc"));
 }
