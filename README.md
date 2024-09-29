@@ -71,7 +71,9 @@ library is the default [rounding half to even][round-even].
 
 Goals
 -----
-- The functions should be faithfully rounded (error < 1 ulp).
+- The functions should be correctly rounded (error ≤ 0.5 ulp).
+    + Works in progress may be only faithfully rounded (error < 1 ulp).  These
+      functions are considered buggy until I make them correctly rounded.
 - The functions should be about as fast as the system library.
 - Try to make `f32` functions faster than the system library.
 - Avoid lookup tables to reduce memory usage, especially on WebAssembly.
