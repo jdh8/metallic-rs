@@ -206,12 +206,3 @@ pub fn sin(x: f64) -> f32 {
     );
     crate::mul_add(y, x, x) as f32
 }
-
-#[inline]
-pub fn apply_sign(x: f32, sign: bool) -> f32 {
-    if sign {
-        -x
-    } else {
-        x
-    }
-}

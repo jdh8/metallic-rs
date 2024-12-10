@@ -853,17 +853,19 @@ pub fn sin(x: f32) -> f32 {
     let y = match x.abs() {
         9830.398 => -0.347_613_25,
         x if x.to_bits() >= f32::INFINITY.to_bits() => f32::NAN,
+
+        #[rustfmt::skip]
         x => {
             let (q, x) = kernel::rem_pio2(x);
-            let y = match q & 1 {
-                0 => kernel::sin(x),
-                _ => kernel::cos(x),
-            };
-            kernel::apply_sign(y, q & 2 == 2)
+            let sin = kernel::sin(x);
+            let cos = kernel::cos(x);
+            let y = if q & 1 == 0 { sin } else { cos };
+            if q & 2 == 0 { y } else { -y }
         }
     };
 
-    kernel::apply_sign(y, x.is_sign_negative())
+    #[rustfmt::skip]
+    return if x.is_sign_negative() { -y } else { y };
 }
 
 #[cfg(feature = "core-math")]
@@ -921,8 +923,8 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
             }
         }
     };
-
-    (kernel::apply_sign(s, x.is_sign_negative()), c)
+    let s = if x.is_sign_negative() { -s } else { s };
+    (s, c)
 }
 
 #[cfg(feature = "core-math")]
@@ -962,5 +964,6 @@ pub fn tan(x: f32) -> f32 {
         }
     };
 
-    kernel::apply_sign(y, x.is_sign_negative())
+    #[rustfmt::skip]
+    return if x.is_sign_negative() { -y } else { y };
 }
