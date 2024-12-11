@@ -852,7 +852,6 @@ pub use core_math::sinf as sin;
 pub fn sin(x: f32) -> f32 {
     let y = match x.abs() {
         9830.398 => -0.347_613_25,
-        x if x.to_bits() >= f32::INFINITY.to_bits() => f32::NAN,
 
         #[rustfmt::skip]
         x => {
@@ -882,7 +881,6 @@ pub fn cos(x: f32) -> f32 {
         2.861_650_8e15 => return 0.533_916_4,
         1.100_467_8e19 => return 0.996_410_1,
         1.726_998_3e20 => return 0.969_058,
-        x if x.to_bits() >= f32::INFINITY.to_bits() => return f32::NAN,
         _ => (),
     }
 
@@ -909,7 +907,6 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
         2.861_650_8e15 => (-0.845_537_3, 0.533_916_4),
         1.100_467_8e19 => (0.084_657_6, 0.996_410_1),
         1.726_998_3e20 => (-0.246_833_34, 0.969_058),
-        x if x.to_bits() >= f32::INFINITY.to_bits() => (f32::NAN, f32::NAN),
         x => {
             let (q, x) = kernel::rem_pio2(x);
             let s = kernel::sin(x);
