@@ -106,6 +106,12 @@ Milestones
     - [ ] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
 - [ ] Real `f64`/`double` functions in [`<math.h>`][math]
+    - [ ] Exponential functions
+    - [ ] Logarithm with constant base
+    - [ ] Power and logarithm with arbitrary base
+    - [ ] Trigonometric and hyperbolic functions
+    - [ ] Miscellaneous elementary functions
+    - [ ] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
 
 [math]: https://en.cppreference.com/w/c/numeric/math
