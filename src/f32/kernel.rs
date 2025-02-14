@@ -2,8 +2,7 @@
 #[inline]
 pub const fn fast_ldexp(x: f64, n: i64) -> f64 {
     const SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
-    let wrapped: i64 = unsafe { core::mem::transmute(x) };
-    unsafe { core::mem::transmute(wrapped + (n << SHIFT)) }
+    f64::from_bits((x.to_bits() as i64 + (n << SHIFT)) as u64)
 }
 
 /// Polynomial approximation of restriction of `(exp(x) - 1) / x`

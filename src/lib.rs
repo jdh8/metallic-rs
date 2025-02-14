@@ -33,7 +33,8 @@ const fn exp2i(n: i64) -> f64 {
         s @ -63..=0 => 1 << (f64::EXP_SHIFT - 1) >> -s,
         _ => 0,
     };
-    unsafe { core::mem::transmute(bits) }
+    #[allow(clippy::cast_sign_loss)]
+    f64::from_bits(bits as u64)
 }
 
 #[allow(clippy::float_cmp)]
