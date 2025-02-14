@@ -19,7 +19,7 @@ core-math = "0.2.0"
 criterion = "0.5.1"
 hexf-parse = "0.2.1"
 libm = "0.2.8"
-rand = "0.8.5"
+rand = "0.9.0"
 regex = "1.10.6"
 
 [features]

@@ -3,11 +3,11 @@ use criterion::BenchmarkGroup;
 use rand::Rng as _;
 
 fn bench<M: Measurement>(group: &mut BenchmarkGroup<M>, name: &str, f: impl Fn(f32, f32) -> f32) {
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     group.bench_function(name, |bencher| {
         bencher.iter_batched(
-            || (rng.gen(), rng.gen()),
+            || (rng.random(), rng.random()),
             |(x, y)| f(x, y),
             criterion::BatchSize::SmallInput,
         );

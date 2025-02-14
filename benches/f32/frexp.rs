@@ -5,7 +5,7 @@ use rand::Rng as _;
 fn bench<M: Measurement>(group: &mut BenchmarkGroup<M>, name: &str, f: impl Fn(f32) -> (f32, i32)) {
     group.bench_function(name, |bencher| {
         bencher.iter_batched(
-            || rand::thread_rng().gen(),
+            || rand::rng().random(),
             &f,
             criterion::BatchSize::SmallInput,
         );
