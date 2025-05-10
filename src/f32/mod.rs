@@ -48,7 +48,7 @@ enum Magnitude {
 
 /// Break a `f32` into its sign and magnitude
 #[inline]
-fn normalize(x: f32) -> (bool, Magnitude) {
+const fn normalize(x: f32) -> (bool, Magnitude) {
     let sign = x.is_sign_negative();
     let magnitude = x.abs().to_bits() as i32;
 
