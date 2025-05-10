@@ -2,10 +2,10 @@
 #![warn(clippy::unreadable_literal)]
 
 mod kernel;
+use super::Sign;
 use core::cmp::Ordering;
 use core::f32;
 use core::num::FpCategory;
-use super::Sign;
 
 /// Higher part of ln(2) whose lowest 14 bits are zero
 const LN_2_HI: f64 = 0.693_147_180_560_117_7;
@@ -63,7 +63,8 @@ const fn normalize(x: f32) -> (Sign, Magnitude) {
         FpCategory::Zero => (sign, Magnitude::Zero),
         FpCategory::Normal => (sign, Magnitude::Normalized(magnitude)),
         FpCategory::Subnormal => {
-            let shift = magnitude.leading_zeros() as i32 - 8;
+            const EXPONENT_DIGITS: u32 = 32 - f32::MANTISSA_DIGITS;
+            let shift = magnitude.leading_zeros() as i32 - EXPONENT_DIGITS as i32;
             let magnitude = (magnitude << shift) - (shift << EXP_SHIFT);
             (sign, Magnitude::Normalized(magnitude))
         }
