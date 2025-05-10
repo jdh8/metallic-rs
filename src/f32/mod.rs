@@ -77,7 +77,7 @@ const fn normalize(x: f32) -> (Sign, Magnitude) {
 /// numbers.  This function is useful until `f32::next_up` gets stabilized.
 #[must_use]
 #[inline]
-pub fn next_up(x: f32) -> f32 {
+pub const fn next_up(x: f32) -> f32 {
     if x.is_nan() || x == f32::INFINITY {
         x
     } else if x == 0.0 {
@@ -95,7 +95,7 @@ pub fn next_up(x: f32) -> f32 {
 /// numbers.  This function is useful until `f32::next_down` gets stabilized.
 #[must_use]
 #[inline]
-pub fn next_down(x: f32) -> f32 {
+pub const fn next_down(x: f32) -> f32 {
     if x.is_nan() || x == f32::NEG_INFINITY {
         x
     } else if x == 0.0 {
