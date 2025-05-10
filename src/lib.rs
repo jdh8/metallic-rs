@@ -18,6 +18,20 @@ enum Sign {
     Negative,
 }
 
+const fn u32_sign_bit(sign: Sign) -> u32 {
+    match sign {
+        Sign::Positive => 0,
+        Sign::Negative => 1 << 31,
+    }
+}
+
+const fn u64_sign_bit(sign: Sign) -> u64 {
+    match sign {
+        Sign::Positive => 0,
+        Sign::Negative => 1 << 63,
+    }
+}
+
 /// Fast multiply-add
 ///
 /// This function picks the faster way to compute `x * y + a` depending on the

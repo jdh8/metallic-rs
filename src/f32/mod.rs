@@ -2,7 +2,7 @@
 #![warn(clippy::unreadable_literal)]
 
 mod kernel;
-use super::Sign;
+use crate::Sign;
 use core::cmp::Ordering;
 use core::f32;
 use core::num::FpCategory;
@@ -127,7 +127,7 @@ pub fn cbrt(x: f32) -> f32 {
 
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
     let x: f64 = x.into();
-    let y: f64 = f32::from_bits(u32::from(sign == Sign::Negative) << 31 | magnitude).into();
+    let y: f64 = f32::from_bits(crate::u32_sign_bit(sign) | magnitude).into();
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
 
@@ -336,7 +336,7 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
 /// [`f32::MAX_EXP`] and [`f32::MIN_EXP`] are defined.
 #[must_use]
 #[inline]
-pub fn frexp(x: f32) -> (f32, i32) {
+pub const fn frexp(x: f32) -> (f32, i32) {
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return (x, 0);
     };
@@ -345,7 +345,7 @@ pub fn frexp(x: f32) -> (f32, i32) {
     let significand = magnitude as u32 & mask | 0.5f32.to_bits();
 
     (
-        f32::from_bits(u32::from(sign == Sign::Negative) << 31 | significand),
+        f32::from_bits(crate::u32_sign_bit(sign) | significand),
         f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
     )
 }
