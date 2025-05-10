@@ -21,6 +21,16 @@ const _: () = assert!(LN_2_HI + LN_2_LO == core::f64::consts::LN_2);
 /// This constant is usually used as a shift to access the exponent bits.
 pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
 
+/// Sign of `f32`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Sign {
+    /// Positive
+    Positive,
+
+    /// Negative
+    Negative,
+}
+
 /// Magnitude of `f32`
 ///
 /// Nonzero subnormal numbers are normalized to have an implicit leading bit.
@@ -48,8 +58,12 @@ enum Magnitude {
 
 /// Break a `f32` into its sign and magnitude
 #[inline]
-const fn normalize(x: f32) -> (bool, Magnitude) {
-    let sign = x.is_sign_negative();
+const fn normalize(x: f32) -> (Sign, Magnitude) {
+    let sign = if x.is_sign_negative() {
+        Sign::Negative
+    } else {
+        Sign::Positive
+    };
     let magnitude = x.abs().to_bits() as i32;
 
     match x.classify() {
@@ -121,7 +135,7 @@ pub fn cbrt(x: f32) -> f32 {
 
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
     let x: f64 = x.into();
-    let y: f64 = f32::from_bits(u32::from(sign) << 31 | magnitude).into();
+    let y: f64 = f32::from_bits(u32::from(sign == Sign::Negative) << 31 | magnitude).into();
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
 
@@ -339,7 +353,7 @@ pub fn frexp(x: f32) -> (f32, i32) {
     let significand = magnitude as u32 & mask | 0.5f32.to_bits();
 
     (
-        f32::from_bits(u32::from(sign) << 31 | significand),
+        f32::from_bits(u32::from(sign == Sign::Negative) << 31 | significand),
         f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
     )
 }
@@ -349,11 +363,11 @@ pub fn frexp(x: f32) -> (f32, i32) {
 #[inline]
 pub fn ln(x: f32) -> f32 {
     match normalize(x) {
-        (false, Magnitude::Infinite) => f32::INFINITY,
+        (Sign::Positive, Magnitude::Infinite) => f32::INFINITY,
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
-        (true, _) | (_, Magnitude::Nan) => f32::NAN,
+        (Sign::Negative, _) | (_, Magnitude::Nan) => f32::NAN,
 
-        (false, Magnitude::Normalized(i)) => {
+        (Sign::Positive, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
 
             match x {
@@ -416,11 +430,11 @@ pub fn ln_1p(x: f32) -> f32 {
 #[inline]
 pub fn log2(x: f32) -> f32 {
     match normalize(x) {
-        (false, Magnitude::Infinite) => f32::INFINITY,
+        (Sign::Positive, Magnitude::Infinite) => f32::INFINITY,
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
-        (true, _) | (_, Magnitude::Nan) => f32::NAN,
+        (Sign::Negative, _) | (_, Magnitude::Nan) => f32::NAN,
 
-        (false, Magnitude::Normalized(i)) => {
+        (Sign::Positive, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> EXP_SHIFT;
             let x: f64 = f32::from_bits((i - (exponent << EXP_SHIFT)) as u32).into();
@@ -446,11 +460,11 @@ pub fn log10(x: f32) -> f32 {
     }
 
     match normalize(x) {
-        (false, Magnitude::Infinite) => f32::INFINITY,
+        (Sign::Positive, Magnitude::Infinite) => f32::INFINITY,
         (_, Magnitude::Zero) => f32::NEG_INFINITY,
-        (true, _) | (_, Magnitude::Nan) => f32::NAN,
+        (Sign::Negative, _) | (_, Magnitude::Nan) => f32::NAN,
 
-        (false, Magnitude::Normalized(i)) => {
+        (Sign::Positive, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
             use core::f64::consts;
 
