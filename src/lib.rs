@@ -8,6 +8,16 @@ pub mod f32;
 /// Real functions for `f64`s
 pub mod f64;
 
+/// Explicit sign rather than a `bool`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Sign {
+    /// Positive
+    Positive,
+
+    /// Negative
+    Negative,
+}
+
 /// Fast multiply-add
 ///
 /// This function picks the faster way to compute `x * y + a` depending on the

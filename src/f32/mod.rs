@@ -5,6 +5,7 @@ mod kernel;
 use core::cmp::Ordering;
 use core::f32;
 use core::num::FpCategory;
+use super::Sign;
 
 /// Higher part of ln(2) whose lowest 14 bits are zero
 const LN_2_HI: f64 = 0.693_147_180_560_117_7;
@@ -20,16 +21,6 @@ const _: () = assert!(LN_2_HI + LN_2_LO == core::f64::consts::LN_2);
 ///
 /// This constant is usually used as a shift to access the exponent bits.
 pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
-
-/// Sign of `f32`
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Sign {
-    /// Positive
-    Positive,
-
-    /// Negative
-    Negative,
-}
 
 /// Magnitude of `f32`
 ///
