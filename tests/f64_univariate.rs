@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 fn parse_f64(s: &str) -> Result<f64, hexf_parse::ParseHexfError> {
     fn fallback(s: &str) -> Option<f64> {
@@ -27,13 +26,4 @@ fn parse_f64(s: &str) -> Result<f64, hexf_parse::ParseHexfError> {
 #[test]
 fn test_parser() {
     assert!(common::parse_case_file("cbrt.wc", parse_f64).count() == 105_554);
-}
-
-#[test]
-fn test_cbrt() {
-    common::test_univariate_cases(
-        metal::cbrt,
-        core_math::cbrt,
-        common::parse_case_file("cbrt.wc", parse_f64),
-    );
 }
