@@ -4,6 +4,16 @@ use common::*;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
+/// Check if `f` returns the same result as `g` for every `f32` values
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+fn test_identity<Output: Identity + core::fmt::Debug>(
+    f: impl Fn(f32) -> Output,
+    g: impl Fn(f32) -> Output,
+) {
+    test_univariate_cases(f, g, (0..=u32::MAX).map(f32::from_bits));
+}
+
 #[test]
 fn test_round() {
     test_identity(metal::round, f32::round);

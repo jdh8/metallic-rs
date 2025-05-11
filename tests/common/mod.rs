@@ -59,7 +59,7 @@ pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
 /// Exhaustively test for every `u32` value
 ///
 /// - `error`: function returning `Some` if there is an error
-pub fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
+fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
     const LIMIT: usize = 250;
     let count = (0..=u32::MAX).filter_map(error).take(LIMIT).count();
 
@@ -68,19 +68,6 @@ pub fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
         "Too many (>= {LIMIT}) mismatches!  Aborting...",
     );
     assert!(count == 0, "There are {count} mismatches");
-}
-
-/// Check if `f` returns the same result as `g` for every `f32` values
-///
-/// By "same result", I mean semantic identity as defined by [`is`].
-pub fn test_identity<T: Identity + core::fmt::Debug>(f: impl Fn(f32) -> T, g: impl Fn(f32) -> T) {
-    exhaustively_test_u32(|i| {
-        let x = f32::from_bits(i);
-        let f = f(x);
-        let g = g(x);
-
-        (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
-    });
 }
 
 /// Check if `result` is within the nearby `f32` representations of `expected`
@@ -94,7 +81,7 @@ pub fn test_identity<T: Identity + core::fmt::Debug>(f: impl Fn(f32) -> T, g: im
 /// If `expected` has an exact `f32` representation, `result` must be that
 /// value.  Otherwise, `expected` has two `f32` neighbors, and `result` must be
 /// either of them.
-pub fn is_faithful_rounding(result: f32, expected: f64) -> bool {
+fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     #[allow(clippy::cast_possible_truncation)]
     if result.is(&(expected as f32)) {
         return true;
