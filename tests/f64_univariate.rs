@@ -26,10 +26,7 @@ fn parse_f64(s: &str) -> Result<f64, hexf_parse::ParseHexfError> {
 
 #[test]
 fn test_parser() {
-    assert_eq!(
-        common::parse_case_file("cbrt.wc", parse_f64).count(),
-        105_554
-    );
+    assert!(common::parse_case_file("cbrt.wc", parse_f64).count() == 105_554);
 }
 
 #[test]

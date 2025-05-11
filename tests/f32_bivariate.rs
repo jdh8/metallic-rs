@@ -49,11 +49,11 @@ fn test_bivariate(
     g: impl Fn(f32, f32) -> f32,
     cases: impl Iterator<Item = [f32; 2]>,
 ) {
-    common::truncate_errors(
-        cases
-            .filter(|&[x, y]| (!f(x, y).is(&g(x, y))))
-            .map(|[x, y]| println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y))),
-    );
+    common::truncate_errors(cases.filter_map(|[x, y]| {
+        let f = f(x, y);
+        let g = g(x, y);
+        (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
+    }));
 }
 
 #[test]
