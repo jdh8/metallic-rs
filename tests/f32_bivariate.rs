@@ -1,11 +1,20 @@
 mod common;
 use common::Identity as _;
+use hexf_parse::ParseHexfError;
 use metallic::f32 as metal;
-use regex::Regex;
-use std::path::PathBuf;
-use std::sync::LazyLock;
 
-fn parse_f32(s: &str) -> Result<f32, hexf_parse::ParseHexfError> {
+enum ParsePairError {
+    EmptyField,
+    Hexf,
+}
+
+impl From<ParseHexfError> for ParsePairError {
+    fn from(_: ParseHexfError) -> Self {
+        Self::Hexf
+    }
+}
+
+fn parse_f32(s: &str) -> Result<f32, ParseHexfError> {
     fn fallback(s: &str) -> Option<f32> {
         match s {
             "snan" => Some(f32::from_bits(f32::NAN.to_bits() | 1)),
@@ -28,28 +37,11 @@ fn parse_f32(s: &str) -> Result<f32, hexf_parse::ParseHexfError> {
     }
 }
 
-fn parse_pairs(stream: impl std::io::BufRead) -> impl Iterator<Item = [f32; 2]> {
-    static SEPARATOR: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\s*,\s*").expect("Failed to compile SEPARATOR"));
-
-    stream.lines().map_while(Result::ok).filter_map(|line| {
-        let line = line[..line.find('#').unwrap_or(line.len())].trim_ascii();
-        let mut fields = SEPARATOR.splitn(line, 2);
-        let x = fields.next().and_then(|s| parse_f32(s).ok())?;
-        let y = fields.next().and_then(|s| parse_f32(s).ok())?;
-        Some([x, y])
-    })
-}
-
-fn parse_pairs_from(filename: impl AsRef<std::ffi::OsStr>) -> impl Iterator<Item = [f32; 2]> {
-    let path: PathBuf = file!().into();
-    let path = path.with_file_name(filename);
-
-    std::fs::File::open(path)
-        .map(std::io::BufReader::new)
-        .map(parse_pairs)
-        .into_iter()
-        .flatten()
+fn parse_f32_pair(s: &str) -> Result<[f32; 2], ParsePairError> {
+    let mut fields = s.splitn(2, ',').map(str::trim_ascii);
+    let x = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    let y = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    Ok([x, y])
 }
 
 fn test_bivariate(
@@ -73,8 +65,8 @@ fn test_bivariate(
 
 #[test]
 fn test_parser() {
-    assert!(parse_pairs_from("worst-cases/hypotf.wc").count() == 6882);
-    assert!(parse_pairs_from("worst-cases/powf.wc").count() == 133_216);
+    assert!(common::parse_case_file("hypotf.wc", parse_f32_pair).count() == 6882);
+    assert!(common::parse_case_file("powf.wc", parse_f32_pair).count() == 133_216);
 }
 
 #[test]
@@ -82,7 +74,7 @@ fn test_hypot() {
     test_bivariate(
         metal::hypot,
         core_math::hypotf,
-        parse_pairs_from("worst-cases/hypotf.wc"),
+        common::parse_case_file("hypotf.wc", parse_f32_pair),
     );
 }
 
@@ -93,6 +85,6 @@ fn test_powf() {
     test_bivariate(
         metal::powf,
         core_math::powf,
-        parse_pairs_from("worst-cases/powf.wc"),
+        common::parse_case_file("powf.wc", parse_f32_pair),
     );
 }

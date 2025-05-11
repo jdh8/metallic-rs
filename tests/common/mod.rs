@@ -3,6 +3,8 @@
 #![allow(dead_code)]
 
 use core::fmt::{Debug, LowerExp};
+use std::io::BufRead as _;
+use std::path::{Path, PathBuf};
 
 /// Semantic identity like `Object.is` in JavaScript
 ///
@@ -60,4 +62,23 @@ pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
         let g = g(x);
         (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
     }));
+}
+
+pub fn parse_case_file<T, E>(
+    filename: impl AsRef<Path>,
+    mut parse: impl FnMut(&str) -> Result<T, E>,
+) -> impl Iterator<Item = T> {
+    std::fs::File::open(PathBuf::from("tests/cases/").join(filename))
+        .map(std::io::BufReader::new)
+        .map(|stream| {
+            stream
+                .lines()
+                .map_while(Result::ok)
+                .filter_map(move |line| {
+                    let line = line[..line.find('#').unwrap_or(line.len())].trim_ascii();
+                    parse(line).ok()
+                })
+        })
+        .into_iter()
+        .flatten()
 }
