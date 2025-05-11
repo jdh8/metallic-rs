@@ -30,6 +30,10 @@ impl<T: Identity, U: Identity> Identity for (T, U) {
     }
 }
 
+/// Truncate error reporting iterator to reasonable length
+///
+/// This library aims for correct rounding.  Reporting thousands of cases
+/// does not help much.  Currently, this function limits the report to 250 cases.
 pub fn truncate_errors(errors: impl Iterator) {
     const LIMIT: usize = 250;
     let count = errors.take(LIMIT).count();
