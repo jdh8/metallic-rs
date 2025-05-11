@@ -316,7 +316,7 @@ pub fn exp_m1(x: f32) -> f32 {
 /// Multiply `x` by 2 raised to the power of `n`
 #[must_use]
 #[inline]
-pub fn ldexp(x: f32, n: i32) -> f32 {
+pub const fn ldexp(x: f32, n: i32) -> f32 {
     const MIN_EXP: i32 = f64::MIN_EXP - 1;
     const MAX_EXP: i32 = f64::MAX_EXP;
 
@@ -326,7 +326,7 @@ pub fn ldexp(x: f32, n: i32) -> f32 {
         MAX_EXP.. => f64::MAX,
     };
 
-    (f64::from(x) * coefficient) as f32
+    (x as f64 * coefficient) as f32
 }
 
 /// Decompose into a significand and an exponent
