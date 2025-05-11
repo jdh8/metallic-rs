@@ -47,20 +47,13 @@ fn parse_f32_pair(s: &str) -> Result<[f32; 2], ParsePairError> {
 fn test_bivariate(
     f: impl Fn(f32, f32) -> f32,
     g: impl Fn(f32, f32) -> f32,
-    data: impl Iterator<Item = [f32; 2]>,
+    cases: impl Iterator<Item = [f32; 2]>,
 ) {
-    const LIMIT: usize = 250;
-    let count = data
-        .filter(|&[x, y]| (!f(x, y).is(&g(x, y))))
-        .map(|[x, y]| println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y)))
-        .take(LIMIT)
-        .count();
-
-    assert!(
-        count < LIMIT,
-        "Too many (>= {LIMIT}) mismatches!  Aborting...",
+    common::truncate_errors(
+        cases
+            .filter(|&[x, y]| (!f(x, y).is(&g(x, y))))
+            .map(|[x, y]| println!("{x:e}, {y:e}: {:e} != {:e}", f(x, y), g(x, y))),
     );
-    assert!(count == 0, "There are {count} mismatches");
 }
 
 #[test]
