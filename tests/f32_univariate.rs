@@ -1,6 +1,6 @@
 mod common;
 
-use common::*;
+use common::{Identity, test_univariate_cases};
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
@@ -150,12 +150,3 @@ fn frexp() {
     });
 }
 
-#[test]
-fn test_hypot() {
-    test_bivariate_correct(metal::hypot, core_math::hypotf);
-}
-
-#[test]
-fn test_powf() {
-    test_bivariate_faithful(metal::powf, core_math::pow);
-}

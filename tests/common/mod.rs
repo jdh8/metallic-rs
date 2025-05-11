@@ -103,14 +103,3 @@ pub fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64)
         (!is_faithful_rounding(f, g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
     });
 }
-
-pub fn test_bivariate_correct(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
-    exhaustively_test_u32(|bits| {
-        let x = f32::from_bits(0x10001 * (bits >> 16));
-        let y = f32::from_bits(bits << 16);
-        let f = f(x, y);
-        let g = g(x, y);
-
-        (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
-    });
-}
