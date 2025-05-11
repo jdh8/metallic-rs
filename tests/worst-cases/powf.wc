@@ -1,5 +1,3 @@
-# This file was src/binary32/pow/powf.wc in the CORE-MATH project
-
 # non-regression tests
 0x1.1058p+0,0x1.ap+64
 0x1.1058p+0,-0x1.ap+64

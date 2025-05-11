@@ -73,8 +73,8 @@ fn test_bivariate(
 
 #[test]
 fn test_parser() {
-    assert!(parse_pairs_from("f32/hypotf.wc").count() == 6882);
-    assert!(parse_pairs_from("f32/powf.wc").count() == 133_216);
+    assert!(parse_pairs_from("worst-cases/hypotf.wc").count() == 6882);
+    assert!(parse_pairs_from("worst-cases/powf.wc").count() == 133_216);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn test_hypot() {
     test_bivariate(
         metal::hypot,
         core_math::hypotf,
-        parse_pairs_from("f32/hypotf.wc"),
+        parse_pairs_from("worst-cases/hypotf.wc"),
     );
 }
 
@@ -93,6 +93,6 @@ fn test_powf() {
     test_bivariate(
         metal::powf,
         core_math::powf,
-        parse_pairs_from("f32/powf.wc"),
+        parse_pairs_from("worst-cases/powf.wc"),
     );
 }

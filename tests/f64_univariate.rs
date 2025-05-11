@@ -51,7 +51,7 @@ fn parse_cases_from<T, E>(
 
 #[test]
 fn test_parser() {
-    assert_eq!(parse_cases_from("f64/cbrt.wc", parse_f64).count(), 105_554);
+    assert_eq!(parse_cases_from("worst-cases/cbrt.wc", parse_f64).count(), 105_554);
 }
 
 #[test]
@@ -59,6 +59,6 @@ fn test_cbrt() {
     test_univariate_cases(
         metal::cbrt,
         core_math::cbrt,
-        parse_cases_from("f64/cbrt.wc", parse_f64),
+        parse_cases_from("worst-cases/cbrt.wc", parse_f64),
     );
 }
