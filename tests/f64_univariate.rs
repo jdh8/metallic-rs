@@ -1,6 +1,6 @@
 mod common;
 
-use common::test_with_cases;
+use common::test_univariate_cases;
 use metallic::f64 as metal;
 use std::io::BufRead as _;
 use std::path::PathBuf;
@@ -57,7 +57,7 @@ fn test_parser() {
 
 #[test]
 fn test_cbrt() {
-    test_with_cases(
+    test_univariate_cases(
         metal::cbrt,
         core_math::cbrt,
         parse_cases_from("f64/cbrt.wc", parse_f64),

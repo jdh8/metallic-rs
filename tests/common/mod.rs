@@ -30,30 +30,30 @@ impl<T: Identity, U: Identity> Identity for (T, U) {
     }
 }
 
-/// Check if `f` returns the same result as `g` for the provided cases
-///
-/// By "same result", I mean semantic identity as defined by [`is`].
-pub fn test_with_cases<Case: Copy + LowerExp, T: Identity + Debug>(
-    f: impl Fn(Case) -> T,
-    g: impl Fn(Case) -> T,
-    cases: impl Iterator<Item = Case>,
-) {
+fn truncate_errors(errors: impl Iterator<Item = ()>) {
     const LIMIT: usize = 250;
-
-    let count = cases
-        .filter_map(|x| {
-            let f = f(x);
-            let g = g(x);
-            (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
-        })
-        .take(LIMIT)
-        .count();
+    let count = errors.take(LIMIT).count();
 
     assert!(
         count < LIMIT,
         "Too many (>= {LIMIT}) mismatches!  Aborting...",
     );
     assert!(count == 0, "There are {count} mismatches");
+}
+
+/// Check if `f` returns the same result as `g` for the provided cases
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
+    f: impl Fn(Case) -> Output,
+    g: impl Fn(Case) -> Output,
+    cases: impl Iterator<Item = Case>,
+) {
+    truncate_errors(cases.filter_map(|x| {
+        let f = f(x);
+        let g = g(x);
+        (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
+    }));
 }
 
 /// Exhaustively test for every `u32` value
