@@ -1,5 +1,4 @@
 mod common;
-
 use common::test_univariate_cases;
 use metallic::f64 as metal;
 use std::io::BufRead as _;

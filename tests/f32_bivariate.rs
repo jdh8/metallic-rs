@@ -1,5 +1,4 @@
 mod common;
-
 use common::Identity as _;
 use metallic::f32 as metal;
 use regex::Regex;

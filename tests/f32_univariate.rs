@@ -1,6 +1,5 @@
 mod common;
-
-use common::{Identity, test_univariate_cases};
+use common::Identity;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
@@ -11,7 +10,7 @@ fn test_identity<Output: Identity + core::fmt::Debug>(
     f: impl Fn(f32) -> Output,
     g: impl Fn(f32) -> Output,
 ) {
-    test_univariate_cases(f, g, (0..=u32::MAX).map(f32::from_bits));
+    common::test_univariate_cases(f, g, (0..=u32::MAX).map(f32::from_bits));
 }
 
 #[test]
@@ -149,4 +148,3 @@ fn frexp() {
         }
     });
 }
-

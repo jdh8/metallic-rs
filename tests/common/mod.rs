@@ -30,7 +30,7 @@ impl<T: Identity, U: Identity> Identity for (T, U) {
     }
 }
 
-fn truncate_errors(errors: impl Iterator<Item = ()>) {
+pub fn truncate_errors(errors: impl Iterator) {
     const LIMIT: usize = 250;
     let count = errors.take(LIMIT).count();
 
@@ -54,52 +54,4 @@ pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
         let g = g(x);
         (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
     }));
-}
-
-/// Exhaustively test for every `u32` value
-///
-/// - `error`: function returning `Some` if there is an error
-fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
-    const LIMIT: usize = 250;
-    let count = (0..=u32::MAX).filter_map(error).take(LIMIT).count();
-
-    assert!(
-        count < LIMIT,
-        "Too many (>= {LIMIT}) mismatches!  Aborting...",
-    );
-    assert!(count == 0, "There are {count} mismatches");
-}
-
-/// Check if `result` is within the nearby `f32` representations of `expected`
-///
-/// Due to [the Table Maker's Dilemma][dilemma], it is infeasible to implement a
-/// correctly-rounded (error < 0.5 ulp) transcendental function.  However,
-/// faithful rounding (error < 1 ulp) is usually achievable.
-///
-/// [dilemma]: https://hal-lara.archives-ouvertes.fr/hal-02101765/document
-///
-/// If `expected` has an exact `f32` representation, `result` must be that
-/// value.  Otherwise, `expected` has two `f32` neighbors, and `result` must be
-/// either of them.
-fn is_faithful_rounding(result: f32, expected: f64) -> bool {
-    #[allow(clippy::cast_possible_truncation)]
-    if result.is(&(expected as f32)) {
-        return true;
-    }
-
-    let next_up = f64::from(metallic::f32::next_up(result));
-    let next_down = f64::from(metallic::f32::next_down(result));
-    next_down < expected && expected < next_up
-}
-
-// Code repetition is intentional for future removal of this function
-pub fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64) -> f64) {
-    exhaustively_test_u32(|bits| {
-        let x = f32::from_bits(0x10001 * (bits >> 16));
-        let y = f32::from_bits(bits << 16);
-        let f = f(x, y);
-        let g = g(x.into(), y.into());
-
-        (!is_faithful_rounding(f, g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
-    });
 }
