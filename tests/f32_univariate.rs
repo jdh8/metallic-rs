@@ -1,12 +1,11 @@
 mod common;
-use common::Identity;
 use core::num::FpCategory;
 use metallic::f32 as metal;
 
 /// Check if `f` returns the same result as `g` for every `f32` values
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
-fn test_identity<Output: Identity + core::fmt::Debug>(
+fn test_identity<Output: common::Identity + core::fmt::Debug>(
     f: impl Fn(f32) -> Output,
     g: impl Fn(f32) -> Output,
 ) {
