@@ -1,3 +1,7 @@
+#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+
+mod common;
+
 fn precise_log(x: f64, base: f64) -> f64 {
     let y;
     unsafe {
@@ -29,5 +33,5 @@ fn test_precise_log() {
 
 #[test]
 fn test_log() {
-    super::test_bivariate_faithful(metallic::f32::log, precise_log);
+    common::test_bivariate_faithful(metallic::f32::log, precise_log);
 }

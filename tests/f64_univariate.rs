@@ -1,26 +1,8 @@
+mod common;
+use common::Identity;
 use metallic::f64 as metal;
 use std::io::BufRead as _;
 use std::path::PathBuf;
-
-/// Semantic identity like `Object.is` in JavaScript
-///
-/// This function works around comparison issues with NaNs and signed zeros.
-/// To be specific, `is(f64::NAN, f64::NAN)` but not `is(0.0, -0.0)`.
-trait Identity {
-    fn is(&self, other: &Self) -> bool;
-}
-
-impl Identity for f64 {
-    fn is(&self, other: &Self) -> bool {
-        self.to_bits() == other.to_bits() || (self.is_nan() && other.is_nan())
-    }
-}
-
-impl<T: Identity, U: Identity> Identity for (T, U) {
-    fn is(&self, other: &Self) -> bool {
-        self.0.is(&other.0) && self.1.is(&other.1)
-    }
-}
 
 /// Check if `f` returns the same result as `g` for the worse cases
 ///
@@ -95,7 +77,7 @@ fn parse_cases_from<T, E>(
 
 #[test]
 fn test_parser() {
-    assert_eq!(parse_cases_from("cbrt.wc", parse_f64).count(), 105_554);
+    assert_eq!(parse_cases_from("f64/cbrt.wc", parse_f64).count(), 105_554);
 }
 
 #[test]
@@ -103,6 +85,6 @@ fn test_cbrt() {
     test_worst_cases(
         metal::cbrt,
         core_math::cbrt,
-        parse_cases_from("cbrt.wc", parse_f64),
+        parse_cases_from("f64/cbrt.wc", parse_f64),
     );
 }

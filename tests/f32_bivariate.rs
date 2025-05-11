@@ -1,4 +1,6 @@
-use super::Identity as _;
+mod common;
+
+use common::Identity as _;
 use metallic::f32 as metal;
 use regex::Regex;
 use std::path::PathBuf;
@@ -72,8 +74,8 @@ fn test_bivariate(
 
 #[test]
 fn test_parser() {
-    assert!(parse_pairs_from("hypotf.wc").count() == 6882);
-    assert!(parse_pairs_from("powf.wc").count() == 133_216);
+    assert!(parse_pairs_from("f32/hypotf.wc").count() == 6882);
+    assert!(parse_pairs_from("f32/powf.wc").count() == 133_216);
 }
 
 #[test]
@@ -81,7 +83,7 @@ fn test_hypot() {
     test_bivariate(
         metal::hypot,
         core_math::hypotf,
-        parse_pairs_from("hypotf.wc"),
+        parse_pairs_from("f32/hypotf.wc"),
     );
 }
 
@@ -89,5 +91,9 @@ fn test_hypot() {
 // Signal when precision improves
 #[should_panic = "Too many (>= 250) mismatches!  Aborting..."]
 fn test_powf() {
-    test_bivariate(metal::powf, core_math::powf, parse_pairs_from("powf.wc"));
+    test_bivariate(
+        metal::powf,
+        core_math::powf,
+        parse_pairs_from("f32/powf.wc"),
+    );
 }
