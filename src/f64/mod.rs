@@ -57,17 +57,3 @@ const fn normalize(x: f64) -> (Sign, Magnitude) {
         }
     }
 }
-
-/// The cube root
-#[must_use]
-#[inline]
-pub fn cbrt(x: f64) -> f64 {
-    let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
-        return x;
-    };
-
-    let newton = |y| crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let magnitude = (0x2A9F_7AF1_96E8_E6E8 + magnitude / 3) as u64;
-    let y = f64::from_bits(crate::u64_sign_bit(sign) | magnitude);
-    newton(newton(newton(newton(y))))
-}
