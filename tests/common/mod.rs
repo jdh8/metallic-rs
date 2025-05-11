@@ -1,3 +1,9 @@
+// Rust analyzer reports false positive for every function.
+// -- jdh8, 2025-05-11
+#![allow(dead_code)]
+
+use core::fmt::{Debug, LowerExp};
+
 /// Semantic identity like `Object.is` in JavaScript
 ///
 /// This function works around comparison issues with NaNs and signed zeros.
@@ -24,10 +30,35 @@ impl<T: Identity, U: Identity> Identity for (T, U) {
     }
 }
 
+/// Check if `f` returns the same result as `g` for the provided cases
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+pub fn test_with_cases<Case: Copy + LowerExp, T: Identity + Debug>(
+    f: impl Fn(Case) -> T,
+    g: impl Fn(Case) -> T,
+    cases: impl Iterator<Item = Case>,
+) {
+    const LIMIT: usize = 250;
+
+    let count = cases
+        .filter_map(|x| {
+            let f = f(x);
+            let g = g(x);
+            (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
+        })
+        .take(LIMIT)
+        .count();
+
+    assert!(
+        count < LIMIT,
+        "Too many (>= {LIMIT}) mismatches!  Aborting...",
+    );
+    assert!(count == 0, "There are {count} mismatches");
+}
+
 /// Exhaustively test for every `u32` value
 ///
 /// - `error`: function returning `Some` if there is an error
-#[allow(dead_code)]
 pub fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
     const LIMIT: usize = 250;
     let count = (0..=u32::MAX).filter_map(error).take(LIMIT).count();
@@ -42,7 +73,6 @@ pub fn exhaustively_test_u32(error: impl Fn(u32) -> Option<()>) {
 /// Check if `f` returns the same result as `g` for every `f32` values
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
-#[allow(dead_code)]
 pub fn test_identity<T: Identity + core::fmt::Debug>(f: impl Fn(f32) -> T, g: impl Fn(f32) -> T) {
     exhaustively_test_u32(|i| {
         let x = f32::from_bits(i);
@@ -64,7 +94,6 @@ pub fn test_identity<T: Identity + core::fmt::Debug>(f: impl Fn(f32) -> T, g: im
 /// If `expected` has an exact `f32` representation, `result` must be that
 /// value.  Otherwise, `expected` has two `f32` neighbors, and `result` must be
 /// either of them.
-#[allow(dead_code)]
 pub fn is_faithful_rounding(result: f32, expected: f64) -> bool {
     #[allow(clippy::cast_possible_truncation)]
     if result.is(&(expected as f32)) {
@@ -77,7 +106,6 @@ pub fn is_faithful_rounding(result: f32, expected: f64) -> bool {
 }
 
 // Code repetition is intentional for future removal of this function
-#[allow(dead_code)]
 pub fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64) -> f64) {
     exhaustively_test_u32(|bits| {
         let x = f32::from_bits(0x10001 * (bits >> 16));
@@ -89,7 +117,6 @@ pub fn test_bivariate_faithful(f: impl Fn(f32, f32) -> f32, g: impl Fn(f64, f64)
     });
 }
 
-#[allow(dead_code)]
 pub fn test_bivariate_correct(f: impl Fn(f32, f32) -> f32, g: impl Fn(f32, f32) -> f32) {
     exhaustively_test_u32(|bits| {
         let x = f32::from_bits(0x10001 * (bits >> 16));

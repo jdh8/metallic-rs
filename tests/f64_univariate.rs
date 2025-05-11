@@ -1,34 +1,9 @@
 mod common;
-use common::Identity;
+
+use common::test_with_cases;
 use metallic::f64 as metal;
 use std::io::BufRead as _;
 use std::path::PathBuf;
-
-/// Check if `f` returns the same result as `g` for the worse cases
-///
-/// By "same result", I mean semantic identity as defined by [`is`].
-fn test_worst_cases<T: Identity + core::fmt::Debug>(
-    f: impl Fn(f64) -> T,
-    g: impl Fn(f64) -> T,
-    cases: impl Iterator<Item = f64>,
-) {
-    const LIMIT: usize = 250;
-
-    let count = cases
-        .filter_map(|x| {
-            let f = f(x);
-            let g = g(x);
-            (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
-        })
-        .take(LIMIT)
-        .count();
-
-    assert!(
-        count < LIMIT,
-        "Too many (>= {LIMIT}) mismatches!  Aborting...",
-    );
-    assert!(count == 0, "There are {count} mismatches");
-}
 
 fn parse_f64(s: &str) -> Result<f64, hexf_parse::ParseHexfError> {
     fn fallback(s: &str) -> Option<f64> {
@@ -82,7 +57,7 @@ fn test_parser() {
 
 #[test]
 fn test_cbrt() {
-    test_worst_cases(
+    test_with_cases(
         metal::cbrt,
         core_math::cbrt,
         parse_cases_from("f64/cbrt.wc", parse_f64),
