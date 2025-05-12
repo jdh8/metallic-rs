@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic)]
 #![warn(clippy::unreadable_literal)]
 
+mod kernel;
 use crate::Sign;
 use core::num::FpCategory;
 
