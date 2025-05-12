@@ -71,42 +71,6 @@ const fn normalize(x: f32) -> (Sign, Magnitude) {
     }
 }
 
-/// The least number greater than `x`
-///
-/// This is a less careful version of [`f32::next_up`] regarding subnormal
-/// numbers.  This function is useful until `f32::next_up` gets stabilized.
-#[must_use]
-#[inline]
-pub const fn next_up(x: f32) -> f32 {
-    if x.is_nan() || x == f32::INFINITY {
-        x
-    } else if x == 0.0 {
-        f32::from_bits(1)
-    } else if x.is_sign_negative() {
-        f32::from_bits(x.to_bits() - 1)
-    } else {
-        f32::from_bits(x.to_bits() + 1)
-    }
-}
-
-/// The greatest number less than `x`
-///
-/// This is a less careful version of [`f32::next_down`] regarding subnormal
-/// numbers.  This function is useful until `f32::next_down` gets stabilized.
-#[must_use]
-#[inline]
-pub const fn next_down(x: f32) -> f32 {
-    if x.is_nan() || x == f32::NEG_INFINITY {
-        x
-    } else if x == 0.0 {
-        f32::from_bits(0x8000_0001)
-    } else if x.is_sign_negative() {
-        f32::from_bits(x.to_bits() + 1)
-    } else {
-        f32::from_bits(x.to_bits() - 1)
-    }
-}
-
 /// Rounds half-way cases away from zero
 #[must_use]
 #[inline]

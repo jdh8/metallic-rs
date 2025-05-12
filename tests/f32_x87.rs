@@ -20,8 +20,8 @@ fn is_faithful_rounding(result: f32, expected: f64) -> bool {
         return true;
     }
 
-    let next_up = f64::from(metallic::f32::next_up(result));
-    let next_down = f64::from(metallic::f32::next_down(result));
+    let next_up: f64 = result.next_up().into();
+    let next_down: f64 = result.next_down().into();
     next_down < expected && expected < next_up
 }
 
