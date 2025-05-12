@@ -57,3 +57,13 @@ const fn normalize(x: f64) -> (Sign, Magnitude) {
         }
     }
 }
+
+/// Rounds half-way cases away from zero
+#[must_use]
+#[inline]
+pub fn round(x: f64) -> f64 {
+    let r = x.abs();
+    let i = r.trunc();
+
+    (i + f64::from(r - i >= 0.5)).copysign(x)
+}
