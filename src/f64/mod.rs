@@ -4,6 +4,7 @@
 mod kernel;
 use crate::Sign;
 use core::num::FpCategory;
+use kernel::{DoubleDouble, OrderedSum};
 
 /// Explicitly stored significand bits in [`prim@f64`]
 ///
@@ -67,4 +68,29 @@ pub fn round(x: f64) -> f64 {
     let i = r.trunc();
 
     (i + f64::from(r - i >= 0.5)).copysign(x)
+}
+
+/// The cube root
+#[must_use]
+#[inline]
+pub fn cbrt(x: f64) -> f64 {
+    match x.abs() {
+        5e-324 => return 1.703_183_936_003_260_3e-108_f64.copysign(x),
+        1.797_693_134_862_315_7e308 => return 5.643_803_094_122_362e102_f64.copysign(x),
+        _ => (),
+    }
+
+    let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
+        return x;
+    };
+
+    let magnitude = (0x2A9F_7AF1_96E8_E6E8 + magnitude / 3) as u64;
+    let y = f64::from_bits(crate::u64_sign_bit(sign) | magnitude);
+    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
+    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
+    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
+
+    let z: OrderedSum = DoubleDouble::from_quotient(x, y).into();
+    let z = OrderedSum::ordered_add(2.0 * y, z / y) / 3.0;
+    z.big + z.small
 }
