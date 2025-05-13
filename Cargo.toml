@@ -31,3 +31,8 @@ opt-level = 3
 [[bench]]
 name = "f32"
 harness = false
+
+
+[[bench]]
+name = "f64_cbrt"
+harness = false
