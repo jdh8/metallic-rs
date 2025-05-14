@@ -4,7 +4,7 @@
 mod kernel;
 use crate::Sign;
 use core::num::FpCategory;
-use kernel::{DoubleDouble, OrderedSum};
+use kernel::Sum;
 
 /// Explicitly stored significand bits in [`prim@f64`]
 ///
@@ -90,7 +90,12 @@ pub fn cbrt(x: f64) -> f64 {
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
 
-    let z: OrderedSum = DoubleDouble::from_quotient(x, y).into();
-    let z = OrderedSum::ordered_add(2.0 * y, z / y) / 3.0;
-    z.big + z.small
+    let quotient = Sum::from_quotient(x, y) / y;
+    let sum = kernel::fast_sum(2.0 * y, quotient.high);
+    let sum = Sum {
+        high: sum.high,
+        low: quotient.low + sum.low,
+    } / 3.0;
+
+    sum.high + sum.low
 }
