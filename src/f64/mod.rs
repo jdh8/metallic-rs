@@ -74,12 +74,6 @@ pub fn round(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn cbrt(x: f64) -> f64 {
-    match x.abs() {
-        5e-324 => return 1.703_183_936_003_260_3e-108_f64.copysign(x),
-        1.797_693_134_862_315_7e308 => return 5.643_803_094_122_362e102_f64.copysign(x),
-        _ => (),
-    }
-
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return x;
     };
