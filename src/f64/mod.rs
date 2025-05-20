@@ -3,7 +3,7 @@
 
 mod kernel;
 use crate::Sign;
-use core::num::FpCategory;
+use core::{f64, num::FpCategory};
 use kernel::Sum;
 
 /// Explicitly stored significand bits in [`prim@f64`]
@@ -74,15 +74,13 @@ pub fn round(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn cbrt(x: f64) -> f64 {
-    match x.classify() {
-        FpCategory::Nan | FpCategory::Infinite | FpCategory::Zero => return x,
-        _ => {}
-    }
+    const TINY: f64 = f64::from_bits(1);
 
     let (x, coefficient) = match x.abs() {
-        r if r < crate::exp2i(-999) => (crate::exp2i(999) * x, crate::exp2i(-333)),
-        r if r > crate::exp2i(999) => (crate::exp2i(-999) * x, crate::exp2i(333)),
-        _ => (x, 1.0),
+        TINY..1e-300 => (crate::exp2i(999) * x, crate::exp2i(-333)),
+        1e-300..=1e300 => (x, 1.0),
+        1e300..f64::INFINITY => (crate::exp2i(-999) * x, crate::exp2i(333)),
+        _ => return x,
     };
 
     let sign_bit = x.to_bits() >> 63 << 63;
