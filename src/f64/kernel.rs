@@ -1,4 +1,4 @@
-use core::ops::Div;
+use core::ops::{Div, Mul};
 
 /// Represents `greater` + `lesser` where |`greater`| >> |`lesser`|
 ///
@@ -6,10 +6,15 @@ use core::ops::Div;
 /// a pair of `f64`.  See [double-double arithmetic][dd] on Wikipedia for more
 /// details.
 ///
-/// [dd]: https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format#Double-double_arithmetic
+/// [dd]:
+///     https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format#Double-double_arithmetic
 ///
-/// Sometimes, the sum is *normalized* when `f64`(`high` + `low`) = `high`.
-/// This form preserves the most precision.
+/// Sometimes, the sum is *normalized* when `f64`(`high` + `low`) = `high`. This
+/// form preserves the most precision.
+///
+/// Arithmetic operations usually **breaks** normalization.  This type works as
+/// an intermediate format.  Performance cost outweighs the precision gain from
+/// renormalization.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Sum {
     /// The part with the larger absolute value
@@ -40,6 +45,14 @@ impl Sum {
         Self { high, low }
     }
 
+    /// Create a normalized pair from a product
+    #[inline]
+    pub fn from_product(x: f64, y: f64) -> Self {
+        let high = x * y;
+        let low = x.mul_add(y, -high);
+        Self { high, low }
+    }
+
     /// Create a normalized pair from a quotient
     #[inline]
     pub fn from_quotient(x: f64, y: f64) -> Self {
@@ -49,7 +62,39 @@ impl Sum {
     }
 }
 
-/// Fast division that does not preserve normality
+/// Fast multiplication that breaks normality
+impl Mul for Sum {
+    type Output = Self;
+
+    #[inline]
+    fn mul(self, other: Self) -> Self {
+        let product = Self::from_product(self.high, other.high);
+        let low = crate::mul_add(self.high, other.low, product.low);
+        let low = crate::mul_add(self.low, other.high, low);
+
+        Self {
+            high: product.high,
+            low,
+        }
+    }
+}
+
+/// Fast multiplication that breaks normality
+impl Mul<f64> for Sum {
+    type Output = Self;
+
+    #[inline]
+    fn mul(self, other: f64) -> Self {
+        let product = Self::from_product(self.high, other);
+
+        Self {
+            high: product.high,
+            low: crate::mul_add(self.low, other, product.low),
+        }
+    }
+}
+
+/// Fast division that breaks normality
 impl Div<f64> for Sum {
     type Output = Self;
 
