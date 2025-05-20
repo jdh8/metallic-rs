@@ -34,10 +34,7 @@ fn test_cbrt() {
     common::test_univariate_cases(
         metal::cbrt,
         core_math::cbrt,
-        common::parse_case_file("cbrt.wc", parse_f64).chain(
-            (0..=u64::MAX)
-                .step_by((1 << 40) - rand::random::<u32>() as usize)
-                .map(f64::from_bits),
-        ),
+        common::parse_case_file("cbrt.wc", parse_f64)
+            .chain((0..=u64::MAX).step_by((1 << 40) - 1337).map(f64::from_bits)),
     );
 }
