@@ -82,19 +82,28 @@ pub fn cbrt(x: f64) -> f64 {
         _ => return x,
     };
 
+    let four_thirds = Sum::from_quotient(4.0, 3.0);
+    let nx_thirds = Sum::from_quotient(x, -3.0);
+    let newton = |y: f64| {
+        let yy = y * y;
+        crate::mul_add(four_thirds.high, y, nx_thirds.high * yy * yy)
+    };
+
     let sign_bit = x.to_bits() >> 63 << 63;
-    let magnitude = 0x2A9F_7AF1_96E8_E6E8 + x.abs().to_bits() / 3;
+    let magnitude = 0x553E_C750_CF65_7065 - x.abs().to_bits() / 3;
     let y = f64::from_bits(sign_bit | magnitude);
-    let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
+    let y = newton(newton(newton(newton(y))));
 
-    let quotient = Sum::from_quotient(x, y) / y;
-    let sum = kernel::fast_sum(2.0 * y, quotient.high);
-    let sum = Sum {
-        high: sum.high,
-        low: quotient.low + sum.low,
-    } / 3.0;
+    let yy = Sum::from_product(y, y);
+    let lhs = four_thirds * y;
+    let rhs = nx_thirds * yy * yy;
 
-    coefficient * (sum.high + sum.low)
+    let y = kernel::fast_sum(lhs.high, rhs.high);
+    let y = Sum {
+        high: y.high,
+        low: lhs.low + rhs.low + y.low,
+    };
+    let yy = y * y;
+
+    yy.high.mul_add(x, yy.low * x) * coefficient
 }
