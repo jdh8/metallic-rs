@@ -74,12 +74,11 @@ pub fn round(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn cbrt(x: f64) -> f64 {
-    const TINY: f64 = f64::from_bits(1);
-
     let (x, coefficient) = match x.abs() {
-        TINY..1e-300 => (crate::exp2i(999) * x, crate::exp2i(-333)),
-        1e-300..=1e300 => (x, 1.0),
-        1e300..f64::INFINITY => (crate::exp2i(-999) * x, crate::exp2i(333)),
+        0.0 => return x,
+        0.0..1e-200 => (crate::exp2i(999) * x, crate::exp2i(-333)),
+        1e-200..=1e200 => (x, 1.0),
+        1e200..f64::INFINITY => (crate::exp2i(-999) * x, crate::exp2i(333)),
         _ => return x,
     };
 
