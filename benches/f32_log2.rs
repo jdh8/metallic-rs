@@ -1,9 +1,9 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::cbrt);
-bench!(bench_core_math, core_math::cbrt);
-bench!(bench_std, f64::cbrt);
-bench!(bench_libm, libm::cbrt);
+bench!(bench_metallic, metallic::f32::log2);
+bench!(bench_core_math, core_math::log2f);
+bench!(bench_std, f32::log2);
+bench!(bench_libm, libm::log2f);
 
 criterion::criterion_group!(
     benches,

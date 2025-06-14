@@ -16,7 +16,7 @@ fast_polynomial = "0.3.0"
 
 [dev-dependencies]
 core-math = "0.2.0"
-criterion = "0.5.1"
+criterion = "0.6.0"
 hexf-parse = "0.2.1"
 libm = "0.2.15"
 rand = "0.9.0"
@@ -29,9 +29,116 @@ core-math = ["dep:core-math"]
 opt-level = 3
 
 [[bench]]
-name = "f32"
+name = "f32_acos"
 harness = false
 
+[[bench]]
+name = "f32_acosh"
+harness = false
+
+[[bench]]
+name = "f32_asin"
+harness = false
+
+[[bench]]
+name = "f32_asinh"
+harness = false
+
+[[bench]]
+name = "f32_atan"
+harness = false
+
+[[bench]]
+name = "f32_atanh"
+harness = false
+
+[[bench]]
+name = "f32_cbrt"
+harness = false
+
+[[bench]]
+name = "f32_cos"
+harness = false
+
+[[bench]]
+name = "f32_cosh"
+harness = false
+
+[[bench]]
+name = "f32_exp_m1"
+harness = false
+
+[[bench]]
+name = "f32_exp"
+harness = false
+
+[[bench]]
+name = "f32_exp2"
+harness = false
+
+[[bench]]
+name = "f32_exp10"
+harness = false
+
+[[bench]]
+name = "f32_frexp"
+harness = false
+
+[[bench]]
+name = "f32_hypot"
+harness = false
+
+[[bench]]
+name = "f32_ldexp"
+harness = false
+
+[[bench]]
+name = "f32_ln_1p"
+harness = false
+
+[[bench]]
+name = "f32_ln"
+harness = false
+
+[[bench]]
+name = "f32_log"
+harness = false
+
+[[bench]]
+name = "f32_log2"
+harness = false
+
+[[bench]]
+name = "f32_log10"
+harness = false
+
+[[bench]]
+name = "f32_powf"
+harness = false
+
+[[bench]]
+name = "f32_round"
+harness = false
+
+[[bench]]
+name = "f32_sin_cos"
+harness = false
+
+[[bench]]
+name = "f32_sin"
+harness = false
+
+[[bench]]
+name = "f32_sinh"
+harness = false
+
+[[bench]]
+name = "f32_tan"
+harness = false
+
+[[bench]]
+name = "f32_tanh"
+harness = false
 
 [[bench]]
 name = "f64_cbrt"
