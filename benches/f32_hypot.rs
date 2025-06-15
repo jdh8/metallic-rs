@@ -1,9 +1,9 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f32::hypot; rand::random(), rand::random());
-bench!(bench_core_math, core_math::hypotf; rand::random(), rand::random());
-bench!(bench_std, f32::hypot; rand::random(), rand::random());
-bench!(bench_libm, libm::hypotf; rand::random(), rand::random());
+bench!(bench_metallic, metallic::f32::hypot, _, _);
+bench!(bench_core_math, core_math::hypotf, _, _);
+bench!(bench_std, f32::hypot, _, _);
+bench!(bench_libm, libm::hypotf, _, _);
 
 criterion::criterion_group!(
     benches,

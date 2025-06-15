@@ -1,9 +1,9 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f32::sin_cos);
-bench!(bench_core_math, core_math::sincosf);
-bench!(bench_std, f32::sin_cos);
-bench!(bench_libm, libm::sincosf);
+bench!(bench_metallic, metallic::f32::sin_cos, _);
+bench!(bench_core_math, core_math::sincosf, _);
+bench!(bench_std, f32::sin_cos, _);
+bench!(bench_libm, libm::sincosf, _);
 
 criterion::criterion_group!(
     benches,
