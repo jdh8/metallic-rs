@@ -1,9 +1,9 @@
 #[macro_export]
 macro_rules! bench {
-    ($name:ident, $callback:expr; $($input:expr),+) => {
+    ($name:ident, $callback:expr; $($args:expr),*) => {
         fn $name(criterion: &mut criterion::Criterion) {
             criterion.bench_function(stringify!($callback), |bencher| {
-                bencher.iter(|| $callback($($input),+));
+                bencher.iter(|| $callback($($args),*));
             });
         }
     };
