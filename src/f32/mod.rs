@@ -152,7 +152,7 @@ fn finite_exp(x: f64) -> f64 {
     let x = crate::mul_add(n, -LN_2_LO, x);
     let y = crate::mul_add(kernel::exp_slope(x), x, 1.0);
 
-    kernel::fast_ldexp(y, n as i64)
+    kernel::fast_ldexp(y, unsafe { n.to_int_unchecked() })
 }
 
 /// The exponential function
@@ -206,7 +206,7 @@ pub fn exp2(x: f32) -> f32 {
         ],
     );
 
-    kernel::fast_ldexp(x, n as i64) as f32
+    kernel::fast_ldexp(x, unsafe { n.to_int_unchecked() }) as f32
 }
 
 /// Raise 10 to the power of `x`
@@ -246,7 +246,7 @@ pub fn exp10(x: f32) -> f32 {
         ],
     );
 
-    kernel::fast_ldexp(x, n as i64) as f32
+    kernel::fast_ldexp(x, unsafe { n.to_int_unchecked() }) as f32
 }
 
 /// Compute `exp(x) - 1` accurately especially for small `x`
@@ -274,7 +274,7 @@ pub fn exp_m1(x: f32) -> f32 {
         return (x * y) as f32;
     }
 
-    (kernel::fast_ldexp(crate::mul_add(x, y, 1.0), n as i64) - 1.0) as f32
+    (kernel::fast_ldexp(crate::mul_add(x, y, 1.0), unsafe { n.to_int_unchecked() }) - 1.0) as f32
 }
 
 /// Multiply `x` by 2 raised to the power of `n`
