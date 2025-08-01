@@ -106,8 +106,8 @@ pub fn exp2(x: f64) -> f64 {
         ],
     );
 
-    #[allow(clippy::cast_possible_truncation)]
-    return fast_ldexp(x, n as i64);
+    // SAFETY: `n` is within `(f64::MIN_EXP - 1) ..= f64::MAX_EXP`
+    fast_ldexp(x, unsafe { n.to_int_unchecked() })
 }
 
 /// Argument reduction for trigonometric functions
