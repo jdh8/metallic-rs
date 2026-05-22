@@ -72,8 +72,6 @@ fn test_hypot() {
 }
 
 #[test]
-// Signal when precision improves
-#[should_panic = "Too many (>= 250) mismatches!  Aborting..."]
 fn test_powf() {
     test_bivariate(
         metal::powf,
