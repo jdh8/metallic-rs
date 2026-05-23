@@ -857,12 +857,14 @@ pub fn cos(x: f32) -> f32 {
     }
 
     let (q, x) = kernel::rem_pio2(x);
+    let sin = kernel::sin(x);
+    let cos = kernel::cos(x);
+    let y = if q & 1 == 0 { cos } else { sin };
 
-    match q & 3 {
-        0 => kernel::cos(x),
-        1 => -kernel::sin(x),
-        2 => -kernel::cos(x),
-        _ => kernel::sin(x),
+    if (q.wrapping_add(1)) & 2 == 0 {
+        y
+    } else {
+        -y
     }
 }
 
