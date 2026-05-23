@@ -886,13 +886,10 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
             let (q, x) = kernel::rem_pio2(x);
             let s = kernel::sin(x);
             let c = kernel::cos(x);
-
-            match q & 3 {
-                0 => (s, c),
-                1 => (c, -s),
-                2 => (-s, -c),
-                _ => (-c, s),
-            }
+            let (s, c) = if q & 1 == 0 { (s, c) } else { (c, s) };
+            let s = if q & 2 == 0 { s } else { -s };
+            let c = if q.wrapping_add(1) & 2 == 0 { c } else { -c };
+            (s, c)
         }
     };
     let s = if x.is_sign_negative() { -s } else { s };
