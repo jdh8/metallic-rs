@@ -103,12 +103,13 @@ pub fn cbrt(x: f64) -> f64 {
 /// Table size for the exponential family: `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
 const EXP_N: i64 = 128;
 
-/// Reconstruct `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)` for the exponential family.
+/// The mantissa `2`<sup>`j/N`</sup>` · exp(r)` of the exponential family, as a
+/// double-double normalized into [1, 2), with `q` adjusted for that normalization.
 ///
-/// `r` is the reduced argument as a double-double, `|r| ≤ ln2/2N`.  The result is
-/// correctly rounded, including gradual underflow into the subnormal range.
+/// `r` is the reduced argument, `|r| ≤ ln2/2N`.  The full value is `2`<sup>`q`</sup>
+/// times the returned mantissa.
 #[inline]
-fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
+fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     use exp_consts::{EXP2_TABLE, EXP_R_COEFFS};
 
     // exp(r) by double-double Horner over the degree-8 minimax polynomial.
@@ -125,15 +126,25 @@ fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
     let product = kernel::fast_sum(scaled.high, scaled.low);
 
     // `2^(j/N) · exp(r)` lies in [0.997, 2.005); fold its exponent into `q` so the
-    // mantissa is in [1, 2).  Then the result is subnormal exactly when `q < −1022`,
-    // and the integer-grid shift below stays within an exact `i64`.
-    let (product, q) = if product.high < 1.0 {
+    // mantissa is in [1, 2).
+    if product.high < 1.0 {
         (product * 2.0, q - 1)
     } else if product.high >= 2.0 {
         (product * 0.5, q + 1)
     } else {
         (product, q)
-    };
+    }
+}
+
+/// Reconstruct `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)` for the exponential family.
+///
+/// `r` is the reduced argument as a double-double, `|r| ≤ ln2/2N`.  The result is
+/// correctly rounded, including gradual underflow into the subnormal range.
+#[inline]
+fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
+    // The mantissa is in [1, 2), so the result is subnormal exactly when
+    // `q < −1022`, and the integer-grid shift below stays within an exact `i64`.
+    let (product, q) = exp_mantissa(j, q, r);
 
     if q >= -1022 {
         // Normal result: scaling by 2^q is exact, so one rounding of the pair.
@@ -273,4 +284,71 @@ pub fn exp10(x: f64) -> f64 {
     };
 
     exp_reconstruct(j, q, x_ln10 + n_ln2)
+}
+
+/// Compute `exp(x) − 1` accurately, especially for small `x`
+#[must_use]
+#[inline]
+pub fn exp_m1(x: f64) -> f64 {
+    use exp_consts::{LN2_OVER_N_HI, LN2_OVER_N_LO};
+
+    /// `N / ln(2)`, the scale that maps `x` to the reduction index
+    const N_OVER_LN2: f64 = 184.6649652337873;
+
+    if x.is_nan() || x == 0.0 {
+        // Preserve the sign of zero: exp_m1(±0) = ±0.
+        return x;
+    }
+
+    if x >= 709.782712893384 {
+        return f64::INFINITY;
+    }
+
+    // Below this `exp(x) < 2^-54`, so `exp(x) − 1` rounds to exactly −1.  This also
+    // keeps the reconstruction below in the normal range (`q ≥ −1022`).
+    if x <= -708.0 {
+        return -1.0;
+    }
+
+    // Same reduction as `exp`: n = round(N·x / ln2), r = x − n·ln2/N.
+    let scaled = (x * N_OVER_LN2).round_ties_even();
+
+    // SAFETY: `|x| < 710`, so `|scaled| < 2^18`.
+    let n = unsafe { scaled.to_int_unchecked::<i64>() };
+
+    if n == 0 {
+        // |x| < ln2/2N ≈ 0.0027.  Computing exp(x) − 1 here would lose the small
+        // result in the double-double's floor relative to 1, so evaluate
+        // expm1(x) = x · S(x) with S(x) = (exp(x) − 1)/x = ∑ xᵏ/(k+1)!.  S is built
+        // by double-double Horner so the result keeps full *relative* accuracy.
+        use exp_consts::EXPM1_S_COEFFS;
+
+        let (high, low) = EXPM1_S_COEFFS[EXPM1_S_COEFFS.len() - 1];
+        let mut s = Sum { high, low };
+
+        for &(high, low) in EXPM1_S_COEFFS[..EXPM1_S_COEFFS.len() - 1].iter().rev() {
+            s = s * x + Sum { high, low };
+        }
+
+        let result = s * x;
+        return result.high + result.low;
+    }
+
+    let j = (n & (EXP_N - 1)) as usize;
+    let q = n >> 7;
+
+    let a = scaled.mul_add(-LN2_OVER_N_HI, x);
+    let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
+
+    // exp(x) = 2^q · mantissa; form `2^q · mantissa − 1` as a double-double.  The
+    // scaling stays normal (`q ∈ [−1022, 1023]`), and the double-double subtraction
+    // absorbs the cancellation that plain `exp(x) − 1` would suffer near zero.
+    let (mantissa, q) = exp_mantissa(j, q, r);
+    let result = mantissa * crate::exp2i(q)
+        + Sum {
+            high: -1.0,
+            low: 0.0,
+        };
+
+    result.high + result.low
 }

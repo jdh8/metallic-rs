@@ -93,3 +93,13 @@ print(f"pub(super) const LN10_LO: f64 = {hexf(ln10_lo)};")
 # 128 · log2(10), the scale mapping x to the reduction index for exp10
 n_log2_10 = f64(mpf(N) * mlog(10) / mlog(2))
 print(f"pub(super) const N_LOG2_10: f64 = {hexf(n_log2_10)};")
+
+# --- S(x) = (exp(x) - 1) / x = sum_{k>=0} x^k/(k+1)! for the small-x expm1 path ---
+# Double-double coefficients 1/(k+1)! (degree 9), evaluated by DD Horner so that
+# expm1(x) = x * S(x) keeps full relative accuracy near zero.
+from mpmath import factorial
+print(f"\npub(super) const EXPM1_S_COEFFS: [(f64, f64); 10] = [")
+for k in range(10):
+    hi, lo = dd(mpf(1) / factorial(k + 1))
+    print(f"    ({hexf(hi)}, {hexf(lo)}),")
+print("];")
