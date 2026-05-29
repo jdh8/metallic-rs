@@ -6,6 +6,9 @@
     clippy::approx_constant
 )]
 
+// CORE-MATH's split of ln2: `LN2_HI = 0x1.62e42fefa38p-1` is an integer multiple
+// of 2^-42, so `e · LN2_HI` is exact for |e| ≤ 1074 (the full f64 exponent range).
+// `LN2_LO = 0x1.ef35793c7673p-45`.
 pub(super) const LN2_HI: f64 = 0.6931471805598903;
 pub(super) const LN2_LO: f64 = 5.497923018708371e-14;
 
