@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![warn(clippy::pedantic, clippy::nursery)]
 #![warn(missing_docs)]
 use fast_polynomial::poly_array as poly;
 
