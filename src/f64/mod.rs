@@ -100,43 +100,16 @@ pub fn cbrt(x: f64) -> f64 {
     coefficient * (sum.high + sum.low)
 }
 
-/// The exponential function
-#[must_use]
+/// Table size for the exponential family: `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
+const EXP_N: i64 = 128;
+
+/// Reconstruct `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)` for the exponential family.
+///
+/// `r` is the reduced argument as a double-double, `|r| ≤ ln2/2N`.  The result is
+/// correctly rounded, including gradual underflow into the subnormal range.
 #[inline]
-pub fn exp(x: f64) -> f64 {
-    use exp_consts::{EXP2_TABLE, EXP_R_COEFFS, LN2_OVER_N_HI, LN2_OVER_N_LO};
-
-    /// Table size, so `exp(x) = 2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
-    const N: i64 = 128;
-
-    /// `N / ln(2)`, the scale that maps `x` to the reduction index
-    const N_OVER_LN2: f64 = 184.6649652337873;
-
-    if x.is_nan() {
-        return x;
-    }
-
-    // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero
-    if x >= 709.782712893384 {
-        return f64::INFINITY;
-    }
-    if x <= -745.133219101941 {
-        return 0.0;
-    }
-
-    // Argument reduction: n = round(N·x / ln2), so r = x − n·ln2/N lies in
-    // [−ln2/2N, ln2/2N] ≈ [−0.0027, 0.0027].
-    let scaled = (x * N_OVER_LN2).round_ties_even();
-
-    // SAFETY: `|x| < 746`, so `|scaled| < 2^18`.
-    let n = unsafe { scaled.to_int_unchecked::<i64>() };
-    let j = (n & (N - 1)) as usize;
-    let q = n >> 7;
-
-    // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
-    // word has 17 trailing zero bits, and the low word recovers the tail.
-    let a = scaled.mul_add(-LN2_OVER_N_HI, x);
-    let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
+fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
+    use exp_consts::{EXP2_TABLE, EXP_R_COEFFS};
 
     // exp(r) by double-double Horner over the degree-8 minimax polynomial.
     let (high, low) = EXP_R_COEFFS[EXP_R_COEFFS.len() - 1];
@@ -146,7 +119,7 @@ pub fn exp(x: f64) -> f64 {
         acc = acc * r + Sum { high, low };
     }
 
-    // exp(x) = 2^q · 2^(j/N) · exp(r); fold the table entry in and normalize.
+    // Fold the table entry in and normalize the mantissa.
     let (high, low) = EXP2_TABLE[j];
     let scaled = Sum { high, low } * acc;
     let product = kernel::fast_sum(scaled.high, scaled.low);
@@ -183,4 +156,80 @@ pub fn exp(x: f64) -> f64 {
 
     // 2^-1074 is the smallest positive subnormal, i.e. `f64::from_bits(1)`.
     n * f64::from_bits(1)
+}
+
+/// The exponential function
+#[must_use]
+#[inline]
+pub fn exp(x: f64) -> f64 {
+    use exp_consts::{LN2_OVER_N_HI, LN2_OVER_N_LO};
+
+    /// `N / ln(2)`, the scale that maps `x` to the reduction index
+    const N_OVER_LN2: f64 = 184.6649652337873;
+
+    if x.is_nan() {
+        return x;
+    }
+
+    // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero
+    if x >= 709.782712893384 {
+        return f64::INFINITY;
+    }
+    if x <= -745.133219101941 {
+        return 0.0;
+    }
+
+    // Argument reduction: n = round(N·x / ln2), so r = x − n·ln2/N lies in
+    // [−ln2/2N, ln2/2N] ≈ [−0.0027, 0.0027].
+    let scaled = (x * N_OVER_LN2).round_ties_even();
+
+    // SAFETY: `|x| < 746`, so `|scaled| < 2^18`.
+    let n = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (n & (EXP_N - 1)) as usize;
+    let q = n >> 7;
+
+    // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
+    // word has 17 trailing zero bits, and the low word recovers the tail.
+    let a = scaled.mul_add(-LN2_OVER_N_HI, x);
+    let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
+
+    exp_reconstruct(j, q, r)
+}
+
+/// 2 raised to the power `x`
+#[must_use]
+#[inline]
+pub fn exp2(x: f64) -> f64 {
+    use exp_consts::{LN2_OVER_N_HI, LN2_OVER_N_LO};
+
+    if x.is_nan() {
+        return x;
+    }
+
+    // `f64::MAX_EXP` and the threshold below which `exp2` rounds to zero
+    if x >= 1024.0 {
+        return f64::INFINITY;
+    }
+    if x <= -1075.0 {
+        return 0.0;
+    }
+
+    // Argument reduction: m = round(N·x), so 2^x = 2^(m/N) · 2^s with
+    // s = x − m/N ∈ [−1/2N, 1/2N].  `sigma = N·x − m` is exact (N is a power of
+    // two), and r = s·ln2 = sigma·(ln2/N) is carried as a double-double.
+    let scaled = (x * EXP_N as f64).round_ties_even();
+
+    // SAFETY: `|x| < 1075`, so `|scaled| < 2^18`.
+    let m = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (m & (EXP_N - 1)) as usize;
+    let q = m >> 7;
+
+    let sigma = x.mul_add(EXP_N as f64, -scaled);
+    let product = Sum::from_product(sigma, LN2_OVER_N_HI);
+    let r = Sum {
+        high: product.high,
+        low: sigma.mul_add(LN2_OVER_N_LO, product.low),
+    };
+
+    exp_reconstruct(j, q, r)
 }
