@@ -26,8 +26,6 @@ const fn u32_sign_bit(sign: Sign) -> u32 {
     }
 }
 
-// Used by `f64::frexp` (see the f64 build-out).
-#[allow(dead_code)]
 const fn u64_sign_bit(sign: Sign) -> u64 {
     match sign {
         Sign::Positive => 0,

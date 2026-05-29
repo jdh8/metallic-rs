@@ -16,9 +16,6 @@ pub const EXP_SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
 /// Magnitude of `f64`
 ///
 /// Nonzero subnormal numbers are normalized to have an implicit leading bit.
-// Used by `frexp` (see the f64 build-out); the exp/log functions handle their
-// special cases inline.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Magnitude {
     /// NaN, see [`FpCategory::Nan`]
@@ -42,8 +39,6 @@ enum Magnitude {
 }
 
 /// Break a `f64` into its sign and magnitude
-// Used by `frexp` (see the f64 build-out).
-#[allow(dead_code)]
 #[inline]
 const fn normalize(x: f64) -> (Sign, Magnitude) {
     let sign = if x.is_sign_negative() {
@@ -550,4 +545,71 @@ pub fn ln_1p(x: f64) -> f64 {
     let (high, low) = L_TABLE[i];
     let result = e_ln2 + Sum { high, low } + ln_1p_kernel(r);
     result.high + result.low
+}
+
+/// The logarithm of `x` to an arbitrary `base`
+///
+/// This is the ratio `log2(x) / log2(base)`; as a quotient of two logarithms it
+/// is faithfully — not correctly — rounded.
+#[must_use]
+#[inline]
+pub fn log(x: f64, base: f64) -> f64 {
+    log2(x) / log2(base)
+}
+
+/// Multiply `x` by 2 raised to the power `n`
+#[must_use]
+#[inline]
+pub const fn ldexp(x: f64, n: i32) -> f64 {
+    // Scale in up to two steps per direction so the whole exponent range is
+    // covered while the final multiply rounds at most once (into the subnormals).
+    let mut x = x;
+    let mut n = n;
+
+    if n > 1023 {
+        x *= crate::exp2i(1023);
+        n -= 1023;
+        if n > 1023 {
+            x *= crate::exp2i(1023);
+            n -= 1023;
+            if n > 1023 {
+                n = 1023;
+            }
+        }
+    } else if n < -1022 {
+        // 2^-969 keeps `x` normal while shedding most of a large negative `n`.
+        x *= crate::exp2i(-969);
+        n += 969;
+        if n < -1022 {
+            x *= crate::exp2i(-969);
+            n += 969;
+            if n < -1022 {
+                n = -1022;
+            }
+        }
+    }
+
+    x * f64::from_bits(((0x3ff + n) as u64) << EXP_SHIFT)
+}
+
+/// Decompose into a significand and an exponent
+///
+/// The absolute value of the significand is in the range of [0.5, 1) for
+/// nonzero finite `x` for historical reasons.  This function also explains how
+/// [`f64::MAX_EXP`] and [`f64::MIN_EXP`] are defined.
+#[must_use]
+#[inline]
+pub const fn frexp(x: f64) -> (f64, i32) {
+    let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
+        return (x, 0);
+    };
+
+    let mask = f64::MIN_POSITIVE.to_bits() - 1;
+    let significand = magnitude as u64 & mask | 0.5f64.to_bits();
+
+    #[allow(clippy::cast_possible_truncation)]
+    (
+        f64::from_bits(crate::u64_sign_bit(sign) | significand),
+        f64::MIN_EXP - 1 + (magnitude >> EXP_SHIFT) as i32,
+    )
 }
