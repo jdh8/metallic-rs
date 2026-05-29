@@ -16,6 +16,9 @@ pub const EXP_SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
 /// Magnitude of `f64`
 ///
 /// Nonzero subnormal numbers are normalized to have an implicit leading bit.
+// Used by `frexp` (see the f64 build-out); the exp/log functions handle their
+// special cases inline.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Magnitude {
     /// NaN, see [`FpCategory::Nan`]
@@ -39,6 +42,8 @@ enum Magnitude {
 }
 
 /// Break a `f64` into its sign and magnitude
+// Used by `frexp` (see the f64 build-out).
+#[allow(dead_code)]
 #[inline]
 const fn normalize(x: f64) -> (Sign, Magnitude) {
     let sign = if x.is_sign_negative() {
@@ -519,14 +524,14 @@ pub fn ln_1p(x: f64) -> f64 {
         return result.high + result.low;
     }
 
-    // Otherwise carry 1 + x exactly as `s + c` (Fast2Sum) so the bits of `x` lost
-    // in forming `s` are kept in `c`.
-    let (s, c) = if x.abs() <= 1.0 {
-        let s = 1.0 + x;
-        (s, x - (s - 1.0))
+    // Otherwise carry 1 + x exactly as `s + c` (Fast2Sum), so the bits of `x` lost
+    // in forming `s` are kept in `c`.  `1 + x` is commutative, so the high word is
+    // the same either way; only the residual depends on which operand is larger.
+    let s = 1.0 + x;
+    let c = if x.abs() <= 1.0 {
+        x - (s - 1.0)
     } else {
-        let s = x + 1.0;
-        (s, 1.0 - (s - x))
+        1.0 - (s - x)
     };
 
     // Reduce s = 2^e·m as for `ln`, then fold the tail `c` *exactly* into the

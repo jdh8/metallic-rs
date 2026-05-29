@@ -13,7 +13,10 @@ autobenches = false
 
 [dependencies]
 core-math = { version = "1", optional = true }
-fast_polynomial = "0.4"
+# `std` enables `num-traits`' `MulAdd for f64`, which `PolyNum` (used by
+# `poly_array`/`rational_array`) requires; without it the library does not build
+# on its own (only under `cargo test`, where dev-dependencies pull it in).
+fast_polynomial = { version = "0.4", features = ["std"] }
 
 [dev-dependencies]
 core-math = "1"

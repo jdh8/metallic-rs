@@ -26,6 +26,8 @@ const fn u32_sign_bit(sign: Sign) -> u32 {
     }
 }
 
+// Used by `f64::frexp` (see the f64 build-out).
+#[allow(dead_code)]
 const fn u64_sign_bit(sign: Sign) -> u64 {
     match sign {
         Sign::Positive => 0,
@@ -48,6 +50,8 @@ const fn u64_sign_bit(sign: Sign) -> u64 {
 /// (`two_product`, residual tests) and high-precision compensation must call
 /// [`f64::mul_add`] directly.  Reserve `mul_add` for hot polynomial-style spots
 /// where a lost low bit is absorbed by later rounding.
+// Not `const`: the hardware path calls the non-const [`f64::mul_add`].
+#[allow(clippy::missing_const_for_fn)]
 #[inline]
 fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     #[cfg(target_feature = "fma")]
