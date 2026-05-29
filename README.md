@@ -39,8 +39,7 @@ metallic = { version = "0.1.2", features = ["core-math"] }
 This would replace the following functions with those from
 [`core-math`][crate]:
 
-- Trigonometric functions for `f32`
-- `f32::powf` for correct rounding
+- `f32::powf`, which is notoriously hard to round correctly
 
 [CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 [crate]: https://crates.io/crates/core-math

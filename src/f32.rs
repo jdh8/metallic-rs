@@ -821,11 +821,7 @@ pub fn atan(x: f32) -> f32 {
     }
 }
 
-#[cfg(feature = "core-math")]
-pub use core_math::sinf as sin;
-
 /// Sine
-#[cfg(not(feature = "core-math"))]
 #[must_use]
 #[inline]
 pub fn sin(x: f32) -> f32 {
@@ -847,11 +843,7 @@ pub fn sin(x: f32) -> f32 {
     return if x.is_sign_negative() { -y } else { y };
 }
 
-#[cfg(feature = "core-math")]
-pub use core_math::cosf as cos;
-
 /// Cosine
-#[cfg(not(feature = "core-math"))]
 #[must_use]
 #[inline]
 pub fn cos(x: f32) -> f32 {
@@ -877,11 +869,7 @@ pub fn cos(x: f32) -> f32 {
     }
 }
 
-#[cfg(feature = "core-math")]
-pub use core_math::sincosf as sin_cos;
-
 /// Compute sine and cosine simultaneously
-#[cfg(not(feature = "core-math"))]
 #[must_use]
 #[inline]
 pub fn sin_cos(x: f32) -> (f32, f32) {
@@ -905,11 +893,7 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
     (s, c)
 }
 
-#[cfg(feature = "core-math")]
-pub use core_math::tanf as tan;
-
 /// Tangent function
-#[cfg(not(feature = "core-math"))]
 #[must_use]
 #[inline]
 pub fn tan(x: f32) -> f32 {
