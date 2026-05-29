@@ -328,6 +328,11 @@ pub fn ln(x: f32) -> f32 {
         (Sign::Positive, Magnitude::Normalized(i)) => {
             use core::f32::consts::FRAC_1_SQRT_2;
 
+            // TODO: these hard-coded returns are correctly-rounded values for
+            // double-rounding cases (the exact ln is within ~½ f64-ulp of an f32
+            // midpoint, so the f64 kernel rounds the wrong way).  Remove them by
+            // rounding the f64 result to odd / carrying a hi+lo pair before the
+            // final f32 round, as the f64 logarithm functions now do.
             match x {
                 1.179_438_3e-2 => return -4.440_131_7,
                 9.472_636 => return 2.248_407_1,
@@ -353,6 +358,8 @@ pub fn ln(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn ln_1p(x: f32) -> f32 {
+    // TODO: the hard-coded returns below are double-rounding cases (see the note
+    // in `ln`); remove them with a round-to-odd / hi+lo final round.
     match x {
         f32::INFINITY => f32::INFINITY,
         -1.0 => f32::NEG_INFINITY,
