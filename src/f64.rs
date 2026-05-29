@@ -177,17 +177,17 @@ pub fn exp(x: f64) -> f64 {
     use exp_consts::{LN2_OVER_N_HI, LN2_OVER_N_LO};
 
     /// `N / ln(2)`, the scale that maps `x` to the reduction index
-    const N_OVER_LN2: f64 = 184.6649652337873;
+    const N_OVER_LN2: f64 = 184.664_965_233_787_3;
 
     if x.is_nan() {
         return x;
     }
 
     // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero
-    if x >= 709.782712893384 {
+    if x >= 709.782_712_893_384 {
         return f64::INFINITY;
     }
-    if x <= -745.133219101941 {
+    if x <= -745.133_219_101_941 {
         return 0.0;
     }
 
@@ -257,10 +257,10 @@ pub fn exp10(x: f64) -> f64 {
     }
 
     // `log10(f64::MAX)` and the threshold below which `exp10` rounds to zero
-    if x >= 308.2547155599167 {
+    if x >= 308.254_715_559_916_7 {
         return f64::INFINITY;
     }
-    if x <= -323.6072453387798 {
+    if x <= -323.607_245_338_779_8 {
         return 0.0;
     }
 
@@ -294,14 +294,14 @@ pub fn exp_m1(x: f64) -> f64 {
     use exp_consts::{LN2_OVER_N_HI, LN2_OVER_N_LO};
 
     /// `N / ln(2)`, the scale that maps `x` to the reduction index
-    const N_OVER_LN2: f64 = 184.6649652337873;
+    const N_OVER_LN2: f64 = 184.664_965_233_787_3;
 
     if x.is_nan() || x == 0.0 {
         // Preserve the sign of zero: exp_m1(±0) = ±0.
         return x;
     }
 
-    if x >= 709.782712893384 {
+    if x >= 709.782_712_893_384 {
         return f64::INFINITY;
     }
 
