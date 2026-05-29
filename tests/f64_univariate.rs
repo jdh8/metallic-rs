@@ -82,6 +82,13 @@ fn test_log10() {
 }
 
 #[test]
+fn test_ln_1p() {
+    let bits = (0..=u64::MAX).step_by((1 << 37) - 1337).map(f64::from_bits);
+    let near_zero = (0..=2_000_000).map(|i| -0.5 + f64::from(i) * (1.5 / 2_000_000.0));
+    common::test_univariate_cases(metal::ln_1p, core_math::log1p, bits.chain(near_zero));
+}
+
+#[test]
 fn test_cbrt() {
     common::test_univariate_cases(
         metal::cbrt,

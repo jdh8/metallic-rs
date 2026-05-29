@@ -490,3 +490,59 @@ pub fn log10(x: f64) -> f64 {
         };
     result.high + result.low
 }
+
+/// Compute `ln(1 + x)` accurately, especially for small `x`
+#[must_use]
+#[inline]
+pub fn ln_1p(x: f64) -> f64 {
+    use log_consts::{INV_TABLE, LN2_HI, LN2_LO, L_TABLE};
+
+    if x.is_nan() || x == 0.0 {
+        // Preserve the sign of zero: ln_1p(±0) = ±0.
+        return x;
+    }
+    if x < -1.0 {
+        return f64::NAN;
+    }
+    if x == -1.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == f64::INFINITY {
+        return x;
+    }
+
+    // Small |x|: evaluate ln(1+x) = x·P(x) directly.  This avoids the table's
+    // `L[i] + ln(1+r)` cancellation, which would cap accuracy when the result is
+    // tiny, and `x` is already an exact reduced argument in the kernel's range.
+    if x.abs() < 1.0 / 256.0 {
+        let result = ln_1p_kernel(Sum { high: x, low: 0.0 });
+        return result.high + result.low;
+    }
+
+    // Otherwise carry 1 + x exactly as `s + c` (Fast2Sum) so the bits of `x` lost
+    // in forming `s` are kept in `c`.
+    let (s, c) = if x.abs() <= 1.0 {
+        let s = 1.0 + x;
+        (s, x - (s - 1.0))
+    } else {
+        let s = x + 1.0;
+        (s, 1.0 - (s - x))
+    };
+
+    // Reduce s = 2^e·m as for `ln`, then fold the tail `c` *exactly* into the
+    // reduced argument: with δ = c·2⁻ᵉ the true mantissa is m + δ, so
+    // r_full = m·inv − 1 + δ·inv reflects 1 + x = s + c with no lost bits.
+    let (e, i, r) = log_reduce(s);
+    let inv = INV_TABLE[i];
+    let delta = if e > -1000 { c * crate::exp2i(-e) } else { 0.0 };
+    let r = r + Sum::from_product(delta, inv);
+
+    let e = e as f64;
+    let e_ln2 = Sum {
+        high: e * LN2_HI,
+        low: e * LN2_LO,
+    };
+    let (high, low) = L_TABLE[i];
+    let result = e_ln2 + Sum { high, low } + ln_1p_kernel(r);
+    result.high + result.low
+}
