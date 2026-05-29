@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic)]
 #![warn(clippy::unreadable_literal)]
 
+mod exp_consts;
 mod kernel;
 use crate::Sign;
 use core::{f64, num::FpCategory};
@@ -97,4 +98,89 @@ pub fn cbrt(x: f64) -> f64 {
     } / 3.0;
 
     coefficient * (sum.high + sum.low)
+}
+
+/// The exponential function
+#[must_use]
+#[inline]
+pub fn exp(x: f64) -> f64 {
+    use exp_consts::{EXP2_TABLE, EXP_R_COEFFS, LN2_OVER_N_HI, LN2_OVER_N_LO};
+
+    /// Table size, so `exp(x) = 2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
+    const N: i64 = 128;
+
+    /// `N / ln(2)`, the scale that maps `x` to the reduction index
+    const N_OVER_LN2: f64 = 184.6649652337873;
+
+    if x.is_nan() {
+        return x;
+    }
+
+    // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero
+    if x >= 709.782712893384 {
+        return f64::INFINITY;
+    }
+    if x <= -745.133219101941 {
+        return 0.0;
+    }
+
+    // Argument reduction: n = round(N·x / ln2), so r = x − n·ln2/N lies in
+    // [−ln2/2N, ln2/2N] ≈ [−0.0027, 0.0027].
+    let scaled = (x * N_OVER_LN2).round_ties_even();
+
+    // SAFETY: `|x| < 746`, so `|scaled| < 2^18`.
+    let n = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (n & (N - 1)) as usize;
+    let q = n >> 7;
+
+    // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
+    // word has 17 trailing zero bits, and the low word recovers the tail.
+    let a = scaled.mul_add(-LN2_OVER_N_HI, x);
+    let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
+
+    // exp(r) by double-double Horner over the degree-8 minimax polynomial.
+    let (high, low) = EXP_R_COEFFS[EXP_R_COEFFS.len() - 1];
+    let mut acc = Sum { high, low };
+
+    for &(high, low) in EXP_R_COEFFS[..EXP_R_COEFFS.len() - 1].iter().rev() {
+        acc = acc * r + Sum { high, low };
+    }
+
+    // exp(x) = 2^q · 2^(j/N) · exp(r); fold the table entry in and normalize.
+    let (high, low) = EXP2_TABLE[j];
+    let scaled = Sum { high, low } * acc;
+    let product = kernel::fast_sum(scaled.high, scaled.low);
+
+    // `2^(j/N) · exp(r)` lies in [0.997, 2.005); fold its exponent into `q` so the
+    // mantissa is in [1, 2).  Then the result is subnormal exactly when `q < −1022`,
+    // and the integer-grid shift below stays within an exact `i64`.
+    let (product, q) = if product.high < 1.0 {
+        (product * 2.0, q - 1)
+    } else if product.high >= 2.0 {
+        (product * 0.5, q + 1)
+    } else {
+        (product, q)
+    };
+
+    if q >= -1022 {
+        // Normal result: scaling by 2^q is exact, so one rounding of the pair.
+        return kernel::fast_ldexp(product.high + product.low, q);
+    }
+
+    // Subnormal result: rounding the pair to `f64` and then scaling would round
+    // twice.  Instead round the double-double on the integer grid at scale
+    // 2^-1074 (the subnormal ulp): `m = (high + low) · 2^(q + 1074)` lies in
+    // [0, 2^52], round it once to an integer, then `n · 2^-1074` is exact.
+    let shift = q + 1074;
+    let high = kernel::fast_ldexp(product.high, shift);
+    let low = kernel::fast_ldexp(product.low, shift);
+
+    // `high` may carry a half-integer resolution at this scale, so `high + low`
+    // would discard the fine part of `low`.  Round `high`, then correct with the
+    // exact residual `(high − n0) + low`.
+    let n0 = high.round_ties_even();
+    let n = n0 + ((high - n0) + low).round_ties_even();
+
+    // 2^-1074 is the smallest positive subnormal, i.e. `f64::from_bits(1)`.
+    n * f64::from_bits(1)
 }

@@ -1,4 +1,11 @@
-use core::ops::{Div, Mul};
+use core::ops::{Add, Div, Mul};
+
+/// Fast C `ldexp` assuming normal argument and result
+#[inline]
+pub const fn fast_ldexp(x: f64, n: i64) -> f64 {
+    const SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
+    f64::from_bits((x.to_bits() as i64 + (n << SHIFT)) as u64)
+}
 
 /// Represents `greater` + `lesser` where |`greater`| >> |`lesser`|
 ///
@@ -106,5 +113,17 @@ impl Div<f64> for Sum {
         let high = self.high / other;
         let low = (high.mul_add(-other, self.high) + self.low) / other;
         Self { high, low }
+    }
+}
+
+/// Double-double addition that breaks normality
+impl Add for Sum {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, other: Self) -> Self {
+        let sum = Self::from_sum(self.high, other.high);
+        let low = sum.low + (self.low + other.low);
+        fast_sum(sum.high, low)
     }
 }
