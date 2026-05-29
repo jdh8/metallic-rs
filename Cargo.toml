@@ -9,6 +9,8 @@ license = "MIT"
 categories = ["mathematics"]
 keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
 exclude = ["/tests/*/huge"]
+autotests = false
+autobenches = false
 
 [dependencies]
 core-math = { version = "1", optional = true }
@@ -27,6 +29,21 @@ core-math = ["dep:core-math"]
 
 [profile.dev]
 opt-level = 3
+
+[[test]]
+name = "f32_bivariate"
+
+[[test]]
+name = "f32_ldexp"
+
+[[test]]
+name = "f32_univariate"
+
+[[test]]
+name = "f32_x87"
+
+[[test]]
+name = "f64_univariate"
 
 [[bench]]
 name = "f32_acos"
