@@ -76,17 +76,31 @@ pub fn round(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn cbrt(x: f64) -> f64 {
-    let (x, coefficient) = match x.abs() {
-        0.0 => return x,
-        0.0..1e-200 => (crate::exp2i(999) * x, crate::exp2i(-333)),
-        1e-200..=1e200 => (x, 1.0),
-        1e200..f64::INFINITY => (crate::exp2i(-999) * x, crate::exp2i(333)),
-        _ => return x,
+    let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
+        return x; // 0, ±inf, nan
     };
 
-    let sign_bit = x.to_bits() >> 63 << 63;
-    let magnitude = 0x2A9F_7AF1_96E8_E6E8 + x.abs().to_bits() / 3;
-    let y = f64::from_bits(sign_bit | magnitude);
+    // Scale extreme |x| into [1e-200, 1e200] so the double-double refinement keeps
+    // full precision (tiny `x` loses it, huge `x` overflows `2·y³`); undo afterwards.
+    // The 999 shift mirrors the `2^±999` scaling of `x`; `333 = 999/3` rescales `y`.
+    let (x, magnitude, coefficient) = if x.abs() < 1e-200 {
+        (
+            crate::exp2i(999) * x,
+            magnitude + (999 << EXP_SHIFT),
+            crate::exp2i(-333),
+        )
+    } else if x.abs() <= 1e200 {
+        (x, magnitude, 1.0)
+    } else {
+        (
+            crate::exp2i(-999) * x,
+            magnitude - (999 << EXP_SHIFT),
+            crate::exp2i(333),
+        )
+    };
+
+    let magnitude = (0x2A9F_7AF1_96E8_E6E8 + magnitude / 3) as u64;
+    let y = f64::from_bits(crate::u64_sign_bit(sign) | magnitude);
     let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
     let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
@@ -394,17 +408,14 @@ fn ln_1p_kernel(r: Sum) -> Sum {
 fn log_reduce(x: f64) -> (i64, usize, Sum) {
     use log_consts::INV_TABLE;
 
-    // Normalize subnormals so `x` is in the normal range.
-    let (x, bias) = if x < f64::MIN_POSITIVE {
-        (x * crate::exp2i(54), -54)
-    } else {
-        (x, 0)
+    let (_, Magnitude::Normalized(magnitude)) = normalize(x) else {
+        // Callers guarantee a finite positive x.
+        unreachable!()
     };
 
-    let bits = x.to_bits();
-    let e = ((bits >> EXP_SHIFT) as i64 - 1023) + bias;
-    let i = ((bits >> (EXP_SHIFT - 7)) & 127) as usize;
-    let m = f64::from_bits((bits & 0x000F_FFFF_FFFF_FFFF) | 0x3FF0_0000_0000_0000);
+    let e = (magnitude >> EXP_SHIFT) - 1023;
+    let i = ((magnitude >> (EXP_SHIFT - 7)) & 127) as usize;
+    let m = f64::from_bits((magnitude as u64 & 0x000F_FFFF_FFFF_FFFF) | 0x3FF0_0000_0000_0000);
 
     // r = m·inv − 1 as a double-double.  `m·inv ∈ [≈0.996, 1.004]`, so the high
     // word minus one is exact (Sterbenz).
