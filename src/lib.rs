@@ -37,7 +37,16 @@ const fn u64_sign_bit(sign: Sign) -> u64 {
 /// This function picks the faster way to compute `x * y + a` depending on the
 /// target architecture.  The FMA instruction is used if available.  Otherwise,
 /// it falls back to `x * y + a` that is faster but gives less accurate results
-/// than [`f64::mul_add`]
+/// than [`f64::mul_add`].
+///
+/// # Not an error-free transform
+///
+/// Because the fallback path rounds the product *before* the addition, this
+/// helper is **not** fused on every target.  Do not use it where correctness
+/// depends on the single rounding of a true FMA — error-free transforms
+/// (`two_product`, residual tests) and high-precision compensation must call
+/// [`f64::mul_add`] directly.  Reserve `mul_add` for hot polynomial-style spots
+/// where a lost low bit is absorbed by later rounding.
 #[inline]
 fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     #[cfg(target_feature = "fma")]

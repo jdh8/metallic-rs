@@ -121,7 +121,9 @@ pub fn hypot(x: f32, y: f32) -> f32 {
     let c: f64 = candidate.into();
     let (xx, yy) = (xx.max(yy), xx.min(yy));
 
-    if crate::mul_add(c, c, -xx).eq(&yy) {
+    // Exact residual test: `c*c - xx == yy` iff `candidate` is exact, so this
+    // must be the fused product-difference, not the degrading `crate::mul_add`.
+    if c.mul_add(c, -xx).eq(&yy) {
         return candidate;
     }
 

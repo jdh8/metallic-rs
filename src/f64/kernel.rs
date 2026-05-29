@@ -69,8 +69,10 @@ impl Mul for Sum {
     #[inline]
     fn mul(self, other: Self) -> Self {
         let product = Self::from_product(self.high, other.high);
-        let low = crate::mul_add(self.high, other.low, product.low);
-        let low = crate::mul_add(self.low, other.high, low);
+        // Cross terms are compensation: use the true FMA so the low word stays
+        // meaningful even on targets without hardware FMA (see `crate::mul_add`).
+        let low = self.high.mul_add(other.low, product.low);
+        let low = self.low.mul_add(other.high, low);
 
         Self {
             high: product.high,
@@ -89,7 +91,8 @@ impl Mul<f64> for Sum {
 
         Self {
             high: product.high,
-            low: crate::mul_add(self.low, other, product.low),
+            // Compensation term: use the true FMA (see `crate::mul_add`).
+            low: self.low.mul_add(other, product.low),
         }
     }
 }
