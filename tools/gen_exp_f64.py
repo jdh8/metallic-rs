@@ -83,3 +83,13 @@ for s in EXPR_COEFFS_HEX:
     hi, lo = dd(parse_hexfloat(s))
     print(f"    ({hexf(hi)}, {hexf(lo)}),")
 print("];")
+
+# --- constants for exp10: 10^x = exp(x·ln10) = 2^q · 2^(j/N) · exp(r) ---
+from mpmath import log as mlog
+ln10 = mlog(10)
+ln10_hi, ln10_lo = dd(ln10)
+print(f"\npub(super) const LN10_HI: f64 = {hexf(ln10_hi)};")
+print(f"pub(super) const LN10_LO: f64 = {hexf(ln10_lo)};")
+# 128 · log2(10), the scale mapping x to the reduction index for exp10
+n_log2_10 = f64(mpf(N) * mlog(10) / mlog(2))
+print(f"pub(super) const N_LOG2_10: f64 = {hexf(n_log2_10)};")

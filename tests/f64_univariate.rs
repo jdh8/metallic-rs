@@ -46,6 +46,13 @@ fn test_exp2() {
 }
 
 #[test]
+fn test_exp10() {
+    let dense = (0..=2_000_000).map(|i| -323.7 + f64::from(i) * (632.0 / 2_000_000.0));
+    let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
+    common::test_univariate_cases(metal::exp10, core_math::exp10, dense.chain(bits));
+}
+
+#[test]
 fn test_cbrt() {
     common::test_univariate_cases(
         metal::cbrt,

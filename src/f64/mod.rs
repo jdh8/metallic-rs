@@ -233,3 +233,44 @@ pub fn exp2(x: f64) -> f64 {
 
     exp_reconstruct(j, q, r)
 }
+
+/// 10 raised to the power `x`
+#[must_use]
+#[inline]
+pub fn exp10(x: f64) -> f64 {
+    use exp_consts::{LN10_HI, LN10_LO, LN2_OVER_N_HI, LN2_OVER_N_LO, N_LOG2_10};
+
+    if x.is_nan() {
+        return x;
+    }
+
+    // `log10(f64::MAX)` and the threshold below which `exp10` rounds to zero
+    if x >= 308.2547155599167 {
+        return f64::INFINITY;
+    }
+    if x <= -323.6072453387798 {
+        return 0.0;
+    }
+
+    // 10^x = exp(x·ln10) = 2^q · 2^(j/N) · exp(r), with the reduction index
+    // n = round(N·x·log2(10)) and r = x·ln10 − n·ln2/N carried as a double-double.
+    let scaled = (x * N_LOG2_10).round_ties_even();
+
+    // SAFETY: `|x| < 324`, so `|scaled| < 2^18`.
+    let m = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (m & (EXP_N - 1)) as usize;
+    let q = m >> 7;
+
+    let x_ln10 = Sum::from_product(x, LN10_HI);
+    let x_ln10 = Sum {
+        high: x_ln10.high,
+        low: x.mul_add(LN10_LO, x_ln10.low),
+    };
+    let n_ln2 = Sum::from_product(scaled, LN2_OVER_N_HI);
+    let n_ln2 = Sum {
+        high: -n_ln2.high,
+        low: scaled.mul_add(-LN2_OVER_N_LO, -n_ln2.low),
+    };
+
+    exp_reconstruct(j, q, x_ln10 + n_ln2)
+}
