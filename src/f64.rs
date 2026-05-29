@@ -170,15 +170,45 @@ fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
     n * f64::from_bits(1)
 }
 
-/// The exponential function
-#[must_use]
+/// Argument reduction for the exponential family.
+///
+/// Returns `(j, q, r)` with `x = (q·N + j)·ln2/N + r` and `|r| ≤ ln2/2N`.  The
+/// caller must keep `|x|` small enough that `round(N·x/ln2)` fits an `i64`
+/// (`|x| < ~746`, the finite exp range).
 #[inline]
-pub fn exp(x: f64) -> f64 {
+fn exp_reduce(x: f64) -> (usize, i64, Sum) {
     use exp_consts::{LN2_OVER_N_HI, LN2_OVER_N_LO};
 
     /// `N / ln(2)`, the scale that maps `x` to the reduction index
     const N_OVER_LN2: f64 = 184.664_965_233_787_3;
 
+    let scaled = (x * N_OVER_LN2).round_ties_even();
+
+    // SAFETY: `|x| < 746`, so `|scaled| < 2^18`.
+    let n = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (n & (EXP_N - 1)) as usize;
+    let q = n >> 7;
+
+    // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
+    // word has 17 trailing zero bits, and the low word recovers the tail.
+    let a = scaled.mul_add(-LN2_OVER_N_HI, x);
+    (j, q, Sum::from_sum(a, scaled * -LN2_OVER_N_LO))
+}
+
+/// `eˣ` as `2`<sup>`q`</sup>` · mantissa` with the mantissa a double-double in [1, 2).
+///
+/// The caller must ensure `x` is finite and within the non-overflow range
+/// (`|x| < ~710`); used by the hyperbolic functions, which need the extra words.
+#[inline]
+fn exp_dd(x: f64) -> (Sum, i64) {
+    let (j, q, r) = exp_reduce(x);
+    exp_mantissa(j, q, r)
+}
+
+/// The exponential function
+#[must_use]
+#[inline]
+pub fn exp(x: f64) -> f64 {
     if x.is_nan() {
         return x;
     }
@@ -191,20 +221,7 @@ pub fn exp(x: f64) -> f64 {
         return 0.0;
     }
 
-    // Argument reduction: n = round(N·x / ln2), so r = x − n·ln2/N lies in
-    // [−ln2/2N, ln2/2N] ≈ [−0.0027, 0.0027].
-    let scaled = (x * N_OVER_LN2).round_ties_even();
-
-    // SAFETY: `|x| < 746`, so `|scaled| < 2^18`.
-    let n = unsafe { scaled.to_int_unchecked::<i64>() };
-    let j = (n & (EXP_N - 1)) as usize;
-    let q = n >> 7;
-
-    // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
-    // word has 17 trailing zero bits, and the low word recovers the tail.
-    let a = scaled.mul_add(-LN2_OVER_N_HI, x);
-    let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
-
+    let (j, q, r) = exp_reduce(x);
     exp_reconstruct(j, q, r)
 }
 
@@ -612,4 +629,111 @@ pub const fn frexp(x: f64) -> (f64, i32) {
         f64::from_bits(crate::u64_sign_bit(sign) | significand),
         f64::MIN_EXP - 1 + (magnitude >> EXP_SHIFT) as i32,
     )
+}
+
+/// `eˣ` and `e⁻ˣ` combined as `2`<sup>`q−1`</sup>` · (m ± 2⁻²q/m)` for `x ≥ 0`.
+///
+/// `(m, q)` is `eˣ = 2`<sup>`q`</sup>` · m`.  The returned double-double is the
+/// mantissa `m ± t` (t = e⁻²ˣ-scaled reciprocal); the caller scales by `2`<sup>`q−1`</sup>.
+#[inline]
+fn cosh_sinh_mantissa(x: f64, add: bool) -> (Sum, i64) {
+    let (m, q) = exp_dd(x);
+
+    // t = 2⁻²q / m ≈ e⁻ˣ relative to eˣ.  `exp2i(-2q)` underflows to 0 once the
+    // term is negligible, so no explicit cutoff is needed.
+    let t = m.recip() * crate::exp2i(-2 * q);
+    let mantissa = if add {
+        m + t
+    } else {
+        m + Sum {
+            high: -t.high,
+            low: -t.low,
+        }
+    };
+    (mantissa, q)
+}
+
+/// Hyperbolic cosine
+#[must_use]
+#[inline]
+pub fn cosh(x: f64) -> f64 {
+    if x.is_nan() {
+        return x;
+    }
+
+    let x = x.abs();
+
+    // `ln(2·f64::MAX)`: above this `cosh = eˣ/2` overflows.
+    if x > 710.475_860_073_944 {
+        return f64::INFINITY;
+    }
+
+    // cosh(x) = ½(eˣ + e⁻ˣ) = 2^(q−1)·(m + 2⁻²q/m); the sum never cancels.
+    let (mantissa, q) = cosh_sinh_mantissa(x, true);
+    kernel::fast_ldexp(mantissa.high + mantissa.low, q - 1)
+}
+
+/// Hyperbolic sine
+#[must_use]
+#[inline]
+pub fn sinh(x: f64) -> f64 {
+    if x.is_nan() {
+        return x;
+    }
+
+    let s = x.abs();
+
+    if s > 710.475_860_073_944 {
+        return f64::INFINITY.copysign(x);
+    }
+
+    // For |x| ≤ 2⁻²⁶, sinh(x) = x + x³/6 + … rounds to exactly x.
+    if s < 1.490_116_119_384_765_6e-8 {
+        return x;
+    }
+
+    // sinh(x) = ½(eˣ − e⁻ˣ) = 2^(q−1)·(m − 2⁻²q/m).  The double-double subtraction
+    // `m − 2⁻²q/m` captures the cancellation exactly (2Sum), so no separate
+    // small-argument polynomial is needed above the 2⁻²⁶ threshold.
+    let (mantissa, q) = cosh_sinh_mantissa(s, false);
+    kernel::fast_ldexp(mantissa.high + mantissa.low, q - 1).copysign(x)
+}
+
+/// Hyperbolic tangent
+#[must_use]
+#[inline]
+pub fn tanh(x: f64) -> f64 {
+    if x.is_nan() {
+        return x;
+    }
+
+    let s = x.abs();
+
+    // For x ≳ 19, tanh(x) = 1 − 2e⁻²ˣ rounds to exactly 1 (and this keeps e²ˣ from
+    // overflowing below).
+    if s >= 20.0 {
+        return 1.0_f64.copysign(x);
+    }
+
+    // For |x| ≤ 2⁻²⁷, tanh(x) = x − x³/3 + … rounds to exactly x.  (The cubic term
+    // is twice sinh's, so the threshold is half a binade smaller.)
+    if s < 7.450_580_596_923_828e-9 {
+        return x;
+    }
+
+    // tanh(x) = expm1(2x) / (expm1(2x) + 2).  Form expm1(2x) = 2^q·m − 1 as a
+    // double-double, then the quotient in double-double.
+    let (m, q) = exp_dd(2.0 * s);
+    let t = m * crate::exp2i(q)
+        + Sum {
+            high: -1.0,
+            low: 0.0,
+        };
+    let result = t
+        * (t + Sum {
+            high: 2.0,
+            low: 0.0,
+        })
+        .recip();
+    (result.high + result.low).copysign(x)
 }

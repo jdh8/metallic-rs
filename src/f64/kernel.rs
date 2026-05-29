@@ -67,6 +67,21 @@ impl Sum {
         let low = high.mul_add(-y, x) / y;
         Self { high, low }
     }
+
+    /// The reciprocal `1 / self` as a double-double
+    ///
+    /// One Newton step `y·(2 − self·y)` from the `f64` seed `1/high` reaches about
+    /// twice `f64` precision.
+    #[inline]
+    pub fn recip(self) -> Self {
+        let y = 1.0 / self.high;
+        (self * -y
+            + Self {
+                high: 2.0,
+                low: 0.0,
+            })
+            * y
+    }
 }
 
 /// Fast multiplication that breaks normality

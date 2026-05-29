@@ -142,6 +142,27 @@ fn test_ln_1p() {
 }
 
 #[test]
+fn test_cosh() {
+    let dense = (0..=2_000_000).map(|i| -711.0 + f64::from(i) * (1422.0 / 2_000_000.0));
+    let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
+    common::test_univariate_cases(metal::cosh, core_math::cosh, dense.chain(bits));
+}
+
+#[test]
+fn test_sinh() {
+    let dense = (0..=2_000_000).map(|i| -711.0 + f64::from(i) * (1422.0 / 2_000_000.0));
+    let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
+    common::test_univariate_cases(metal::sinh, core_math::sinh, dense.chain(bits));
+}
+
+#[test]
+fn test_tanh() {
+    let dense = (0..=2_000_000).map(|i| -25.0 + f64::from(i) * (50.0 / 2_000_000.0));
+    let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
+    common::test_univariate_cases(metal::tanh, core_math::tanh, dense.chain(bits));
+}
+
+#[test]
 fn test_cbrt() {
     common::test_univariate_cases(
         metal::cbrt,
