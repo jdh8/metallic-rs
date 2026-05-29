@@ -1,4 +1,4 @@
-#![allow(clippy::pedantic)]
+#![allow(clippy::pedantic, clippy::approx_constant)]
 #![warn(clippy::unreadable_literal)]
 
 mod exp_consts;
