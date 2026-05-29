@@ -59,6 +59,28 @@ fn test_exp_m1() {
     common::test_univariate_cases(metal::exp_m1, core_math::expm1, dense.chain(bits));
 }
 
+/// Bit-pattern sweep plus a dense sweep of [0.5, 2] (the cancellation region near 1).
+fn log_inputs() -> impl Iterator<Item = f64> {
+    let bits = (0..=u64::MAX).step_by((1 << 37) - 1337).map(f64::from_bits);
+    let near_one = (0..=2_000_000).map(|i| 0.5 + f64::from(i) * (1.5 / 2_000_000.0));
+    bits.chain(near_one)
+}
+
+#[test]
+fn test_ln() {
+    common::test_univariate_cases(metal::ln, core_math::log, log_inputs());
+}
+
+#[test]
+fn test_log2() {
+    common::test_univariate_cases(metal::log2, core_math::log2, log_inputs());
+}
+
+#[test]
+fn test_log10() {
+    common::test_univariate_cases(metal::log10, core_math::log10, log_inputs());
+}
+
 #[test]
 fn test_cbrt() {
     common::test_univariate_cases(

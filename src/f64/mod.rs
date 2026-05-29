@@ -3,6 +3,7 @@
 
 mod exp_consts;
 mod kernel;
+mod log_consts;
 use crate::Sign;
 use core::{f64, num::FpCategory};
 use kernel::Sum;
@@ -350,5 +351,142 @@ pub fn exp_m1(x: f64) -> f64 {
             low: 0.0,
         };
 
+    result.high + result.low
+}
+
+/// `ln(1 + r)` as a double-double for `|r| ≤ 1/256`, via `ln(1+r) = r · P(r)`.
+#[inline]
+fn ln_1p_kernel(r: Sum) -> Sum {
+    use log_consts::LN1P_P_COEFFS;
+
+    let (high, low) = LN1P_P_COEFFS[LN1P_P_COEFFS.len() - 1];
+    let mut p = Sum { high, low };
+
+    for &(high, low) in LN1P_P_COEFFS[..LN1P_P_COEFFS.len() - 1].iter().rev() {
+        p = p * r + Sum { high, low };
+    }
+
+    p * r
+}
+
+/// Decompose a finite positive `x` into `(e, i, m·inv − 1)` for the log family.
+///
+/// `x = 2^e · m` with `m ∈ [1, 2)`; `i` is the 7-bit table index and the returned
+/// double-double is `r = m · INV_TABLE[i] − 1 ∈ [−1/256, 1/256]`.
+#[inline]
+fn log_reduce(x: f64) -> (i64, usize, Sum) {
+    use log_consts::INV_TABLE;
+
+    // Normalize subnormals so `x` is in the normal range.
+    let (x, bias) = if x < f64::MIN_POSITIVE {
+        (x * crate::exp2i(54), -54)
+    } else {
+        (x, 0)
+    };
+
+    let bits = x.to_bits();
+    let e = ((bits >> EXP_SHIFT) as i64 - 1023) + bias;
+    let i = ((bits >> (EXP_SHIFT - 7)) & 127) as usize;
+    let m = f64::from_bits((bits & 0x000F_FFFF_FFFF_FFFF) | 0x3FF0_0000_0000_0000);
+
+    // r = m·inv − 1 as a double-double.  `m·inv ∈ [≈0.996, 1.004]`, so the high
+    // word minus one is exact (Sterbenz).
+    let mi = Sum::from_product(m, INV_TABLE[i]);
+    let r = kernel::fast_sum(mi.high - 1.0, mi.low);
+
+    (e, i, r)
+}
+
+/// The natural logarithm of a finite positive `x ≠ 1`, as a double-double.
+#[inline]
+fn ln_dd(x: f64) -> Sum {
+    use log_consts::{LN2_HI, LN2_LO, L_TABLE};
+
+    // ln(x) = e·ln2 + L_TABLE[i] + ln(1+r).
+    let (e, i, r) = log_reduce(x);
+    let e = e as f64;
+
+    let e_ln2 = Sum {
+        high: e * LN2_HI,
+        low: e * LN2_LO,
+    };
+    let (high, low) = L_TABLE[i];
+    e_ln2 + Sum { high, low } + ln_1p_kernel(r)
+}
+
+/// The natural logarithm
+#[must_use]
+#[inline]
+pub fn ln(x: f64) -> f64 {
+    if x.is_nan() {
+        return x;
+    }
+    if x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == 1.0 || x == f64::INFINITY {
+        return x - 1.0;
+    }
+
+    let result = ln_dd(x);
+    result.high + result.low
+}
+
+/// The base-2 logarithm
+#[must_use]
+#[inline]
+pub fn log2(x: f64) -> f64 {
+    use log_consts::{LOG2_E_HI, LOG2_E_LO};
+
+    if x.is_nan() {
+        return x;
+    }
+    if x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == 1.0 || x == f64::INFINITY {
+        return x - 1.0;
+    }
+
+    // log2(x) = ln(x) · log2(e)
+    let result = ln_dd(x)
+        * Sum {
+            high: LOG2_E_HI,
+            low: LOG2_E_LO,
+        };
+    result.high + result.low
+}
+
+/// The base-10 logarithm
+#[must_use]
+#[inline]
+pub fn log10(x: f64) -> f64 {
+    use log_consts::{LOG10_E_HI, LOG10_E_LO};
+
+    if x.is_nan() {
+        return x;
+    }
+    if x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == 1.0 || x == f64::INFINITY {
+        return x - 1.0;
+    }
+
+    // log10(x) = ln(x) · log10(e)
+    let result = ln_dd(x)
+        * Sum {
+            high: LOG10_E_HI,
+            low: LOG10_E_LO,
+        };
     result.high + result.low
 }
