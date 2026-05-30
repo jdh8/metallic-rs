@@ -496,6 +496,35 @@ pub const LGAMMA_TAIL: [f64; 7] = [
     -0.029_550_653_594_771_242,
 ];
 
+/// Numerator of the `f64` rational `g(z) = ln Γ(z)/((z−1)(z−2))` on `[½, 8]`
+///
+/// Degree 7/7 minimax (rminimax), relative error `2⁻³⁷` — only the *fast* Ziv
+/// path of [`lgamma`] uses it, so `f64` coefficients are ample.  The `(z−1)(z−2)`
+/// factor carries lgamma's zeros at 1 and 2; the rational stays log-free, which
+/// is the whole point of the small-argument path.
+pub const LGAMMA_NUM: [f64; 8] = [
+    0.006_304_151_792_758_075,
+    0.124_171_423_430_961_66,
+    0.479_383_552_214_150_1,
+    0.555_061_667_914_565_5,
+    0.211_973_927_253_084_42,
+    0.025_465_952_676_201_734,
+    0.000_736_538_147_975_647_5,
+    1.113_967_406_563_718_2e-6,
+];
+
+/// Denominator of the rational `g(z)` paired with [`LGAMMA_NUM`]
+pub const LGAMMA_DEN: [f64; 8] = [
+    0.002_584_416_514_557_812,
+    0.090_842_150_680_063_21,
+    0.556_476_452_487_686_2,
+    1.0,
+    0.628_146_845_505_252_6,
+    0.142_068_778_652_565_23,
+    0.010_505_967_556_747_394,
+    0.000_179_700_933_585_125_6,
+];
+
 /// Magnitude of `atan2(y, x)` for finite nonzero `a = |x|`, `b = |y|`
 ///
 /// Returns the correctly-rounded angle in `[0, π]`; the caller restores the

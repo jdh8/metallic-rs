@@ -1193,6 +1193,68 @@ fn lgamma_pos(y: f64) -> Sum {
     }
 }
 
+/// `ln Γ(y)` in plain `f64` for `y ≥ ½`, the fast Ziv path
+///
+/// Below 8 a log-free rational `(y−1)(y−2)·g(y)` does the work; from 8 up the
+/// Stirling series with a single logarithm takes over (its `2⁻⁴⁶` tail
+/// truncation sits well inside the [`lgamma`] gate).
+#[inline]
+fn lgamma_pos_f64(y: f64) -> f64 {
+    if y < 8.0 {
+        let g = crate::poly(y, &kernel::LGAMMA_NUM) / crate::poly(y, &kernel::LGAMMA_DEN);
+        return (y - 1.0) * (y - 2.0) * g;
+    }
+
+    let u = 1.0 / (y * y);
+    let s = 1.0 / (12.0 * y) + crate::poly(u, &kernel::LGAMMA_TAIL) * (u / y);
+    (y - 0.5) * y.ln() - y + 0.918_938_533_204_672_8 + s
+}
+
+/// Fast `f64` approximation of `ln|Γ(z)|` with an absolute error bound
+///
+/// The fast path's relative error (`≈2⁻³⁷` from the rational, less from Stirling)
+/// turns into an *absolute* error proportional to the magnitude actually fed
+/// through it — `ln Γ(1−z)` under reflection, where the reflected result itself
+/// can be tiny.  Returning the bound lets [`lgamma`] gate tightly instead of
+/// assuming the worst case everywhere.
+#[inline]
+fn lgamma_f64(z: f32) -> (f64, f64) {
+    /// `ln(π)`, the reflection constant (kept literal — `f64::ln` is not `const`)
+    const LN_PI: f64 = 1.144_729_885_849_400_2;
+
+    let x = f64::from(z);
+    if z < 0.5 {
+        let reflected = lgamma_pos_f64(1.0 - x);
+        let value = LN_PI - kernel::sinpi(z).abs().ln() - reflected;
+        (
+            value,
+            crate::exp2i(-36) * reflected.abs() + crate::exp2i(-44),
+        )
+    } else {
+        let value = lgamma_pos_f64(x);
+        (value, crate::exp2i(-36) * value.abs() + crate::exp2i(-44))
+    }
+}
+
+/// The double-double `ln|Γ(z)|`, the accurate Ziv fallback for [`lgamma`]
+///
+/// The caller has already handled NaN, ±∞, the non-positive-integer poles and
+/// the exact zeros `Γ(1) = Γ(2) = 1`.  Kept out of line so the rare fallback
+/// never bloats the hot path.
+#[cold]
+#[inline(never)]
+fn lgamma_dd(z: f32) -> f32 {
+    if z < 0.5 {
+        // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z), the reflection formula.
+        let value = ln_sum(kernel::PI)
+            + neg(crate::f64::ln_dd(kernel::sinpi(z).abs()))
+            + neg(lgamma_pos(1.0 - f64::from(z)));
+        return kernel::round_signed(value);
+    }
+
+    kernel::round_signed(lgamma_pos(f64::from(z)))
+}
+
 /// The natural logarithm of the absolute value of the gamma function
 #[must_use]
 #[inline]
@@ -1205,25 +1267,26 @@ pub fn lgamma(z: f32) -> f32 {
         return z;
     }
 
-    if z < 0.5 {
-        // Non-positive integers (and −∞) are poles.
-        if z.round_ties_even() == z {
-            return f32::INFINITY;
-        }
-
-        // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z), the reflection formula.
-        let value = ln_sum(kernel::PI)
-            + neg(crate::f64::ln_dd(kernel::sinpi(z).abs()))
-            + neg(lgamma_pos(1.0 - f64::from(z)));
-        return kernel::round_signed(value);
+    // Non-positive integers (and −∞) are poles; Γ(1) = Γ(2) = 1 give exact zeros.
+    if z < 0.5 && z.round_ties_even() == z {
+        return f32::INFINITY;
     }
-
-    // lgamma(1) = lgamma(2) = +0 exactly; the skeleton would round the residual.
     if z == 1.0 || z == 2.0 {
         return 0.0;
     }
 
-    kernel::round_signed(lgamma_pos(f64::from(z)))
+    // Ziv two-step: the plain-f64 path is correctly rounded unless the value
+    // lands within `err` of an f32 boundary, where the double-double path
+    // resolves it.
+    let (f, err) = lgamma_f64(z);
+    let lo = (f - err) as f32;
+    let hi = (f + err) as f32;
+
+    if lo == hi {
+        lo
+    } else {
+        lgamma_dd(z)
+    }
 }
 
 /// Sine
