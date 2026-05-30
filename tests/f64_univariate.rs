@@ -107,7 +107,7 @@ fn test_exp10() {
 
 #[test]
 fn test_exp_m1() {
-    let dense = (0..=2_000_000).map(|i| -710.0 + f64::from(i) * (1420.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(1420.0 / 2_000_000.0, -710.0));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::exp_m1, core_math::expm1, dense.chain(bits));
 }
@@ -115,7 +115,7 @@ fn test_exp_m1() {
 /// Bit-pattern sweep plus a dense sweep of [0.5, 2] (the cancellation region near 1).
 fn log_inputs() -> impl Iterator<Item = f64> {
     let bits = (0..=u64::MAX).step_by((1 << 37) - 1337).map(f64::from_bits);
-    let near_one = (0..=2_000_000).map(|i| 0.5 + f64::from(i) * (1.5 / 2_000_000.0));
+    let near_one = (0..=2_000_000).map(|i| f64::from(i).mul_add(1.5 / 2_000_000.0, 0.5));
     bits.chain(near_one)
 }
 
@@ -137,27 +137,27 @@ fn test_log10() {
 #[test]
 fn test_ln_1p() {
     let bits = (0..=u64::MAX).step_by((1 << 37) - 1337).map(f64::from_bits);
-    let near_zero = (0..=2_000_000).map(|i| -0.5 + f64::from(i) * (1.5 / 2_000_000.0));
+    let near_zero = (0..=2_000_000).map(|i| f64::from(i).mul_add(1.5 / 2_000_000.0, -0.5));
     common::test_univariate_cases(metal::ln_1p, core_math::log1p, bits.chain(near_zero));
 }
 
 #[test]
 fn test_cosh() {
-    let dense = (0..=2_000_000).map(|i| -711.0 + f64::from(i) * (1422.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(1422.0 / 2_000_000.0, -711.0));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::cosh, core_math::cosh, dense.chain(bits));
 }
 
 #[test]
 fn test_sinh() {
-    let dense = (0..=2_000_000).map(|i| -711.0 + f64::from(i) * (1422.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(1422.0 / 2_000_000.0, -711.0));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::sinh, core_math::sinh, dense.chain(bits));
 }
 
 #[test]
 fn test_tanh() {
-    let dense = (0..=2_000_000).map(|i| -25.0 + f64::from(i) * (50.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(50.0 / 2_000_000.0, -25.0));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::tanh, core_math::tanh, dense.chain(bits));
 }
