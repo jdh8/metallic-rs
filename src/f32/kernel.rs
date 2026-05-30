@@ -401,57 +401,6 @@ pub fn round_signed(value: Sum) -> f32 {
     magnitude.copysign(value.high as f32)
 }
 
-/// Lanczos parameter `g` paired with [`lanczos_series_dd`]
-pub const LANCZOS_G: f64 = 11.0;
-
-/// `g = 11`, `N = 12` Lanczos residues as double-double `(hi, lo)`, `P[k]` for
-/// `k = 0..=12`
-///
-/// Fitted by high-precision (mpmath dps = 120) partial-fraction collocation of
-/// `Γ(1+z)·exp(base − (z+½)·ln base)`, `base = z + g + ½`; the double-double
-/// evaluation reaches a relative error near `2⁻⁷⁷` (the large middle
-/// coefficients cancel ~30 bits, absorbed by the double-double).
-const LANCZOS_DD: [(f64, f64); 13] = [
-    (2.506_628_274_631_000_7, -1.833_342_939_975_63e-16),
-    (117_675.678_082_064_84, -6.377_647_077_305_131e-12),
-    (-391_185.713_936_887_86, -2.544_126_572_594_141_3e-11),
-    (517_631.163_569_869_1, -2.397_838_335_242_907_7e-11),
-    (-348_154.317_887_234_9, -1.957_712_719_207_311_3e-11),
-    (126_128.431_662_407_4, 1.090_829_367_983_853_4e-12),
-    (-24_067.622_813_809_663, -1.289_575_101_825_531_7e-12),
-    (2_202.287_489_321_604, 6.046_378_756_292_902e-14),
-    (-79.087_979_918_177_65, 6.754_225_717_025_943e-16),
-    (0.728_963_452_017_579_7, -5.166_675_620_473_435_6e-17),
-    (-0.000_581_493_530_300_979, -5.349_575_079_661_075_6e-20),
-    (-6.285_608_219_650_064e-10, -1.132_046_773_410_826_6e-27),
-    (2.535_607_566_029_473_5e-10, -2.026_987_982_540_162_3e-27),
-];
-
-/// Lanczos partial-fraction series `P[0] + Σ P[k]/(z + k)` in double-double
-///
-/// The terms are accumulated smallest (largest `k`) first to limit cancellation.
-#[inline]
-pub fn lanczos_series_dd(z: Sum) -> Sum {
-    let mut acc = Sum {
-        high: 0.0,
-        low: 0.0,
-    };
-
-    for k in (1..LANCZOS_DD.len()).rev() {
-        let (high, low) = LANCZOS_DD[k];
-        let denominator = z + Sum {
-            high: k as f64,
-            low: 0.0,
-        };
-        acc = acc + Sum { high, low } * denominator.recip();
-    }
-
-    acc + Sum {
-        high: LANCZOS_DD[0].0,
-        low: LANCZOS_DD[0].1,
-    }
-}
-
 /// Center of the [`tgamma_poly`] minimax interval, `Γ(TGAMMA_CENTER + d)`
 pub const TGAMMA_CENTER: f64 = 2.875;
 
@@ -523,6 +472,29 @@ pub fn tgamma_poly(d: f64) -> Sum {
 
     acc
 }
+
+/// `½·ln(2π)`, the additive Stirling constant for `lgamma_pos`
+pub const HALF_LN_2PI: Sum = Sum {
+    high: 0.9189385332046728,
+    low: -3.878_294_158_067_241_4e-17,
+};
+
+/// Argument above which the Stirling series for `ln Γ` converges fast enough
+pub const LGAMMA_STIRLING: f64 = 14.0;
+
+/// Stirling tail `Σ_{k≥2} B₂ₖ/(2k(2k−1)) t^{1−2k}` past the leading `1/(12t)`
+///
+/// Coefficients `B₄/12`, `B₆/30`, … the Bernoulli factors of `ln Γ`'s asymptotic
+/// expansion; evaluated as `(u/t)·poly(u)` with `u = 1/t²`.
+pub const LGAMMA_TAIL: [f64; 7] = [
+    -0.002_777_777_777_777_778,
+    0.000_793_650_793_650_793_7,
+    -0.000_595_238_095_238_095_3,
+    0.000_841_750_841_750_841_7,
+    -0.001_917_526_917_526_917_6,
+    0.006_410_256_410_256_41,
+    -0.029_550_653_594_771_242,
+];
 
 /// Magnitude of `atan2(y, x)` for finite nonzero `a = |x|`, `b = |y|`
 ///

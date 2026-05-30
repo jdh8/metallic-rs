@@ -1152,15 +1152,45 @@ pub fn tgamma(z: f32) -> f32 {
     finish(if negative { neg(value) } else { value }, 0, negative)
 }
 
-/// `(z + ½)·ln(g + ½ + z) − (g + ½ + z)` as a double-double, the log-Γ skeleton
+/// `ln Γ(y)` as a double-double for `y ≥ ½`
+///
+/// Reduces `y` upward to `t ≥ 14` with `ln Γ(y) = ln Γ(t) − ln ∏(y+j)`, then
+/// applies the Stirling expansion `(t−½)·ln t − t + ½ln(2π) + 1/(12t) +
+/// tail(1/t²)`.  The big `(t−½)·ln t − t` and the leading `1/(12t)` stay in
+/// double-double; the asymptotic tail is negligible in f64.  Relative error
+/// near `2⁻⁶⁴`.
 #[inline]
-fn lcoeff_dd(z: f64) -> Sum {
-    let base = z + (kernel::LANCZOS_G + 0.5);
-    crate::f64::ln_dd(base) * (z + 0.5)
+fn lgamma_pos(y: f64) -> Sum {
+    let mut product = Sum {
+        high: 1.0,
+        low: 0.0,
+    };
+    let mut t = y;
+    let mut reduced = false;
+
+    while t < kernel::LGAMMA_STIRLING {
+        product = product * t;
+        t += 1.0;
+        reduced = true;
+    }
+
+    let u = 1.0 / (t * t);
+    let rest = crate::poly(u, &kernel::LGAMMA_TAIL) * (u / t);
+
+    let stirling = crate::f64::ln_dd(t) * (t - 0.5)
+        + Sum { high: -t, low: 0.0 }
+        + kernel::HALF_LN_2PI
+        + Sum::from_quotient(1.0, 12.0 * t)
         + Sum {
-            high: -base,
+            high: rest,
             low: 0.0,
-        }
+        };
+
+    if reduced {
+        stirling + neg(ln_sum(product))
+    } else {
+        stirling
+    }
 }
 
 /// The natural logarithm of the absolute value of the gamma function
@@ -1181,13 +1211,10 @@ pub fn lgamma(z: f32) -> f32 {
             return f32::INFINITY;
         }
 
-        // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z),  ln Γ(1−z) = lcoeff(w) + ln series(w)
-        let w = -f64::from(z);
-        let series = kernel::lanczos_series_dd(Sum { high: w, low: 0.0 });
+        // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z), the reflection formula.
         let value = ln_sum(kernel::PI)
             + neg(crate::f64::ln_dd(kernel::sinpi(z).abs()))
-            + neg(lcoeff_dd(w))
-            + neg(ln_sum(series));
+            + neg(lgamma_pos(1.0 - f64::from(z)));
         return kernel::round_signed(value);
     }
 
@@ -1196,12 +1223,7 @@ pub fn lgamma(z: f32) -> f32 {
         return 0.0;
     }
 
-    let z = f64::from(z);
-    let series = kernel::lanczos_series_dd(Sum {
-        high: z - 1.0,
-        low: 0.0,
-    });
-    kernel::round_signed(lcoeff_dd(z - 1.0) + ln_sum(series))
+    kernel::round_signed(lgamma_pos(f64::from(z)))
 }
 
 /// Sine
