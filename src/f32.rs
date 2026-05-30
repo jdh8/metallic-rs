@@ -1014,6 +1014,149 @@ pub fn erfc(x: f32) -> f32 {
     }
 }
 
+/// Lanczos parameter `g` paired with [`lanczos_series`]
+const LANCZOS_G: f64 = 7.0;
+
+/// Lanczos rational series for the Γ approximation
+///
+/// Coefficients were fitted (partial-fraction collocation) for `g = 7`, giving a
+/// relative approximation error near `2^-57`; the smaller terms are summed first
+/// to limit cancellation among the large middle coefficients.
+#[inline]
+fn lanczos_series(z: f64) -> f64 {
+    const P: [f64; 10] = [
+        2.506_628_274_630_999_4,
+        1_695.785_083_098_086_3,
+        -3_156.193_962_332_789,
+        1_933.421_115_453_225_4,
+        -442.708_225_772_753_34,
+        31.351_260_098_691_565,
+        -0.347_345_764_967_161_46,
+        2.444_832_943_756_223_5e-5,
+        7.570_873_982_174_572e-7,
+        -1.012_272_352_038_846_7e-7,
+    ];
+
+    P[9] / (z + 9.0)
+        + P[8] / (z + 8.0)
+        + P[7] / (z + 7.0)
+        + P[6] / (z + 6.0)
+        + P[5] / (z + 5.0)
+        + P[4] / (z + 4.0)
+        + P[3] / (z + 3.0)
+        + P[2] / (z + 2.0)
+        + P[1] / (z + 1.0)
+        + P[0]
+}
+
+/// `Γ(1 + z)` through the Lanczos approximation
+#[inline]
+fn gamma1p(z: f64) -> f64 {
+    let base = LANCZOS_G + 0.5 + z;
+    kernel::exp2(crate::mul_add(
+        0.5 + z,
+        kernel::log2(base),
+        -core::f64::consts::LOG2_E * base,
+    )) * lanczos_series(z)
+}
+
+/// The gamma function
+#[must_use]
+#[inline]
+pub fn tgamma(z: f32) -> f32 {
+    if z == 0.0 {
+        return f32::INFINITY.copysign(z);
+    }
+
+    if z == f32::INFINITY {
+        return f32::INFINITY;
+    }
+
+    if z < 0.5 {
+        // Negative integers (and −∞) are poles; everything else reflects.
+        if z.round_ties_even() == z {
+            return f32::NAN;
+        }
+        let r = core::f64::consts::PI / (kernel::sinpi(z) * gamma1p(-f64::from(z)));
+        return r as f32;
+    }
+
+    gamma1p(f64::from(z) - 1.0) as f32
+}
+
+/// `(z + ½)·ln(g + ½ + z) - (g + ½ + z)`, the Lanczos log-Γ skeleton
+#[inline]
+fn lcoeff(z: f64) -> f64 {
+    let base = LANCZOS_G + 0.5 + z;
+    crate::mul_add(0.5 + z, crate::f64::ln(base), -base)
+}
+
+/// `ln(Γ(1 + x))` near `x = 0`, where the Lanczos form loses precision
+///
+/// The trailing `+ 0.0` keeps `lgamma1p(0) = +0` rather than the `-0` that
+/// `0 · (-γ)` would yield.
+#[inline]
+fn lgamma1p(x: f64) -> f64 {
+    crate::mul_add(
+        x,
+        crate::poly(
+            x,
+            &[
+                -0.577_215_664_901_485_7,
+                0.822_467_226_958_685_8,
+                -0.400_685_881_609_553_26,
+            ],
+        ),
+        0.0,
+    )
+}
+
+/// `ln(Γ(2 + x))` near `x = 0`, where the Lanczos form loses precision
+#[inline]
+fn lgamma2p(x: f64) -> f64 {
+    x * crate::poly(
+        x,
+        &[
+            0.422_784_335_098_897,
+            0.322_467_268_953_198_2,
+            -0.067_352_441_921_785_51,
+        ],
+    )
+}
+
+/// The natural logarithm of the absolute value of the gamma function
+#[must_use]
+#[inline]
+pub fn lgamma(z: f32) -> f32 {
+    if z == 0.0 || z == f32::INFINITY {
+        return f32::INFINITY;
+    }
+
+    if z < 0.5 {
+        // Non-positive integers (and −∞) are poles.
+        if z.round_ties_even() == z {
+            return f32::INFINITY;
+        }
+        let w = -f64::from(z);
+        let r =
+            crate::f64::ln(core::f64::consts::PI / (kernel::sinpi(z).abs() * lanczos_series(w)))
+                - lcoeff(w);
+        return r as f32;
+    }
+
+    let z = f64::from(z);
+
+    // The skeleton cancels badly near the zeros lgamma(1) = lgamma(2) = 0.
+    if (z - 1.0).abs() < crate::exp2i(-10) {
+        return lgamma1p(z - 1.0) as f32;
+    }
+    if (z - 2.0).abs() < crate::exp2i(-8) {
+        return lgamma2p(z - 2.0) as f32;
+    }
+
+    (lcoeff(z - 1.0) + crate::f64::ln(lanczos_series(z - 1.0))) as f32
+}
+
 /// Sine
 #[must_use]
 #[inline]

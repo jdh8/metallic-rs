@@ -49,6 +49,44 @@ pub fn truncate_errors(errors: impl Iterator) {
     assert!(count == 0, "There are {count} mismatches");
 }
 
+/// Signed-magnitude ordering of an `f32`, so that adjacent floats differ by one
+fn ordered_f32(x: f32) -> i64 {
+    let magnitude = i64::from(x.to_bits() & 0x7fff_ffff);
+    if x.is_sign_negative() {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
+/// ulp error between two `f32`s, with NaN and ∞ required to match exactly
+pub fn ulp_error_f32(a: f32, b: f32) -> u64 {
+    if a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()) {
+        return 0;
+    }
+    if a.is_nan() || b.is_nan() || a.is_infinite() || b.is_infinite() {
+        return u64::MAX;
+    }
+    (ordered_f32(a) - ordered_f32(b)).unsigned_abs()
+}
+
+/// Like [`test_univariate_cases`] but tolerant up to `tol` ulps
+///
+/// This is for faithfully-rounded (≤ 1 ulp) functions that are not yet
+/// correctly rounded.
+pub fn test_univariate_faithful<Case: Copy + LowerExp>(
+    f: impl Fn(Case) -> f32,
+    g: impl Fn(Case) -> f32,
+    cases: impl Iterator<Item = Case>,
+    tol: u64,
+) {
+    truncate_errors(cases.filter_map(|x| {
+        let (f, g) = (f(x), g(x));
+        let error = ulp_error_f32(f, g);
+        (error > tol).then(|| println!("{x:e}: {f:e} != {g:e} ({error} ulp)"))
+    }));
+}
+
 /// Check if `f` returns the same result as `g` for the provided cases
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].

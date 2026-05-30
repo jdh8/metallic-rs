@@ -73,6 +73,28 @@ fn test_erfc() {
 }
 
 #[test]
+fn test_tgamma() {
+    // Faithful (≤ 1 ulp), not yet correctly rounded.
+    common::test_univariate_faithful(
+        metal::tgamma,
+        core_math::tgammaf,
+        (0..=u32::MAX).map(f32::from_bits),
+        1,
+    );
+}
+
+#[test]
+fn test_lgamma() {
+    // Faithful (≤ 1 ulp), not yet correctly rounded.
+    common::test_univariate_faithful(
+        metal::lgamma,
+        core_math::lgammaf,
+        (0..=u32::MAX).map(f32::from_bits),
+        1,
+    );
+}
+
+#[test]
 fn test_acosh() {
     test_identity(metal::acosh, core_math::acoshf);
 }
