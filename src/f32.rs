@@ -1160,7 +1160,7 @@ pub fn tgamma(z: f32) -> f32 {
 /// double-double; the asymptotic tail is negligible in f64.  Relative error
 /// near `2⁻⁶⁴`.
 #[inline]
-fn lgamma_pos(y: f64) -> Sum {
+fn lgamma_pos_dd(y: f64) -> Sum {
     let mut product = Sum {
         high: 1.0,
         low: 0.0,
@@ -1248,11 +1248,11 @@ fn lgamma_dd(z: f32) -> f32 {
         // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z), the reflection formula.
         let value = ln_sum(kernel::PI)
             + neg(crate::f64::ln_dd(kernel::sinpi(z).abs()))
-            + neg(lgamma_pos(1.0 - f64::from(z)));
+            + neg(lgamma_pos_dd(1.0 - f64::from(z)));
         return kernel::round_signed(value);
     }
 
-    kernel::round_signed(lgamma_pos(f64::from(z)))
+    kernel::round_signed(lgamma_pos_dd(f64::from(z)))
 }
 
 /// The natural logarithm of the absolute value of the gamma function
