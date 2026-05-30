@@ -276,7 +276,7 @@ const FRAC_PI_2: Sum = Sum {
 };
 
 /// π as a double-double
-const PI: Sum = Sum {
+pub const PI: Sum = Sum {
     high: 3.141_592_653_589_793,
     low: 1.224_646_799_147_353_2e-16,
 };
@@ -360,6 +360,96 @@ pub fn round(value: Sum) -> f32 {
     };
 
     odd as f32
+}
+
+/// Round a non-negative double-double to the nearest `f32`, safe across the
+/// subnormal range and overflow
+///
+/// In the normal range this is [`round`] (round-to-odd then cast, which sends
+/// overflow to `+∞`).  Below `f32::MIN_POSITIVE` a plain cast would round twice,
+/// so the value is quantized once on the `2⁻¹⁴⁹` subnormal grid, exactly like
+/// the subnormal branch of the `f64` exponential.
+#[inline]
+pub fn round_general(value: Sum) -> f32 {
+    if value.high >= f64::from(f32::MIN_POSITIVE) {
+        return round(value);
+    }
+
+    let high = value.high * crate::exp2i(149);
+    let low = value.low * crate::exp2i(149);
+    let n = high.round_ties_even();
+    let n = n + ((high - n) + low).round_ties_even();
+
+    (n * crate::exp2i(-149)) as f32
+}
+
+/// Round a signed normal-range double-double to the nearest `f32`
+///
+/// Rounds the magnitude to odd then restores the sign, so [`round`]'s
+/// positive-only round-to-odd applies on either side of zero.
+#[inline]
+pub fn round_signed(value: Sum) -> f32 {
+    let magnitude = round(Sum {
+        high: value.high.abs(),
+        low: if value.high < 0.0 {
+            -value.low
+        } else {
+            value.low
+        },
+    });
+
+    magnitude.copysign(value.high as f32)
+}
+
+/// Lanczos parameter `g` paired with [`lanczos_series_dd`]
+pub const LANCZOS_G: f64 = 11.0;
+
+/// `g = 11`, `N = 12` Lanczos residues as double-double `(hi, lo)`, `P[k]` for
+/// `k = 0..=12`
+///
+/// Fitted by high-precision (mpmath dps = 120) partial-fraction collocation of
+/// `Γ(1+z)·exp(base − (z+½)·ln base)`, `base = z + g + ½`; the double-double
+/// evaluation reaches a relative error near `2⁻⁷⁷` (the large middle
+/// coefficients cancel ~30 bits, absorbed by the double-double).
+const LANCZOS_DD: [(f64, f64); 13] = [
+    (2.506_628_274_631_000_7, -1.833_342_939_975_63e-16),
+    (117_675.678_082_064_84, -6.377_647_077_305_131e-12),
+    (-391_185.713_936_887_86, -2.544_126_572_594_141_3e-11),
+    (517_631.163_569_869_1, -2.397_838_335_242_907_7e-11),
+    (-348_154.317_887_234_9, -1.957_712_719_207_311_3e-11),
+    (126_128.431_662_407_4, 1.090_829_367_983_853_4e-12),
+    (-24_067.622_813_809_663, -1.289_575_101_825_531_7e-12),
+    (2_202.287_489_321_604, 6.046_378_756_292_902e-14),
+    (-79.087_979_918_177_65, 6.754_225_717_025_943e-16),
+    (0.728_963_452_017_579_7, -5.166_675_620_473_435_6e-17),
+    (-0.000_581_493_530_300_979, -5.349_575_079_661_075_6e-20),
+    (-6.285_608_219_650_064e-10, -1.132_046_773_410_826_6e-27),
+    (2.535_607_566_029_473_5e-10, -2.026_987_982_540_162_3e-27),
+];
+
+/// Lanczos partial-fraction series `P[0] + Σ P[k]/(z + k)` in double-double
+///
+/// The terms are accumulated smallest (largest `k`) first to limit cancellation.
+#[inline]
+pub fn lanczos_series_dd(z: Sum) -> Sum {
+    let mut acc = Sum {
+        high: 0.0,
+        low: 0.0,
+    };
+
+    for k in (1..LANCZOS_DD.len()).rev() {
+        let (high, low) = LANCZOS_DD[k];
+        let denominator = z + Sum {
+            high: k as f64,
+            low: 0.0,
+        };
+        acc = acc + Sum { high, low } * denominator.recip();
+    }
+
+    acc + Sum {
+        high: LANCZOS_DD[0].0,
+        low: LANCZOS_DD[0].1,
+    }
 }
 
 /// Magnitude of `atan2(y, x)` for finite nonzero `a = |x|`, `b = |y|`

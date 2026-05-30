@@ -1014,50 +1014,76 @@ pub fn erfc(x: f32) -> f32 {
     }
 }
 
-/// Lanczos parameter `g` paired with [`lanczos_series`]
-const LANCZOS_G: f64 = 7.0;
-
-/// Lanczos rational series for the Γ approximation
-///
-/// Coefficients were fitted (partial-fraction collocation) for `g = 7`, giving a
-/// relative approximation error near `2^-57`; the smaller terms are summed first
-/// to limit cancellation among the large middle coefficients.
+/// Negate a double-double
 #[inline]
-fn lanczos_series(z: f64) -> f64 {
-    const P: [f64; 10] = [
-        2.506_628_274_630_999_4,
-        1_695.785_083_098_086_3,
-        -3_156.193_962_332_789,
-        1_933.421_115_453_225_4,
-        -442.708_225_772_753_34,
-        31.351_260_098_691_565,
-        -0.347_345_764_967_161_46,
-        2.444_832_943_756_223_5e-5,
-        7.570_873_982_174_572e-7,
-        -1.012_272_352_038_846_7e-7,
-    ];
-
-    P[9] / (z + 9.0)
-        + P[8] / (z + 8.0)
-        + P[7] / (z + 7.0)
-        + P[6] / (z + 6.0)
-        + P[5] / (z + 5.0)
-        + P[4] / (z + 4.0)
-        + P[3] / (z + 3.0)
-        + P[2] / (z + 2.0)
-        + P[1] / (z + 1.0)
-        + P[0]
+fn neg(a: Sum) -> Sum {
+    Sum {
+        high: -a.high,
+        low: -a.low,
+    }
 }
 
-/// `Γ(1 + z)` through the Lanczos approximation
+/// Natural logarithm of a positive double-double
+///
+/// `ln(hi + lo) = ln(hi) + ln(1 + lo/hi) ≈ ln(hi) + lo/hi`, the last term being
+/// a tiny correction folded into the double-double `ln`.
 #[inline]
-fn gamma1p(z: f64) -> f64 {
-    let base = LANCZOS_G + 0.5 + z;
-    kernel::exp2(crate::mul_add(
-        0.5 + z,
-        kernel::log2(base),
-        -core::f64::consts::LOG2_E * base,
-    )) * lanczos_series(z)
+fn ln_sum(x: Sum) -> Sum {
+    crate::f64::ln_dd(x.high)
+        + Sum {
+            high: x.low / x.high,
+            low: 0.0,
+        }
+}
+
+/// `Γ(1 + z)` as a normalized double-double mantissa times `2`<sup>`q`</sup>
+///
+/// `Γ(1 + z) = base`<sup>`z+½`</sup>`·e`<sup>`−base`</sup>`·series(z)` with
+/// `base = g + ½ + z`.  The first factor is `exp((z+½)·ln(base) − base)`,
+/// evaluated by feeding that double-double exponent to the `f64` double-double
+/// exponential; `series(z)` is the double-double Lanczos partial fraction.
+/// Returning `(mantissa, q)` keeps the mantissa near `1`, so Γ's huge dynamic
+/// range never overflows the `f64` pair.
+#[inline]
+fn gamma1p_scaled(z: f64) -> (Sum, i64) {
+    // `base = z + g + ½` and `z + ½` are kept as double-doubles: for tiny `z`
+    // the f64 rounding of `base` would otherwise feed straight into the exponent
+    // and `exp` would amplify it to a ~2⁻⁵⁰ relative error.
+    let base = Sum::from_sum(kernel::LANCZOS_G + 0.5, z);
+    let exponent = ln_sum(base) * Sum::from_sum(0.5, z) + neg(base);
+    let (mantissa, q) = crate::f64::exp_dd(exponent.high);
+    let value =
+        mantissa * (1.0 + exponent.low) * kernel::lanczos_series_dd(Sum { high: z, low: 0.0 });
+    (value, q)
+}
+
+/// Round `value · 2`<sup>`q`</sup> to the nearest `f32`, negating when `negative`
+///
+/// Covers tgamma's full range: overflow to `±∞` for large `q`, gradual
+/// underflow to `±0` for very negative `q`, and [`kernel::round_general`] for the
+/// normal and subnormal grids in between.
+#[inline]
+fn finish(value: Sum, q: i64, negative: bool) -> f32 {
+    let magnitude = if q >= 1022 {
+        f32::INFINITY
+    } else if q <= -203 {
+        // `value.high · 2^q` underflows even f64 (minimum f64 ≈ 2^-1074); flush to 0.
+        0.0
+    } else {
+        // Renormalize so `high` is the nearest `f64`: the upstream `Sum / z` and
+        // `Sum * Sum` can leave the pair denormal by up to an ulp, which would
+        // defeat `round`'s round-to-odd at the hardest f32 boundaries.
+        kernel::round_general(Sum::from_sum(
+            kernel::fast_ldexp(value.high, q),
+            kernel::fast_ldexp(value.low, q),
+        ))
+    };
+
+    if negative {
+        -magnitude
+    } else {
+        magnitude
+    }
 }
 
 /// The gamma function
@@ -1068,8 +1094,45 @@ pub fn tgamma(z: f32) -> f32 {
         return f32::INFINITY.copysign(z);
     }
 
+    if z.is_nan() {
+        return z;
+    }
+
     if z == f32::INFINITY {
         return f32::INFINITY;
+    }
+
+    if z > -0.5 && z < 0.5 {
+        let z = f64::from(z);
+
+        // Very near the pole at 0, Γ(z) ≈ 1/z is so ill-conditioned that the
+        // Lanczos product's ~2⁻⁵⁵ reconstruction loses the last ulp.  The Maclaurin
+        // series Γ(z) = 1/z − γ + c₂z + c₃z² + c₄z³ + … is far better behaved: 1/z
+        // carries the dynamic range as a double-double and the O(1) correction
+        // polynomial is ample in f64 (truncation ≪ 2⁻³⁶ ulp at |z| = 2⁻¹²).
+        if z.abs() < 0.000_244_140_625 {
+            let correction = crate::poly(
+                z,
+                &[
+                    -0.577_215_664_901_532_9,
+                    0.989_055_995_327_972_6,
+                    -0.907_479_076_080_886_3,
+                    0.981_728_086_834_400_2,
+                ],
+            );
+            let value = Sum::from_quotient(1.0, z)
+                + Sum {
+                    high: correction,
+                    low: 0.0,
+                };
+            return kernel::round_signed(value);
+        }
+
+        // Γ(z) = Γ(1+z)/z holds throughout (−½, ½) and, unlike reflection, never
+        // divides by a single-precision sin(πz), keeping the moderate-z values
+        // correctly rounded.  z = 0 was handled above.
+        let (gamma, q) = gamma1p_scaled(z);
+        return finish(gamma / z.abs(), q, z < 0.0);
     }
 
     if z < 0.5 {
@@ -1077,51 +1140,37 @@ pub fn tgamma(z: f32) -> f32 {
         if z.round_ties_even() == z {
             return f32::NAN;
         }
-        let r = core::f64::consts::PI / (kernel::sinpi(z) * gamma1p(-f64::from(z)));
-        return r as f32;
+
+        // Γ(z) = π / (sin(πz)·Γ(1−z)); Γ(1−z) > 0, so the sign comes from sin.
+        let sin = kernel::sinpi(z);
+        let (gamma, q) = gamma1p_scaled(-f64::from(z));
+        let denominator = Sum {
+            high: gamma.high * sin.abs(),
+            low: gamma.low * sin.abs(),
+        };
+        return finish(kernel::PI * denominator.recip(), -q, sin.is_sign_negative());
     }
 
-    gamma1p(f64::from(z) - 1.0) as f32
+    // tgamma overflows f32 at z ≈ 35.04; exp_dd overflows f64 well before that.
+    let z_f64 = f64::from(z) - 1.0;
+    let base = z_f64 + (kernel::LANCZOS_G + 0.5);
+    if (z_f64 + 0.5) * base.ln() - base > 90.0 {
+        return f32::INFINITY;
+    }
+
+    let (gamma, q) = gamma1p_scaled(z_f64);
+    finish(gamma, q, false)
 }
 
-/// `(z + ½)·ln(g + ½ + z) - (g + ½ + z)`, the Lanczos log-Γ skeleton
+/// `(z + ½)·ln(g + ½ + z) − (g + ½ + z)` as a double-double, the log-Γ skeleton
 #[inline]
-fn lcoeff(z: f64) -> f64 {
-    let base = LANCZOS_G + 0.5 + z;
-    crate::mul_add(0.5 + z, crate::f64::ln(base), -base)
-}
-
-/// `ln(Γ(1 + x))` near `x = 0`, where the Lanczos form loses precision
-///
-/// The trailing `+ 0.0` keeps `lgamma1p(0) = +0` rather than the `-0` that
-/// `0 · (-γ)` would yield.
-#[inline]
-fn lgamma1p(x: f64) -> f64 {
-    crate::mul_add(
-        x,
-        crate::poly(
-            x,
-            &[
-                -0.577_215_664_901_485_7,
-                0.822_467_226_958_685_8,
-                -0.400_685_881_609_553_26,
-            ],
-        ),
-        0.0,
-    )
-}
-
-/// `ln(Γ(2 + x))` near `x = 0`, where the Lanczos form loses precision
-#[inline]
-fn lgamma2p(x: f64) -> f64 {
-    x * crate::poly(
-        x,
-        &[
-            0.422_784_335_098_897,
-            0.322_467_268_953_198_2,
-            -0.067_352_441_921_785_51,
-        ],
-    )
+fn lcoeff_dd(z: f64) -> Sum {
+    let base = z + (kernel::LANCZOS_G + 0.5);
+    crate::f64::ln_dd(base) * (z + 0.5)
+        + Sum {
+            high: -base,
+            low: 0.0,
+        }
 }
 
 /// The natural logarithm of the absolute value of the gamma function
@@ -1132,29 +1181,37 @@ pub fn lgamma(z: f32) -> f32 {
         return f32::INFINITY;
     }
 
+    if z.is_nan() {
+        return z;
+    }
+
     if z < 0.5 {
         // Non-positive integers (and −∞) are poles.
         if z.round_ties_even() == z {
             return f32::INFINITY;
         }
+
+        // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z),  ln Γ(1−z) = lcoeff(w) + ln series(w)
         let w = -f64::from(z);
-        let r =
-            crate::f64::ln(core::f64::consts::PI / (kernel::sinpi(z).abs() * lanczos_series(w)))
-                - lcoeff(w);
-        return r as f32;
+        let series = kernel::lanczos_series_dd(Sum { high: w, low: 0.0 });
+        let value = ln_sum(kernel::PI)
+            + neg(crate::f64::ln_dd(kernel::sinpi(z).abs()))
+            + neg(lcoeff_dd(w))
+            + neg(ln_sum(series));
+        return kernel::round_signed(value);
+    }
+
+    // lgamma(1) = lgamma(2) = +0 exactly; the skeleton would round the residual.
+    if z == 1.0 || z == 2.0 {
+        return 0.0;
     }
 
     let z = f64::from(z);
-
-    // The skeleton cancels badly near the zeros lgamma(1) = lgamma(2) = 0.
-    if (z - 1.0).abs() < crate::exp2i(-10) {
-        return lgamma1p(z - 1.0) as f32;
-    }
-    if (z - 2.0).abs() < crate::exp2i(-8) {
-        return lgamma2p(z - 2.0) as f32;
-    }
-
-    (lcoeff(z - 1.0) + crate::f64::ln(lanczos_series(z - 1.0))) as f32
+    let series = kernel::lanczos_series_dd(Sum {
+        high: z - 1.0,
+        low: 0.0,
+    });
+    kernel::round_signed(lcoeff_dd(z - 1.0) + ln_sum(series))
 }
 
 /// Sine
