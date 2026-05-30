@@ -1036,27 +1036,6 @@ fn ln_sum(x: Sum) -> Sum {
         }
 }
 
-/// `Γ(1 + z)` as a normalized double-double mantissa times `2`<sup>`q`</sup>
-///
-/// `Γ(1 + z) = base`<sup>`z+½`</sup>`·e`<sup>`−base`</sup>`·series(z)` with
-/// `base = g + ½ + z`.  The first factor is `exp((z+½)·ln(base) − base)`,
-/// evaluated by feeding that double-double exponent to the `f64` double-double
-/// exponential; `series(z)` is the double-double Lanczos partial fraction.
-/// Returning `(mantissa, q)` keeps the mantissa near `1`, so Γ's huge dynamic
-/// range never overflows the `f64` pair.
-#[inline]
-fn gamma1p_scaled(z: f64) -> (Sum, i64) {
-    // `base = z + g + ½` and `z + ½` are kept as double-doubles: for tiny `z`
-    // the f64 rounding of `base` would otherwise feed straight into the exponent
-    // and `exp` would amplify it to a ~2⁻⁵⁰ relative error.
-    let base = Sum::from_sum(kernel::LANCZOS_G + 0.5, z);
-    let exponent = ln_sum(base) * Sum::from_sum(0.5, z) + neg(base);
-    let (mantissa, q) = crate::f64::exp_dd(exponent.high);
-    let value =
-        mantissa * (1.0 + exponent.low) * kernel::lanczos_series_dd(Sum { high: z, low: 0.0 });
-    (value, q)
-}
-
 /// Round `value · 2`<sup>`q`</sup> to the nearest `f32`, negating when `negative`
 ///
 /// Covers tgamma's full range: overflow to `±∞` for large `q`, gradual
@@ -1090,10 +1069,6 @@ fn finish(value: Sum, q: i64, negative: bool) -> f32 {
 #[must_use]
 #[inline]
 pub fn tgamma(z: f32) -> f32 {
-    if z == 0.0 {
-        return f32::INFINITY.copysign(z);
-    }
-
     if z.is_nan() {
         return z;
     }
@@ -1102,64 +1077,79 @@ pub fn tgamma(z: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    if z > -0.5 && z < 0.5 {
-        let z = f64::from(z);
-
-        // Very near the pole at 0, Γ(z) ≈ 1/z is so ill-conditioned that the
-        // Lanczos product's ~2⁻⁵⁵ reconstruction loses the last ulp.  The Maclaurin
-        // series Γ(z) = 1/z − γ + c₂z + c₃z² + c₄z³ + … is far better behaved: 1/z
-        // carries the dynamic range as a double-double and the O(1) correction
-        // polynomial is ample in f64 (truncation ≪ 2⁻³⁶ ulp at |z| = 2⁻¹²).
-        if z.abs() < 0.000_244_140_625 {
-            let correction = crate::poly(
-                z,
-                &[
-                    -0.577_215_664_901_532_9,
-                    0.989_055_995_327_972_6,
-                    -0.907_479_076_080_886_3,
-                    0.981_728_086_834_400_2,
-                ],
-            );
-            let value = Sum::from_quotient(1.0, z)
-                + Sum {
-                    high: correction,
-                    low: 0.0,
-                };
-            return kernel::round_signed(value);
-        }
-
-        // Γ(z) = Γ(1+z)/z holds throughout (−½, ½) and, unlike reflection, never
-        // divides by a single-precision sin(πz), keeping the moderate-z values
-        // correctly rounded.  z = 0 was handled above.
-        let (gamma, q) = gamma1p_scaled(z);
-        return finish(gamma / z.abs(), q, z < 0.0);
+    if z == 0.0 {
+        return f32::INFINITY.copysign(z);
     }
 
-    if z < 0.5 {
-        // Negative integers (and −∞) are poles; everything else reflects.
-        if z.round_ties_even() == z {
-            return f32::NAN;
-        }
+    let x = f64::from(z);
 
-        // Γ(z) = π / (sin(πz)·Γ(1−z)); Γ(1−z) > 0, so the sign comes from sin.
-        let sin = kernel::sinpi(z);
-        let (gamma, q) = gamma1p_scaled(-f64::from(z));
-        let denominator = Sum {
-            high: gamma.high * sin.abs(),
-            low: gamma.low * sin.abs(),
-        };
-        return finish(kernel::PI * denominator.recip(), -q, sin.is_sign_negative());
+    // Near the pole at 0, Γ(z) ≈ 1/z.  The Maclaurin series Γ(z) = 1/z − γ + c₂z +
+    // c₃z² + c₄z³ keeps the dynamic range inside the double-double 1/z while the
+    // O(1) correction stays ample in f64; this also yields Γ(±0) = ±∞.
+    if z.abs() < 0.000_244_140_625 {
+        let correction = crate::poly(
+            x,
+            &[
+                -0.577_215_664_901_532_9,
+                0.989_055_995_327_972_6,
+                -0.907_479_076_080_886_3,
+                0.981_728_086_834_400_2,
+            ],
+        );
+        let value = Sum::from_quotient(1.0, x)
+            + Sum {
+                high: correction,
+                low: 0.0,
+            };
+        return kernel::round_signed(value);
     }
 
-    // tgamma overflows f32 at z ≈ 35.04; exp_dd overflows f64 well before that.
-    let z_f64 = f64::from(z) - 1.0;
-    let base = z_f64 + (kernel::LANCZOS_G + 0.5);
-    if (z_f64 + 0.5) * base.ln() - base > 90.0 {
+    // Γ exceeds f32::MAX at z ≈ 35.0401; bail before the recurrence loop, which
+    // would otherwise run unboundedly for huge z.
+    if z >= 35.040_100_097_656_25 {
         return f32::INFINITY;
     }
 
-    let (gamma, q) = gamma1p_scaled(z_f64);
-    finish(gamma, q, false)
+    // Non-positive integers are poles (z = 0 handled above); below −42 the
+    // magnitude underflows past 2⁻¹⁵¹ to a signed zero alternating with each pole.
+    if x == x.floor() && z < 0.0 {
+        return f32::NAN;
+    }
+    if z < -42.0 {
+        return if (x.floor() as i64) & 1 == 0 {
+            0.0
+        } else {
+            -0.0
+        };
+    }
+
+    // Reduce z into the minimax interval [2.375, 3.375] centred on 2.875, then
+    // walk back with Γ(z) = Γ(z−i)·∏(z−j) for z above the interval, or a single
+    // reciprocal of ∏(z+j) below it.  For negative z the product runs through
+    // negative factors, so it supplies the sign as well — no reflection needed.
+    let m = x - kernel::TGAMMA_CENTER;
+    let i = m.round_ties_even();
+    let mut value = kernel::tgamma_poly(m - i);
+    let steps = i.abs() as i32;
+
+    if i > 0.0 {
+        let mut factor = x;
+        for _ in 0..steps {
+            factor -= 1.0;
+            value = value * factor;
+        }
+    } else if i < 0.0 {
+        let mut product = Sum { high: x, low: 0.0 };
+        let mut factor = x;
+        for _ in 1..steps {
+            factor += 1.0;
+            product = product * factor;
+        }
+        value = value * product.recip();
+    }
+
+    let negative = value.high < 0.0;
+    finish(if negative { neg(value) } else { value }, 0, negative)
 }
 
 /// `(z + ½)·ln(g + ½ + z) − (g + ½ + z)` as a double-double, the log-Γ skeleton

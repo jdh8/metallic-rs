@@ -452,6 +452,78 @@ pub fn lanczos_series_dd(z: Sum) -> Sum {
     }
 }
 
+/// Center of the [`tgamma_poly`] minimax interval, `Γ(TGAMMA_CENTER + d)`
+pub const TGAMMA_CENTER: f64 = 2.875;
+
+/// Leading double-double coefficients of `Γ(2.875 + d)`, `c₀..c₅`
+///
+/// Paired with [`TGAMMA_TAIL`]; together a degree-18 minimax fit on `d ∈ [−½, ½]`
+/// with relative approximation error `2⁻⁶⁷`, from
+/// `mpmath.chebyfit(lambda d: gamma(mpf("2.875")+d), [-0.5,0.5], 19)` at
+/// `prec=260`.  Only the leading six coefficients need double-double — `c_k`'s
+/// f64 rounding contributes `2⁻⁵³·|c_k|·½ᵏ`, which drops below `2⁻⁶²` from `c₆`.
+const TGAMMA_DD: [Sum; 6] = [
+    Sum {
+        high: 1.7877108988969403,
+        low: -3.737560105011311e-17,
+    },
+    Sum {
+        high: 1.5591939012079505,
+        low: -6.845438926265673e-18,
+    },
+    Sum {
+        high: 1.051049326681183,
+        low: -8.10863306869118e-17,
+    },
+    Sum {
+        high: 0.47065801829339715,
+        low: 1.1343489177185007e-18,
+    },
+    Sum {
+        high: 0.18881863832011508,
+        low: -3.2013513690009033e-18,
+    },
+    Sum {
+        high: 0.05883154841060908,
+        low: -4.38554794255165e-20,
+    },
+];
+
+/// `f64` tail coefficients `c₆..c₁₈` of `Γ(2.875 + d)`, low-degree first
+const TGAMMA_TAIL: [f64; 13] = [
+    0.017_825_943_641_179_64,
+    0.004_228_758_172_382_065,
+    0.001_097_918_031_010_185,
+    0.000_194_565_434_866_167_52,
+    5.196_979_083_766_004_4e-5,
+    4.915_691_029_862_106_5e-6,
+    2.444_402_450_877_52e-6,
+    -1.498_674_146_532_898e-7,
+    1.650_360_438_390_299_6e-7,
+    -4.001_740_593_832_342e-8,
+    1.641_622_008_561_281_3e-8,
+    -6.297_805_420_549_436_6e-9,
+    2.238_642_403_291_221_4e-9,
+];
+
+/// `Γ(2.875 + d)` as a double-double for `d ∈ [−½, ½]`
+///
+/// The high-degree tail `c₆ + c₇d + …` is summed in `f64` (its rounding enters at
+/// `d⁶`, hence below `2⁻⁶³`) and folded into a double-double Horner pass over the
+/// six leading coefficients, giving a relative error near `2⁻⁶⁴` — ample for a
+/// correctly-rounded `f32` after the recurrence and round-to-odd.
+#[inline]
+pub fn tgamma_poly(d: f64) -> Sum {
+    let tail = crate::poly(d, &TGAMMA_TAIL);
+
+    let mut acc = TGAMMA_DD[5] + Sum::from_product(d, tail);
+    for coefficient in TGAMMA_DD[..5].iter().rev() {
+        acc = acc * d + *coefficient;
+    }
+
+    acc
+}
+
 /// Magnitude of `atan2(y, x)` for finite nonzero `a = |x|`, `b = |y|`
 ///
 /// Returns the correctly-rounded angle in `[0, π]`; the caller restores the
