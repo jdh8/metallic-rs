@@ -300,7 +300,7 @@ fn atan_dd(q: Sum) -> Sum {
 /// `f64`, hence is even, so the odd nudge lands on the correct side before the
 /// final round to nearest.
 #[inline]
-fn round(value: Sum) -> f32 {
+pub fn round(value: Sum) -> f32 {
     let bits = value.high.to_bits();
 
     let odd = if value.low == 0.0 || bits & 1 == 1 {

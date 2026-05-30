@@ -63,6 +63,16 @@ fn test_log10() {
 }
 
 #[test]
+fn test_erf() {
+    test_identity(metal::erf, core_math::erff);
+}
+
+#[test]
+fn test_erfc() {
+    test_identity(metal::erfc, core_math::erfcf);
+}
+
+#[test]
 fn test_acosh() {
     test_identity(metal::acosh, core_math::acoshf);
 }
