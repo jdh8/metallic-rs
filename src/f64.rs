@@ -126,7 +126,7 @@ const EXP_N: i64 = 128;
 /// `r` is the reduced argument, `|r| ≤ ln2/2N`.  The full value is `2`<sup>`q`</sup>
 /// times the returned mantissa.
 #[inline]
-fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
+pub(crate) fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     use exp_consts::{EXP2_TABLE, EXP_R_COEFFS};
 
     // exp(r) by double-double Horner over the degree-8 minimax polynomial.
@@ -158,7 +158,7 @@ fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
 /// `r` is the reduced argument as a double-double, `|r| ≤ ln2/2N`.  The result is
 /// correctly rounded, including gradual underflow into the subnormal range.
 #[inline]
-fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
+pub(crate) fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
     // The mantissa is in [1, 2), so the result is subnormal exactly when
     // `q < −1022`, and the integer-grid shift below stays within an exact `i64`.
     let (product, q) = exp_mantissa(j, q, r);
@@ -216,7 +216,7 @@ fn exp_reduce(x: f64) -> (usize, i64, Sum) {
 /// The caller must ensure `x` is finite and within the non-overflow range
 /// (`|x| < ~710`); used by the hyperbolic functions, which need the extra words.
 #[inline]
-fn exp_dd(x: f64) -> (Sum, i64) {
+pub(crate) fn exp_dd(x: f64) -> (Sum, i64) {
     let (j, q, r) = exp_reduce(x);
     exp_mantissa(j, q, r)
 }
@@ -429,7 +429,7 @@ fn log_reduce(x: f64) -> (i64, usize, Sum) {
 
 /// The natural logarithm of a finite positive `x ≠ 1`, as a double-double.
 #[inline]
-fn ln_dd(x: f64) -> Sum {
+pub(crate) fn ln_dd(x: f64) -> Sum {
     use log_consts::{LN2_HI, LN2_LO, L_TABLE};
 
     // ln(x) = e·ln2 + L_TABLE[i] + ln(1+r).
