@@ -473,7 +473,26 @@ pub fn tgamma_poly(d: f64) -> Sum {
     acc
 }
 
-/// `½·ln(2π)`, the additive Stirling constant for `lgamma_pos`
+/// `Γ(2.875 + d)` for `d ∈ [−½, ½]` as a plain-`f64` degree-11 minimax
+///
+/// Relative error `2⁻⁴²` — the fast Ziv path of [`tgamma`] only needs enough to
+/// gate against the double-double [`tgamma_poly`], so half the degree suffices.
+pub const TGAMMA_POLY_F64: [f64; 12] = [
+    1.787_710_898_896_633_5,
+    1.559_193_901_207_972_3,
+    1.051_049_326_769_541_3,
+    0.470_658_018_287_150_76,
+    0.188_818_634_201_838_25,
+    0.058_831_548_700_820_71,
+    0.017_826_013_745_994_518,
+    0.004_228_753_264_700_664,
+    0.001_097_379_867_515_545,
+    0.000_194_602_632_143_494_85,
+    5.386_339_273_934_268_4e-5,
+    4.788_385_422_314_536e-6,
+];
+
+/// `½·ln(2π)`, the additive Stirling constant for `lgamma_pos_dd`
 pub const HALF_LN_2PI: Sum = Sum {
     high: 0.9189385332046728,
     low: -3.878_294_158_067_241_4e-17,

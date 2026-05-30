@@ -1065,6 +1065,71 @@ fn finish(value: Sum, q: i64, negative: bool) -> f32 {
     }
 }
 
+/// Fast plain-`f64` `Γ(z)` over the recurrence range, with a relative error bound
+///
+/// Mirrors [`tgamma_dd`] in `f64`: reduce `z` into `[2.375, 3.375]`, evaluate the
+/// degree-11 minimax, and walk back by the same recurrence.  The error is
+/// dominated by the polynomial's `2⁻⁴²`, which the gate in [`tgamma`] uses.
+#[inline]
+fn tgamma_f64(x: f64) -> (f64, f64) {
+    let m = x - kernel::TGAMMA_CENTER;
+    let i = m.round_ties_even();
+    let mut value = crate::poly(m - i, &kernel::TGAMMA_POLY_F64);
+    let steps = i.abs() as i32;
+
+    if i > 0.0 {
+        let mut factor = x;
+        for _ in 0..steps {
+            factor -= 1.0;
+            value *= factor;
+        }
+    } else if i < 0.0 {
+        let mut product = x;
+        let mut factor = x;
+        for _ in 1..steps {
+            factor += 1.0;
+            product *= factor;
+        }
+        value /= product;
+    }
+
+    (value, crate::exp2i(-37) * value.abs())
+}
+
+/// Double-double `Γ(z)` over the recurrence range, the accurate Ziv fallback
+///
+/// Reduces `z` into the minimax interval `[2.375, 3.375]` centred on 2.875, then
+/// walks back with `Γ(z) = Γ(z−i)·∏(z−j)` for `z` above the interval, or a single
+/// reciprocal of `∏(z+j)` below it.  For negative `z` the product runs through
+/// negative factors, so it supplies the sign as well — no reflection needed.
+#[cold]
+#[inline(never)]
+fn tgamma_dd(x: f64) -> f32 {
+    let m = x - kernel::TGAMMA_CENTER;
+    let i = m.round_ties_even();
+    let mut value = kernel::tgamma_poly(m - i);
+    let steps = i.abs() as i32;
+
+    if i > 0.0 {
+        let mut factor = x;
+        for _ in 0..steps {
+            factor -= 1.0;
+            value = value * factor;
+        }
+    } else if i < 0.0 {
+        let mut product = Sum { high: x, low: 0.0 };
+        let mut factor = x;
+        for _ in 1..steps {
+            factor += 1.0;
+            product = product * factor;
+        }
+        value = value * product.recip();
+    }
+
+    let negative = value.high < 0.0;
+    finish(if negative { neg(value) } else { value }, 0, negative)
+}
+
 /// The gamma function
 #[must_use]
 #[inline]
@@ -1123,33 +1188,18 @@ pub fn tgamma(z: f32) -> f32 {
         };
     }
 
-    // Reduce z into the minimax interval [2.375, 3.375] centred on 2.875, then
-    // walk back with Γ(z) = Γ(z−i)·∏(z−j) for z above the interval, or a single
-    // reciprocal of ∏(z+j) below it.  For negative z the product runs through
-    // negative factors, so it supplies the sign as well — no reflection needed.
-    let m = x - kernel::TGAMMA_CENTER;
-    let i = m.round_ties_even();
-    let mut value = kernel::tgamma_poly(m - i);
-    let steps = i.abs() as i32;
+    // Ziv two-step over the recurrence range: the plain-f64 path is correctly
+    // rounded unless its value lands within the error bound of an f32 boundary,
+    // where the double-double path resolves it.
+    let (value, err) = tgamma_f64(x);
+    let lo = (value - err) as f32;
+    let hi = (value + err) as f32;
 
-    if i > 0.0 {
-        let mut factor = x;
-        for _ in 0..steps {
-            factor -= 1.0;
-            value = value * factor;
-        }
-    } else if i < 0.0 {
-        let mut product = Sum { high: x, low: 0.0 };
-        let mut factor = x;
-        for _ in 1..steps {
-            factor += 1.0;
-            product = product * factor;
-        }
-        value = value * product.recip();
+    if lo == hi {
+        lo
+    } else {
+        tgamma_dd(x)
     }
-
-    let negative = value.high < 0.0;
-    finish(if negative { neg(value) } else { value }, 0, negative)
 }
 
 /// `ln Γ(y)` as a double-double for `y ≥ ½`
