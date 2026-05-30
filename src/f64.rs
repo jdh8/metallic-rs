@@ -4,7 +4,7 @@
 mod dint;
 mod dint_consts;
 mod exp_consts;
-mod kernel;
+pub(crate) mod kernel;
 mod log_consts;
 use crate::Sign;
 use core::{f64, num::FpCategory};

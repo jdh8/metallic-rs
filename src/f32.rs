@@ -821,6 +821,45 @@ pub fn atan(x: f32) -> f32 {
     }
 }
 
+/// Arctangent of `y / x` using the signs of both to select the quadrant
+///
+/// The result is the angle in `(-π, π]` between the positive `x`-axis and the
+/// point `(x, y)`, carrying the sign of `y`.
+#[must_use]
+#[inline]
+pub fn atan2(y: f32, x: f32) -> f32 {
+    use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI};
+
+    /// Correctly-rounded `f32` of 3π/4
+    const THREE_PI_4: f32 = 2.356_194_5;
+
+    if x.is_nan() || y.is_nan() {
+        return f32::NAN;
+    }
+
+    if x.is_infinite() || y.is_infinite() {
+        let magnitude = match (x.is_infinite(), y.is_infinite()) {
+            (true, true) if x.is_sign_positive() => FRAC_PI_4,
+            (true, true) => THREE_PI_4,
+            (true, false) if x.is_sign_positive() => 0.0,
+            (true, false) => PI,
+            (false, true) => FRAC_PI_2,
+            (false, false) => unreachable!(),
+        };
+        return magnitude.copysign(y);
+    }
+
+    if y == 0.0 {
+        return if x.is_sign_positive() { 0.0 } else { PI }.copysign(y);
+    }
+
+    if x == 0.0 {
+        return FRAC_PI_2.copysign(y);
+    }
+
+    kernel::atan2(x.abs().into(), y.abs().into(), x.is_sign_negative()).copysign(y)
+}
+
 /// Sine
 #[must_use]
 #[inline]

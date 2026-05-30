@@ -86,21 +86,21 @@ fn test_parser() {
 fn test_exp() {
     // Dense sweep of the finite range [−745, 710] plus bit-pattern stepping over
     // all of `f64` (covers ±0, subnormals, overflow/underflow, NaN, ∞).
-    let dense = (0..=2_000_000).map(|i| -745.2 + f64::from(i) * (1455.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(1455.0 / 2_000_000.0, -745.2));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::exp, core_math::exp, dense.chain(bits));
 }
 
 #[test]
 fn test_exp2() {
-    let dense = (0..=2_000_000).map(|i| -1075.0 + f64::from(i) * (2099.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(2099.0 / 2_000_000.0, -1075.0));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::exp2, core_math::exp2, dense.chain(bits));
 }
 
 #[test]
 fn test_exp10() {
-    let dense = (0..=2_000_000).map(|i| -323.7 + f64::from(i) * (632.0 / 2_000_000.0));
+    let dense = (0..=2_000_000).map(|i| f64::from(i).mul_add(632.0 / 2_000_000.0, -323.7));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metal::exp10, core_math::exp10, dense.chain(bits));
 }

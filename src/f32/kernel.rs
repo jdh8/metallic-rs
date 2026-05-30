@@ -1,3 +1,5 @@
+use crate::f64::kernel::Sum;
+
 /// Fast C `ldexp` assuming normal argument and result
 #[inline]
 pub const fn fast_ldexp(x: f64, n: i64) -> f64 {
@@ -204,4 +206,141 @@ pub fn sin(x: f64) -> f32 {
         ],
     );
     crate::mul_add(y, x, x) as f32
+}
+
+/// `atan(k / 8)` as a double-double for `k` in `0..=8`
+const ATAN_TABLE: [(f64, f64); 9] = [
+    (0.0, 0.0),
+    (0.124_354_994_546_761_44, -3.125_324_142_453_938_3e-18),
+    (0.244_978_663_126_864_14, 1.069_875_561_873_445_1e-17),
+    (0.358_770_670_270_572_25, -2.462_381_558_263_863_5e-17),
+    (0.463_647_609_000_806_1, 2.269_877_745_296_168_7e-17),
+    (0.558_599_315_343_562_4, -5.455_630_548_591_626_4e-18),
+    (0.643_501_108_793_284_4, 1.583_478_505_144_428_6e-17),
+    (0.718_829_999_621_624_5, -2.147_838_844_445_698_3e-17),
+    (0.785_398_163_397_448_3, 3.061_616_997_868_383e-17),
+];
+
+/// π/2 as a double-double
+const FRAC_PI_2: Sum = Sum {
+    high: 1.570_796_326_794_896_6,
+    low: 6.123_233_995_736_766e-17,
+};
+
+/// π as a double-double
+const PI: Sum = Sum {
+    high: 3.141_592_653_589_793,
+    low: 1.224_646_799_147_353_2e-16,
+};
+
+/// Arctangent of a double-double in `[0, 1]`, returned as a double-double
+///
+/// The argument is reduced into a cell of width 1/8 centred on `c = k/8`, where
+/// the table holds `atan(c)`.  Inside the cell `atan(q) = atan(c) + atan(u)`
+/// with `u = (q - c) / (1 + q·c)` and `|u| ≤ 1/16`, so the Taylor series of the
+/// odd part `atan(u) - u` converges in a handful of terms evaluated in `f64`.
+#[inline]
+fn atan_dd(q: Sum) -> Sum {
+    let k = (q.high * 8.0).round_ties_even();
+    let c = k * 0.125;
+
+    // `q.high ∈ [0, 1]` ⇒ `k ∈ {0, …, 8}`, always a valid index
+    let (high, low) = ATAN_TABLE[k as usize];
+
+    // u = (q - c) / (1 + q·c), exact in double-double (c is a power-of-two multiple)
+    let u = (q + Sum { high: -c, low: 0.0 })
+        * (q * c
+            + Sum {
+                high: 1.0,
+                low: 0.0,
+            })
+        .recip();
+
+    // atan(u) = u - u³/3 + u⁵/5 - u⁷/7 + …, |u| ≤ 1/16.  The cubic term carries
+    // the result near small `q`, so it is formed in double-double (`/3.0` is the
+    // compensated divisor); the remaining tail is tiny and stays in `f64`.
+    let uu = u.high * u.high;
+    let cubic = u * u * u / 3.0;
+    let tail = u.high
+        * uu
+        * uu
+        * crate::poly(
+            uu,
+            &[
+                1.0 / 5.0,
+                -1.0 / 7.0,
+                1.0 / 9.0,
+                -1.0 / 11.0,
+                1.0 / 13.0,
+                -1.0 / 15.0,
+                1.0 / 17.0,
+                -1.0 / 19.0,
+                1.0 / 21.0,
+            ],
+        );
+
+    Sum { high, low }
+        + u
+        + Sum {
+            high: -cubic.high,
+            low: -cubic.low,
+        }
+        + Sum {
+            high: tail,
+            low: 0.0,
+        }
+}
+
+/// Round a normalized positive double-double to the nearest `f32`
+///
+/// A plain `value.high as f32` can double-round when `value.high` lands on an
+/// `f32` midpoint: the cast rounds to even before the low word breaks the tie.
+/// Rounding `value.high` to odd in `f64` first (in the direction of `value.low`)
+/// sidesteps this — every `f32` midpoint has at least 28 trailing zero bits in
+/// `f64`, hence is even, so the odd nudge lands on the correct side before the
+/// final round to nearest.
+#[inline]
+fn round(value: Sum) -> f32 {
+    let bits = value.high.to_bits();
+
+    let odd = if value.low == 0.0 || bits & 1 == 1 {
+        value.high
+    } else if value.low > 0.0 {
+        f64::from_bits(bits + 1)
+    } else {
+        f64::from_bits(bits - 1)
+    };
+
+    odd as f32
+}
+
+/// Magnitude of `atan2(y, x)` for finite nonzero `a = |x|`, `b = |y|`
+///
+/// Returns the correctly-rounded angle in `[0, π]`; the caller restores the
+/// sign of `y` with `copysign`.
+#[inline]
+pub fn atan2(a: f64, b: f64, x_negative: bool) -> f32 {
+    let phi = if a >= b {
+        atan_dd(Sum::from_quotient(b, a))
+    } else {
+        // π/2 - atan(a/b)
+        let t = atan_dd(Sum::from_quotient(a, b));
+        FRAC_PI_2
+            + Sum {
+                high: -t.high,
+                low: -t.low,
+            }
+    };
+
+    let theta = if x_negative {
+        // π - φ
+        PI + Sum {
+            high: -phi.high,
+            low: -phi.low,
+        }
+    } else {
+        phi
+    };
+
+    round(theta)
 }
