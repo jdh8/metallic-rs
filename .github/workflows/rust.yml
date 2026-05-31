@@ -25,13 +25,6 @@ jobs:
       run: cargo test --verbose
       env:
         RUSTFLAGS: "-C target-feature=-fma"
-
-  bench:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run benchmarks
-      run: cargo bench
   
   format:
     runs-on: ubuntu-latest

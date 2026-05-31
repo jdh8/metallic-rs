@@ -1,8 +1,9 @@
-metallic
-========
+# metallic
+
 [![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jdh8/metallic-rs)
 [![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
+[![Benchmark status](https://github.com/jdh8/metallic-rs/actions/workflows/bench.yml/badge.svg)](https://jdh8.github.io/metallic-rs/dev/bench/)
 
 A fast correctly rounded math library in Rust!
 
@@ -12,8 +13,8 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 [Metallic]: https://github.com/jdh8/metallic
 
-Enable [fused multiply-add][fma] for best performance!
-------------------------------------------------------
+## Enable [fused multiply-add][fma] for best performance!
+
 This crate extensively uses the fused multiply-add instruction if available.
 Sadly, Rust does not enable it in the default `generic` target.  To achieve best
 performance, add the following to your `.cargo/config.toml` either in **your**
@@ -26,8 +27,8 @@ rustflags = ["-Ctarget-cpu=native"]
 
 [fma]: https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation
 
-Using faster functions from [CORE-MATH]
----------------------------------------
+## Using faster functions from [CORE-MATH]
+
 I struggle to make some functions faster than [CORE-MATH].  You can enable the
 [`core-math`](crate) feature in your `Cargo.toml`:
 
@@ -44,8 +45,8 @@ This would replace the following functions with those from
 [CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 [crate]: https://crates.io/crates/core-math
 
-Assumptions
------------
+## Assumptions
+
 C libraries tend to have strict yet obsolete assumptions on math functions.
 For example, `float` functions dare not use `double` instructions for fear
 that the host does not support them.  In this library, I assume all Rust
@@ -68,8 +69,8 @@ library is the default [rounding half to even][round-even].
 
 [round-even]: https://en.wikipedia.org/wiki/Rounding#Rounding_half_to_even
 
-Goals
------
+## Goals
+
 - The functions should be correctly rounded (error ≤ 0.5 ulp).
     + Works in progress may be only faithfully rounded (error < 1 ulp).  These
       functions are considered buggy until I make them correctly rounded.
@@ -82,6 +83,7 @@ Goals
       for more details.
 
 ### Non-goals
+
 - I skip rounding functions such as `rint`, `round`, and `trunc` because
     + They are likely to be a single instruction on modern CPUs.
     + Rust already provides
@@ -91,8 +93,8 @@ Goals
       etc.
     + Their software implementations are slow and tedious, unlike `fabs`.
 
-Milestones
-----------
+## Milestones
+
 - [ ] Real `f32`/`float` functions in [`<math.h>`][math]
     - [x] Exponential functions
     - [x] Logarithm with constant base
