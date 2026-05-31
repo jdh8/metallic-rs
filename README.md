@@ -104,13 +104,16 @@ library is the default [rounding half to even][round-even].
   - [x] Trigonometric and hyperbolic functions
     - [ ] Make trigonometric functions faster than [CORE-MATH]
   - [x] Miscellaneous elementary functions
-  - [ ] Non-elementary functions (optional)
+  - [x] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
 - [ ] Real `f64`/`double` functions in [`<math.h>`][math]
-  - [ ] Exponential functions
-  - [ ] Logarithm with constant base
+  - [x] Exponential functions
+  - [x] Logarithm with constant base
   - [ ] Power and logarithm with arbitrary base
+    - [x] Faithful rounding
+    - [ ] Correct rounding
   - [ ] Trigonometric and hyperbolic functions
+    - [x] Hyperbolic functions
   - [ ] Miscellaneous elementary functions
   - [ ] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
