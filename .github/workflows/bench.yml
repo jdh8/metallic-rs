@@ -9,13 +9,84 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      benches: ${{ steps.benches.outputs.list }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Discover bench targets
+      id: benches
+      shell: bash
+      run: |
+        list=$(awk '
+          /^\[\[bench\]\]/ { in_bench = 1; next }
+          in_bench && /^name[[:space:]]*=/ {
+            line = $0
+            sub(/^name[[:space:]]*=[[:space:]]*"/, "", line)
+            sub(/".*/, "", line)
+            print line
+            in_bench = 0
+          }
+        ' Cargo.toml | jq -R -s -c 'split("\n")[:-1]')
+        echo "list=$list" >> "$GITHUB_OUTPUT"
+
   bench:
+    needs:
+    - prepare
+    - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bench: ${{ fromJson(needs.prepare.outputs.benches) }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: bench-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+
+    - name: Run benchmark
+      run: cargo bench --bench ${{ matrix.bench }} -- --output-format bencher | tee bench-output-${{ matrix.bench }}.txt
+
+    - name: Upload benchmark output
+      uses: actions/upload-artifact@v4
+      with:
+        name: bench-output-${{ matrix.bench }}
+        path: bench-output-${{ matrix.bench }}.txt
+
+  build:
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
-    - name: Run benchmarks
-      run: cargo bench --benches -- --output-format bencher | tee bench-output.txt
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: bench-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build benchmark binaries
+      run: cargo bench --no-run --benches
+
+  publish:
+    needs: bench
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        path: bench-outputs
+
+    - name: Merge benchmark outputs
+      shell: bash
+      run: |
+        find bench-outputs -name 'bench-output-*.txt' -type f -print0 \
+          | sort -z \
+          | xargs -0 cat > bench-output.txt
 
     - name: Publish benchmark numbers
       uses: benchmark-action/github-action-benchmark@v1
