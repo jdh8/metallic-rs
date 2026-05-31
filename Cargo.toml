@@ -32,6 +32,9 @@ core-math = ["dep:core-math"]
 [profile.dev]
 opt-level = 3
 
+[lib]
+bench = false
+
 [[bench]]
 name = "f32_acos"
 harness = false
