@@ -13,7 +13,7 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 [Metallic]: https://github.com/jdh8/metallic
 
-## Enable [fused multiply-add][fma] for best performance!
+## Enable [fused multiply-add][fma] for best performance
 
 This crate extensively uses the fused multiply-add instruction if available.
 Sadly, Rust does not enable it in the default `generic` target.  To achieve best
@@ -72,47 +72,47 @@ library is the default [rounding half to even][round-even].
 ## Goals
 
 - The functions should be correctly rounded (error ≤ 0.5 ulp).
-    + Works in progress may be only faithfully rounded (error < 1 ulp).  These
-      functions are considered buggy until I make them correctly rounded.
+  + Works in progress may be only faithfully rounded (error < 1 ulp).  These
+    functions are considered buggy until I make them correctly rounded.
 - The functions should be about as fast as the system library.
 - Try to make `f32` functions faster than the system library.
 - Avoid lookup tables to reduce memory usage, especially on WebAssembly.
-    + This goal is not as important as the others.  For example, a lookup
-      table for trigonometric functions is required to achieve faithful
-      rounding.  See [Payne&ndash;Hanek reduction](https://doi.org/10.1145/1057600.1057602)
-      for more details.
+  + This goal is not as important as the others.  For example, a lookup
+    table for trigonometric functions is required to achieve faithful
+    rounding.  See [Payne&ndash;Hanek reduction](https://doi.org/10.1145/1057600.1057602)
+    for more details.
 
 ### Non-goals
 
 - I skip rounding functions such as `rint`, `round`, and `trunc` because
-    + They are likely to be a single instruction on modern CPUs.
-    + Rust already provides
-      [`f32::round_ties_even`](https://doc.rust-lang.org/std/primitive.f32.html#method.round_ties_even),
-      [`f32::round`](https://doc.rust-lang.org/std/primitive.f32.html#method.round),
-      [`f32::trunc`](https://doc.rust-lang.org/std/primitive.f32.html#method.trunc),
-      etc.
-    + Their software implementations are slow and tedious, unlike `fabs`.
+  + They are likely to be a single instruction on modern CPUs.
+  + Rust already provides
+    [`f32::round_ties_even`](https://doc.rust-lang.org/std/primitive.f32.html#method.round_ties_even),
+    [`f32::round`](https://doc.rust-lang.org/std/primitive.f32.html#method.round),
+    [`f32::trunc`](https://doc.rust-lang.org/std/primitive.f32.html#method.trunc),
+    etc.
+  + Their software implementations are slow and tedious, unlike `fabs`.
 
 ## Milestones
 
 - [ ] Real `f32`/`float` functions in [`<math.h>`][math]
-    - [x] Exponential functions
-    - [x] Logarithm with constant base
-    - [ ] Power and logarithm with arbitrary base
-      - [x] Faithful rounding
-      - [ ] Correct rounding
-    - [x] Trigonometric and hyperbolic functions
-      - [ ] Make trigonometric functions faster than [CORE-MATH]
-    - [x] Miscellaneous elementary functions
-    - [ ] Non-elementary functions (optional)
+  - [x] Exponential functions
+  - [x] Logarithm with constant base
+  - [ ] Power and logarithm with arbitrary base
+    - [x] Faithful rounding
+    - [ ] Correct rounding
+  - [x] Trigonometric and hyperbolic functions
+    - [ ] Make trigonometric functions faster than [CORE-MATH]
+  - [x] Miscellaneous elementary functions
+  - [ ] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
 - [ ] Real `f64`/`double` functions in [`<math.h>`][math]
-    - [ ] Exponential functions
-    - [ ] Logarithm with constant base
-    - [ ] Power and logarithm with arbitrary base
-    - [ ] Trigonometric and hyperbolic functions
-    - [ ] Miscellaneous elementary functions
-    - [ ] Non-elementary functions (optional)
+  - [ ] Exponential functions
+  - [ ] Logarithm with constant base
+  - [ ] Power and logarithm with arbitrary base
+  - [ ] Trigonometric and hyperbolic functions
+  - [ ] Miscellaneous elementary functions
+  - [ ] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
 
 [math]: https://en.cppreference.com/w/c/numeric/math
