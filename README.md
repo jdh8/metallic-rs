@@ -72,12 +72,12 @@ library is the default [rounding half to even][round-even].
 ## Goals
 
 - The functions should be correctly rounded (error ≤ 0.5 ulp).
-  + Works in progress may be only faithfully rounded (error < 1 ulp).  These
+  - Works in progress may be only faithfully rounded (error < 1 ulp).  These
     functions are considered buggy until I make them correctly rounded.
 - The functions should be about as fast as the system library.
 - Try to make `f32` functions faster than the system library.
 - Avoid lookup tables to reduce memory usage, especially on WebAssembly.
-  + This goal is not as important as the others.  For example, a lookup
+  - This goal is not as important as the others.  For example, a lookup
     table for trigonometric functions is required to achieve faithful
     rounding.  See [Payne&ndash;Hanek reduction](https://doi.org/10.1145/1057600.1057602)
     for more details.
@@ -85,13 +85,13 @@ library is the default [rounding half to even][round-even].
 ### Non-goals
 
 - I skip rounding functions such as `rint`, `round`, and `trunc` because
-  + They are likely to be a single instruction on modern CPUs.
-  + Rust already provides
+  - They are likely to be a single instruction on modern CPUs.
+  - Rust already provides
     [`f32::round_ties_even`](https://doc.rust-lang.org/std/primitive.f32.html#method.round_ties_even),
     [`f32::round`](https://doc.rust-lang.org/std/primitive.f32.html#method.round),
     [`f32::trunc`](https://doc.rust-lang.org/std/primitive.f32.html#method.trunc),
     etc.
-  + Their software implementations are slow and tedious, unlike `fabs`.
+  - Their software implementations are slow and tedious, unlike `fabs`.
 
 ## Milestones
 
