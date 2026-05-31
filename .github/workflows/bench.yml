@@ -15,21 +15,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Run benchmarks
-      run: cargo bench -- --output-format bencher | tee bench-output.txt
-
-    - name: Ensure gh-pages branch
-      run: |
-        if ! git ls-remote --exit-code origin gh-pages; then
-          commit=$(
-            GIT_AUTHOR_NAME='github-actions[bot]' \
-            GIT_AUTHOR_EMAIL='github-actions[bot]@users.noreply.github.com' \
-            GIT_COMMITTER_NAME='github-actions[bot]' \
-            GIT_COMMITTER_EMAIL='github-actions[bot]@users.noreply.github.com' \
-            git commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
-              -m 'Initialize gh-pages'
-          )
-          git push origin "${commit}:refs/heads/gh-pages"
-        fi
+      run: cargo bench -- --output-format bencher 2>&1 | tee bench-output.txt
 
     - name: Publish benchmark numbers
       uses: benchmark-action/github-action-benchmark@v1
