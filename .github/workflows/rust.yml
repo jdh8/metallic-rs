@@ -13,14 +13,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Run tests
       run: cargo test --verbose
 
   test-without-fma:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Run tests without FMA
       run: cargo test --verbose
       env:
@@ -29,6 +29,6 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Check formatting
       run: cargo fmt --check

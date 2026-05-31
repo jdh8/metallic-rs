@@ -14,7 +14,7 @@ jobs:
     outputs:
       benches: ${{ steps.benches.outputs.list }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Discover bench targets
       id: benches
@@ -42,7 +42,7 @@ jobs:
       matrix:
         bench: ${{ fromJson(needs.prepare.outputs.benches) }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Restore Rust cache
       uses: Swatinem/rust-cache@v2
@@ -54,7 +54,7 @@ jobs:
       run: cargo bench --bench ${{ matrix.bench }} -- --output-format bencher | tee bench-output-${{ matrix.bench }}.txt
 
     - name: Upload benchmark output
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: bench-output-${{ matrix.bench }}
         path: bench-output-${{ matrix.bench }}.txt
@@ -63,7 +63,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Restore Rust cache
       uses: Swatinem/rust-cache@v2
