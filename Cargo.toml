@@ -33,6 +33,8 @@ core-math = ["dep:core-math"]
 opt-level = 3
 
 [lib]
+# Prevents cargo bench from running the lib test harness as a benchmark target.
+# This avoids errors when passing Criterion/bencher options like --output-format.
 bench = false
 
 [[bench]]
