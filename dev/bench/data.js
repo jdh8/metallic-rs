@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780285439050,
+  "lastUpdate": 1780286619667,
   "repoUrl": "https://github.com/jdh8/metallic-rs",
   "entries": {
     "Benchmark": [
@@ -1432,6 +1432,78 @@ window.BENCHMARK_DATA = {
           {
             "name": "libm::ldexpf",
             "value": 15,
+            "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "committer": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "distinct": true,
+          "id": "a34f196554b6ce7d1215421ad8ee1b9fc286910c",
+          "message": "test: split integration tests to one file per function\n\nCI parallelized tests only at the file level, so the *_univariate files\nran dozens of independent functions sequentially in a single matrix job.\nSplit each into one file per function (mirroring benches/), moving shared\nhelpers into tests/common. The prepare job's tests/*.rs glob auto-scales\nthe matrix from 6 to 48 targets with no workflow change.\n\nRename f32_x87.rs -> f32_log.rs to match benches/f32_log.rs.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-06-01T11:57:37+08:00",
+          "tree_id": "b2cd2240fa05fd566e802e16d94280c7503c94f7",
+          "url": "https://github.com/jdh8/metallic-rs/commit/a34f196554b6ce7d1215421ad8ee1b9fc286910c"
+        },
+        "date": 1780286619275,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "metallic::f32::asinh",
+            "value": 9,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::asinhf",
+            "value": 9,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::asinh",
+            "value": 32,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::asinhf",
+            "value": 19,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f64::cbrt",
+            "value": 22,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::cbrt",
+            "value": 21,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f64::cbrt",
+            "value": 25,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::cbrt",
+            "value": 22,
             "range": "± 0",
             "unit": "ns/iter"
           }
