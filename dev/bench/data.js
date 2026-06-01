@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780299873184,
+  "lastUpdate": 1780304580749,
   "repoUrl": "https://github.com/jdh8/metallic-rs",
   "entries": {
     "Benchmark": [
@@ -1565,6 +1565,102 @@ window.BENCHMARK_DATA = {
             "name": "libm::powf",
             "value": 70,
             "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "committer": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "distinct": true,
+          "id": "2282b25459d256e0d0331fbdc99ec69aa356b1d7",
+          "message": "bench: sample inputs uniformly over f32 representations\n\n`rand::random::<f32>()` is uniform on [0, 1), so the bare `_` form of `bench!`\nnever exercised negatives, large magnitudes (trig argument reduction),\nsubnormals, or special-case paths.\n\nReplace it with representation-uniform sampling -- each f32 bit pattern equally\nlikely -- mirroring the exhaustive `test_all_f32` population:\n\n- `random_f32()` draws any of the 2^32 bit patterns (NaN/±inf included).\n- `random_f32_in(lo..=hi)` draws uniformly over the representations in a range\n  via the sign-magnitude -> monotonic-ordered-u32 flip (Dawson's ULP order).\n- The `_` and `in` macro arms now route through these; ranges become `..=`.\n\nAlso fix the acosh bench, which sampled `random::<f32>().abs()` in [0, 1) --\nentirely outside acosh's domain [1, inf).\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-06-01T16:55:14+08:00",
+          "tree_id": "76e349ada128fa3a61731d0efc9596890b75400a",
+          "url": "https://github.com/jdh8/metallic-rs/commit/2282b25459d256e0d0331fbdc99ec69aa356b1d7"
+        },
+        "date": 1780304579835,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "metallic::f32::exp",
+            "value": 16,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::expf",
+            "value": 17,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::exp",
+            "value": 16,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::expf",
+            "value": 17,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::log",
+            "value": 29,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::log",
+            "value": 29,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::round",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::round",
+            "value": 4,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::roundf",
+            "value": 10,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::tgamma",
+            "value": 35,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::tgammaf",
+            "value": 19,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::tgammaf",
+            "value": 64,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
