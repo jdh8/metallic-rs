@@ -15,17 +15,34 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 ## Enable [fused multiply-add][fma] for best performance
 
-This crate extensively uses the fused multiply-add instruction if available.
-Sadly, Rust does not enable it in the default `generic` target.  To achieve best
-performance, add the following to your `.cargo/config.toml` either in **your**
-project or home directory:
+This crate leans heavily on the fused multiply-add instruction.  Most modern
+targets &mdash; AArch64, RISC-V with `Zfa`, WebAssembly with `relaxed-simd`
+&mdash; enable it by default.  On x86-64, however, Rust's default `generic`
+target does not, so the crate silently falls back to a slower path with
+[double rounding][double-rounding] and emits a `cargo:warning` from `build.rs`
+at compile time.
 
-```toml
-[build]
-rustflags = ["-Ctarget-cpu=native"]
-```
+To opt in, ask `rustc` for a CPU baseline that includes FMA.  Pick whichever is
+most convenient:
+
+- **Per project** &mdash; commit a `.cargo/config.toml`:
+
+  ```toml
+  [target.'cfg(target_arch = "x86_64")']
+  rustflags = ["-Ctarget-cpu=x86-64-v3"]   # AVX2 + FMA, portable across modern CPUs
+  ```
+
+- **Per user** &mdash; put the same snippet in `~/.cargo/config.toml`; it
+  applies to every crate you build.
+- **Per invocation** &mdash; `RUSTFLAGS="-Ctarget-cpu=x86-64-v3" cargo build --release`.
+
+For maximum local performance, use `-Ctarget-cpu=native` instead so the
+compiler is free to use every instruction your CPU supports (e.g. AVX-512).
+Avoid `native` for redistributed binaries or shared CI caches: a binary built
+on a newer CPU will trap with `SIGILL` on an older one.
 
 [fma]: https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation
+[double-rounding]: https://en.wikipedia.org/wiki/Rounding#Double_rounding
 
 ## Using faster functions from [CORE-MATH]
 
