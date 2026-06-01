@@ -52,17 +52,6 @@ const fn u64_sign_bit(sign: Sign) -> u64 {
 #[allow(clippy::missing_const_for_fn)]
 #[inline]
 fn mul_add(x: f64, y: f64, a: f64) -> f64 {
-    // x86/x86_64 without compile-time FMA is the only case that can't delegate
-    // directly: on those targets `f64::mul_add` without the feature flag lowers
-    // to a slow libm call rather than a single VFMADD instruction.  Every other
-    // target (compile-time FMA, aarch64 where fp-armv8 is baseline, wasm32, …)
-    // just delegates to Rust's `mul_add`, which LLVM lowers correctly.
-    #[cfg(not(all(
-        not(target_feature = "fma"),
-        any(target_arch = "x86", target_arch = "x86_64"),
-    )))]
-    return x.mul_add(y, a);
-
     // x86/x86_64 without compile-time FMA: runtime dispatch.
     // `is_x86_feature_detected!` caches via an AtomicU8 (one-time CPUID cost),
     // so subsequent calls pay only an atomic load plus a branch the predictor
@@ -73,18 +62,25 @@ fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     ))]
     {
         #[target_feature(enable = "fma")]
-        unsafe fn fma_impl(x: f64, y: f64, a: f64) -> f64 {
+        unsafe fn force_fma(x: f64, y: f64, a: f64) -> f64 {
             x.mul_add(y, a)
         }
 
         if std::is_x86_feature_detected!("fma") {
             // SAFETY: runtime check confirmed FMA is available on this CPU.
-            return unsafe { fma_impl(x, y, a) };
+            return unsafe { force_fma(x, y, a) };
         }
 
         #[allow(clippy::suboptimal_flops)]
         return x * y + a;
     }
+
+    // x86/x86_64 without compile-time FMA is the only case that can't delegate
+    // directly: on those targets `f64::mul_add` without the feature flag lowers
+    // to a slow libm call rather than a single VFMADD instruction.  Every other
+    // target (compile-time FMA, aarch64 where fp-armv8 is baseline, wasm32, …)
+    // just delegates to Rust's `mul_add`, which LLVM lowers correctly.
+    x.mul_add(y, a)
 }
 
 /// Const evaluation of 2<sup>`n`</sup>
