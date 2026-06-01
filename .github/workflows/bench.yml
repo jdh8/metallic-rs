@@ -8,6 +8,20 @@ permissions:
   contents: write
 env:
   CARGO_TERM_COLOR: always
+  # `build` and each `bench` matrix job land on different GitHub-hosted runners
+  # with heterogeneous CPUs, and `bench` reuses the cached binary from `build`.
+  # `-Ctarget-cpu=native` would crash with SIGILL when the build host has newer
+  # ISA extensions than the bench host. `x86-64-v3` (AVX2 + FMA) is supported by
+  # every current GitHub-hosted Ubuntu runner and exercises metallic's FMA path.
+  RUSTFLAGS: -Ctarget-cpu=x86-64-v3
+
+defaults:
+  run:
+    # GHA's default `bash -e {0}` has no `pipefail`, so `cargo bench … | tee …`
+    # would mask a crash: tee returns 0, the step is "successful", and an empty
+    # artifact is uploaded. Force pipefail across the workflow.
+    shell: bash
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -18,7 +32,6 @@ jobs:
 
     - name: Discover bench targets
       id: benches
-      shell: bash
       run: |
         list=$(awk '
           /^\[\[bench\]\]/ { in_bench = 1; next }
@@ -51,13 +64,20 @@ jobs:
         save-if: false
 
     - name: Run benchmark
-      run: cargo bench --bench ${{ matrix.bench }} -- --output-format bencher | tee bench-output-${{ matrix.bench }}.txt
+      run: |
+        out=bench-output-${{ matrix.bench }}.txt
+        cargo bench --bench ${{ matrix.bench }} -- --output-format bencher | tee "$out"
+        # Belt-and-braces: even if a future change re-loses pipefail, refuse to
+        # upload an empty file that would silently drop this bench from the
+        # published dataset.
+        test -s "$out"
 
     - name: Upload benchmark output
       uses: actions/upload-artifact@v7
       with:
         name: bench-output-${{ matrix.bench }}
         path: bench-output-${{ matrix.bench }}.txt
+        if-no-files-found: error
 
   build:
     needs: prepare
@@ -84,7 +104,6 @@ jobs:
         path: bench-outputs
 
     - name: Merge benchmark outputs
-      shell: bash
       run: |
         find bench-outputs -name 'bench-output-*.txt' -type f -print0 \
           | sort -z \
