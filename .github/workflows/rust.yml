@@ -10,22 +10,113 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.tests.outputs.list }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Discover test targets
+      id: tests
+      shell: bash
+      run: |
+        list=$(basename -a -s .rs tests/*.rs | jq -R -s -c 'split("\n")[:-1]')
+        echo "list=$list" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build test binaries
+      run: cargo test --no-run --verbose
+
+  build-without-fma:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C target-feature=-fma"
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-without-fma-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build test binaries without FMA
+      run: cargo test --no-run --verbose
+
+  test:
+    needs:
+    - prepare
+    - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJson(needs.prepare.outputs.tests) }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --test ${{ matrix.test }} --verbose
+
+  test-lib:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+    - name: Run lib tests
+      run: cargo test --lib --verbose
 
   test-without-fma:
+    needs:
+    - prepare
+    - build-without-fma
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C target-feature=-fma"
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJson(needs.prepare.outputs.tests) }}
     steps:
     - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-without-fma-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
     - name: Run tests without FMA
-      run: cargo test --verbose
-      env:
-        RUSTFLAGS: "-C target-feature=-fma"
-  
+      run: cargo test --test ${{ matrix.test }} --verbose
+
+  test-lib-without-fma:
+    needs: build-without-fma
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C target-feature=-fma"
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-without-fma-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+    - name: Run lib tests without FMA
+      run: cargo test --lib --verbose
+
   format:
     runs-on: ubuntu-latest
     steps:
