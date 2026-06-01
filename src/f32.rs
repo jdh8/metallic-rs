@@ -725,97 +725,102 @@ pub fn tanh(x: f32) -> f32 {
     magnitude.copysign(x)
 }
 
+/// Minimax coefficients of `P` in `asin(t) = t + t³·P(t²)` on `t² ∈ [0, ¼]`.
+///
+/// Shared by the `|x| < ½` branch of [`asin`] and by both branches of [`acos`].
+/// For `|x| ≥ ½`, reflecting through `s = √((1−|x|)/2) ∈ [0, ½]` keeps the
+/// kernel argument in `[0, ¼]`, so the same `P` serves the whole domain:
+/// `asin(x) = π/2 − 2·asin(s)` and `acos(x) = 2·asin(s)` (or `π − 2·asin(s)`).
+///
+/// Relative error ≈ 2⁻⁴⁶, generated with
+/// `ratapprox --function="(asin(sqrt(x))-sqrt(x))/(x*sqrt(x))"
+///   --dom="[1e-30,0.25]" --num=[1,x,x^2,...,x^10] --den=[1]`.
+const ASIN_NEAR_ZERO: [f64; 11] = [
+    0.166_666_666_666_669_68,
+    0.074_999_999_997_106_53,
+    0.044_642_857_599_726_166,
+    0.030_381_916_397_495_97,
+    0.022_373_038_603_277_58,
+    0.017_336_763_281_738_436,
+    0.014_144_868_382_976_405,
+    0.010_267_430_424_776_843,
+    0.015_521_003_704_904_501,
+    -0.006_965_450_747_007_442,
+    0.027_986_438_522_030_702,
+];
+
+/// `asin(t)` for `t ∈ [0, ½]`, where `u = t²`, via `t + t³·P(t²)`.
+#[inline]
+fn asin_near_zero(t: f64, u: f64) -> f64 {
+    crate::mul_add(t * u, crate::poly(u, &ASIN_NEAR_ZERO), t)
+}
+
 /// Arccosine
+///
+/// `acos(x) = π/2 − asin(x)`.  For `|x| < ½` this subtracts the near-zero
+/// kernel [`asin_near_zero`] directly (no square root); for `|x| ≥ ½` it
+/// reflects through `s = √((1−|x|)/2) ∈ [0, ½]`, giving `acos(x) = 2·asin(s)`
+/// for `x ≥ 0` and `π − 2·asin(s)` for `x < 0`.  Both forms are evaluated and
+/// selected branchlessly so random inputs pay no misprediction penalty.
 #[must_use]
 #[inline]
 pub fn acos(x: f32) -> f32 {
-    let y = {
-        let x: f64 = x.abs().into();
-        crate::poly(
-            x,
-            &[
-                1.570_796_326_794_895_7,
-                -2.146_018_366_019_891_2e-1,
-                8.904_862_249_163_578e-2,
-                -5.079_281_229_679_732e-2,
-                3.368_124_006_642_692e-2,
-                -2.437_373_657_488_884e-2,
-                1.866_733_156_855_094_8e-2,
-                -1.485_707_820_782_702e-2,
-                1.209_263_142_298_289e-2,
-                -9.833_619_072_388_472e-3,
-                7.685_589_578_218_092e-3,
-                -5.463_397_714_481_38e-3,
-                3.307_640_446_073_071_4e-3,
-                -1.585_712_772_872_508_6e-3,
-                5.515_942_277_755_394e-4,
-                -1.219_755_299_410_277_6e-4,
-                1.275_454_772_275_258_2e-5,
-            ],
-        ) * (1.0 - x).sqrt()
+    let xf: f64 = x.into();
+    let a = xf.abs();
+
+    // |x| < ½:  π/2 − asin(x)
+    let near = core::f64::consts::FRAC_PI_2 - asin_near_zero(xf, xf * xf);
+
+    // |x| ≥ ½:  2·asin(s) folded about π for x < 0, s = √((1−|x|)/2)
+    let u = 0.5 * (1.0 - a);
+    let two = 2.0 * asin_near_zero(u.sqrt(), u);
+    let far = if xf.is_sign_positive() {
+        two
+    } else {
+        core::f64::consts::PI - two
     };
 
+    let y = (if a < 0.5 { near } else { far }) as f32;
+
+    // Hard-to-round cases near π/2 (tiny x, near-zero branch).
     match x {
         1.589_325_5e-8 => 1.570_796_4,
         2.486_864_7e-4 => 1.570_547_7,
-        x if x.is_sign_positive() => y as f32,
-        _ => (core::f64::consts::PI - y) as f32,
+        _ => y,
     }
 }
 
 /// Arcsine
+///
+/// For `|x| < ½`, evaluate the near-zero kernel [`asin_near_zero`] directly.
+/// For `|x| ≥ ½`, reflect through `s = √((1−|x|)/2) ∈ [0, ½]` with
+/// `asin(x) = π/2 − 2·asin(s)` (sign restored afterward), reusing the same
+/// kernel.  Both forms are evaluated and selected branchlessly.
 #[must_use]
 #[inline]
 pub fn asin(x: f32) -> f32 {
-    let sin = x.abs();
+    let xf: f64 = x.into();
+    let a = xf.abs();
 
-    if sin < 0.5 {
-        let x: f64 = x.into();
-        let y = x * x;
-        let y = y * crate::poly(
-            y,
-            &[
-                0.166_666_666_666_669_9,
-                0.074_999_999_996_942_23,
-                0.044_642_857_621_259_74,
-                0.030_381_915_298_596_9,
-                0.022_373_067_117_079_332,
-                0.017_336_338_079_820_927,
-                0.014_148_729_679_087_69,
-                0.010_245_724_097_753_366,
-                0.015_594_752_512_270_386,
-                -0.007_104_188_100_086_482_5,
-                0.028_097_370_567_441_11,
-            ],
-        );
+    // |x| < ½:  asin(x) directly
+    let near = asin_near_zero(xf, xf * xf);
 
-        return crate::mul_add(y, x, x) as f32;
-    }
-
-    let y = if sin.eq(&0.532_136_56) {
-        0.561_122_06
+    // |x| ≥ ½:  ±(π/2 − 2·asin(s)), s = √((1−|x|)/2)
+    let u = 0.5 * (1.0 - a);
+    let two = 2.0 * asin_near_zero(u.sqrt(), u);
+    let far = if xf.is_sign_positive() {
+        core::f64::consts::FRAC_PI_2 - two
     } else {
-        let sin: f64 = sin.into();
-        let y = crate::poly(
-            sin,
-            &[
-                -1.570_795_268_727_950_5,
-                2.145_844_720_538_429_6e-1,
-                -8.891_815_130_471_556e-2,
-                5.019_724_059_139_869e-2,
-                -3.183_089_187_114_656e-2,
-                2.021_070_346_378_044_8e-2,
-                -1.159_335_145_410_863_3e-2,
-                5.441_837_134_625_65e-3,
-                -1.883_759_349_016_505e-3,
-                4.174_581_850_783_569e-4,
-                -4.385_109_488_852_58e-5,
-            ],
-        );
-        crate::mul_add((1.0 - sin).sqrt(), y, core::f64::consts::FRAC_PI_2) as f32
+        two - core::f64::consts::FRAC_PI_2
     };
 
-    y.copysign(x)
+    let y = (if a < 0.5 { near } else { far }) as f32;
+
+    // Hard-to-round case in the reflection branch.
+    match x.abs() {
+        0.532_136_56 => 0.561_122_06_f32.copysign(x),
+        _ => y,
+    }
 }
 
 /// Arctangent
