@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780286619667,
+  "lastUpdate": 1780299873184,
   "repoUrl": "https://github.com/jdh8/metallic-rs",
   "entries": {
     "Benchmark": [
@@ -1504,6 +1504,66 @@ window.BENCHMARK_DATA = {
           {
             "name": "libm::cbrt",
             "value": 22,
+            "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "committer": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "distinct": true,
+          "id": "082b6108b8ba9ffacc4eec7771484a50bff9dc4e",
+          "message": "fix(f32): use saturating `as i64` instead of unsafe to_int_unchecked\n\nA NaN input slipped past the `<`/`>` range guards (every NaN comparison\nis false) and reached `n.to_int_unchecked()` with n = NaN, which is UB.\nThe resulting garbage i64 was platform-dependent: benign locally, but on\nCI large enough to overflow the i64 add in fast_ldexp, tripping debug\noverflow checks (the unreproducible cosh panic).\n\nReplace the unsafe conversion with a plain `n as i64`. For finite\nin-range inputs the result is identical; for NaN it saturates to 0 while\nNaN propagates through the mantissa, so exp/exp2/exp10/exp_m1/cosh/sinh/\ntanh all return NaN without panicking. This removes the unsafe block\nentirely. Benchmarks show no net change.",
+          "timestamp": "2026-06-01T15:40:45+08:00",
+          "tree_id": "aae2e56af1a82aaa6e47a2601687d3e30a70f1b3",
+          "url": "https://github.com/jdh8/metallic-rs/commit/082b6108b8ba9ffacc4eec7771484a50bff9dc4e"
+        },
+        "date": 1780299872797,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "metallic::f32::ldexp",
+            "value": 11,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::ldexpf",
+            "value": 22,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::powf",
+            "value": 20,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::powf",
+            "value": 24,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::powf",
+            "value": 17,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::powf",
+            "value": 70,
             "range": "± 0",
             "unit": "ns/iter"
           }
