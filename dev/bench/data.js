@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780273702124,
+  "lastUpdate": 1780277964499,
   "repoUrl": "https://github.com/jdh8/metallic-rs",
   "entries": {
     "Benchmark": [
@@ -874,6 +874,138 @@ window.BENCHMARK_DATA = {
           {
             "name": "libm::tanf",
             "value": 10,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "committer": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "distinct": true,
+          "id": "13630e7f882a91ad11b018a42839bccbbf0ece37",
+          "message": "feat: enforce FMA for downstream users via runtime dispatch and build warning\n\nAdd build.rs to warn on x86/x86_64 when FMA is not enabled at compile time.\nRefactor crate::mul_add with a three-arm cfg strategy: compile-time FMA (Arm A,\nunchanged), x86/x86_64 runtime dispatch via #[target_feature(enable = \"fma\")]\n(Arm B, new), and non-x86 fallback using f64::mul_add directly (Arm C, correct\nsingle rounding on aarch64).\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-06-01T09:36:01+08:00",
+          "tree_id": "a6bbc0190b706ea8bfd0610b54eebdecc5cac7bc",
+          "url": "https://github.com/jdh8/metallic-rs/commit/13630e7f882a91ad11b018a42839bccbbf0ece37"
+        },
+        "date": 1780277964202,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "metallic::f32::asinh",
+            "value": 14,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::asinhf",
+            "value": 13,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::asinh",
+            "value": 38,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::asinhf",
+            "value": 24,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::lgamma",
+            "value": 31,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::lgammaf",
+            "value": 22,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::lgammaf",
+            "value": 30,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::log2",
+            "value": 9,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::log2f",
+            "value": 8,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::log2",
+            "value": 8,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::log2f",
+            "value": 12,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::sinh",
+            "value": 13,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::sinhf",
+            "value": 7,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::sinh",
+            "value": 18,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::sinhf",
+            "value": 16,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::tgamma",
+            "value": 41,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::tgammaf",
+            "value": 35,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::tgammaf",
+            "value": 120,
             "range": "± 1",
             "unit": "ns/iter"
           }
