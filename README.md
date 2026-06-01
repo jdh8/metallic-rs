@@ -102,7 +102,6 @@ library is the default [rounding half to even][round-even].
     - [x] Faithful rounding
     - [ ] Correct rounding
   - [x] Trigonometric and hyperbolic functions
-    - [ ] Make trigonometric functions faster than [CORE-MATH]
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
