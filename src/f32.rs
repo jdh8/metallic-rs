@@ -1449,35 +1449,41 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
 }
 
 /// Tangent function
+///
+/// After [`kernel::rem_pio2`] reduces `x` to `y ∈ [-π/4, π/4]` with quadrant
+/// `q`, evaluate `tan(y) = y·p(y²)/q(y²)` as a degree-3/3 rational.  In an odd
+/// quadrant we want `-cot(y) = -q(y²)/(y·p(y²))`, the same two polynomials
+/// with numerator and denominator swapped.
+///
+/// Coefficients (relative error ≈ 2⁻⁵¹) generated with
+/// `ratapprox --function="tan(sqrt(x))/sqrt(x)" --dom="[0.0001,0.6168]"
+///   --type=[3,3] --numF=D --denF=D`.
 #[must_use]
 #[inline]
 pub fn tan(x: f32) -> f32 {
+    const NUM: [f64; 4] = [
+        1.0,
+        -0.128_282_401_241_495_37,
+        2.805_799_105_412_74e-3,
+        -7.482_480_453_622_507e-6,
+    ];
+    const DEN: [f64; 4] = [
+        1.0,
+        -0.461_615_734_574_826_74,
+        2.334_437_729_696_323e-2,
+        -2.084_309_371_418_349_5e-4,
+    ];
+
     let y = match x.abs() {
-        3013.517 => 0.894_440_53,
-        2.898_609_4e37 => 0.792_096_8,
         x if !x.is_finite() => f32::NAN,
         x => {
-            let (q, x) = kernel::rem_pio2(x);
-            let xcotx = crate::poly(
-                x * x,
-                &[
-                    9.999_999_999_999_997e-1,
-                    -3.333_333_333_332_465_5e-1,
-                    -2.222_222_222_589_263_8e-2,
-                    -2.116_402_056_643_148_4e-3,
-                    -2.116_406_990_379_701_1e-4,
-                    -2.137_556_903_554_936_4e-5,
-                    -2.170_374_883_723_272e-6,
-                    -2.100_327_091_903_891_5e-7,
-                    -2.970_220_949_700_791e-8,
-                ],
-            );
-
-            let y = match q & 1 {
-                0 => x / xcotx,
-                _ => xcotx / -x,
-            };
-            y as f32
+            let (q, y) = kernel::rem_pio2(x);
+            let u = y * y;
+            let p = crate::poly(u, &NUM);
+            let d = crate::poly(u, &DEN);
+            let yp = y * p;
+            let result = if q & 1 == 0 { yp / d } else { -d / yp };
+            result as f32
         }
     };
 
