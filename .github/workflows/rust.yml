@@ -8,6 +8,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Enable FMA + AVX2 across the workflow so the "FMA" job matrix exercises the
+  # real fast path. `x86-64-v3` is portable across all GitHub-hosted Ubuntu
+  # runners, so a binary built in one job runs in every matrix shard.
+  RUSTFLAGS: -Ctarget-cpu=x86-64-v3
 
 jobs:
   prepare:
