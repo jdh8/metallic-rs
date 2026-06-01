@@ -52,12 +52,43 @@ const fn u64_sign_bit(sign: Sign) -> u64 {
 #[allow(clippy::missing_const_for_fn)]
 #[inline]
 fn mul_add(x: f64, y: f64, a: f64) -> f64 {
+    // Arm A: compile-time FMA guaranteed — zero runtime overhead.
     #[cfg(target_feature = "fma")]
     return x.mul_add(y, a);
 
-    #[cfg(not(target_feature = "fma"))]
-    #[allow(clippy::suboptimal_flops)]
-    return x * y + a;
+    // Arm B: x86/x86_64 without compile-time FMA.
+    // `is_x86_feature_detected!` caches via an AtomicU8 (one-time CPUID cost),
+    // so subsequent calls pay only an atomic load plus a branch the predictor
+    // always gets right.  When this function is inlined into a loop the branch
+    // is typically hoisted by the optimiser.
+    #[cfg(all(
+        not(target_feature = "fma"),
+        any(target_arch = "x86", target_arch = "x86_64")
+    ))]
+    {
+        #[target_feature(enable = "fma")]
+        unsafe fn fma_impl(x: f64, y: f64, a: f64) -> f64 {
+            x.mul_add(y, a)
+        }
+
+        if std::is_x86_feature_detected!("fma") {
+            // SAFETY: runtime check confirmed FMA is available on this CPU.
+            return unsafe { fma_impl(x, y, a) };
+        }
+
+        #[allow(clippy::suboptimal_flops)]
+        return x * y + a;
+    }
+
+    // Arm C: non-x86 targets without compile-time FMA (aarch64, wasm32, …).
+    // On aarch64, LLVM lowers `f64::mul_add` to a native FMADD because
+    // fp-armv8 is a mandatory baseline feature, so this is hardware-fast.
+    // On wasm32 it becomes a libm call — correct, no hardware FMA available.
+    #[cfg(all(
+        not(target_feature = "fma"),
+        not(any(target_arch = "x86", target_arch = "x86_64")),
+    ))]
+    return x.mul_add(y, a);
 }
 
 /// Const evaluation of 2<sup>`n`</sup>
