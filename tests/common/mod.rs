@@ -102,6 +102,31 @@ pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
     }));
 }
 
+/// Check if `f` returns the same result as `g` for every `f32` value
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+pub fn test_all_f32<Output: Identity + Debug>(
+    f: impl Fn(f32) -> Output,
+    g: impl Fn(f32) -> Output,
+) {
+    test_univariate_cases(f, g, (0..=u32::MAX).map(f32::from_bits));
+}
+
+/// Check if `f` returns the same result as `g` for the provided pairs
+///
+/// By "same result", I mean semantic identity as defined by [`is`].
+pub fn test_bivariate_cases(
+    f: impl Fn(f32, f32) -> f32,
+    g: impl Fn(f32, f32) -> f32,
+    cases: impl Iterator<Item = [f32; 2]>,
+) {
+    truncate_errors(cases.filter_map(|[x, y]| {
+        let f = f(x, y);
+        let g = g(x, y);
+        (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
+    }));
+}
+
 pub fn parse_case_file<T, E>(
     filename: impl AsRef<Path>,
     mut parse: impl FnMut(&str) -> Result<T, E>,
@@ -119,4 +144,68 @@ pub fn parse_case_file<T, E>(
         })
         .into_iter()
         .flatten()
+}
+
+pub enum ParsePairError {
+    EmptyField,
+    Hexf,
+}
+
+impl From<hexf_parse::ParseHexfError> for ParsePairError {
+    fn from(_: hexf_parse::ParseHexfError) -> Self {
+        Self::Hexf
+    }
+}
+
+pub fn parse_f32(s: &str) -> Result<f32, hexf_parse::ParseHexfError> {
+    fn fallback(s: &str) -> Option<f32> {
+        match s {
+            "snan" => Some(f32::from_bits(f32::NAN.to_bits() | 1)),
+            #[allow(clippy::cast_precision_loss)]
+            s if s.starts_with("0x") => u32::from_str_radix(&s[2..], 16).ok().map(|x| x as f32),
+            _ => None,
+        }
+    }
+
+    match hexf_parse::parse_hexf32(s, true) {
+        Ok(value) => Ok(value),
+        Err(e) => s.parse().or_else(|_| {
+            match s.bytes().next() {
+                Some(b'+') => fallback(&s[1..]),
+                Some(b'-') => fallback(&s[1..]).map(core::ops::Neg::neg),
+                _ => fallback(s),
+            }
+            .ok_or(e)
+        }),
+    }
+}
+
+pub fn parse_f32_pair(s: &str) -> Result<[f32; 2], ParsePairError> {
+    let mut fields = s.splitn(2, ',').map(str::trim_ascii);
+    let x = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    let y = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    Ok([x, y])
+}
+
+pub fn parse_f64(s: &str) -> Result<f64, hexf_parse::ParseHexfError> {
+    fn fallback(s: &str) -> Option<f64> {
+        match s {
+            "snan" => Some(f64::from_bits(f64::NAN.to_bits() | 1)),
+            #[allow(clippy::cast_precision_loss)]
+            s if s.starts_with("0x") => u64::from_str_radix(&s[2..], 16).ok().map(|x| x as f64),
+            _ => None,
+        }
+    }
+
+    match hexf_parse::parse_hexf64(s, true) {
+        Ok(value) => Ok(value),
+        Err(e) => s.parse().or_else(|_| {
+            match s.bytes().next() {
+                Some(b'+') => fallback(&s[1..]),
+                Some(b'-') => fallback(&s[1..]).map(core::ops::Neg::neg),
+                _ => fallback(s),
+            }
+            .ok_or(e)
+        }),
+    }
 }
