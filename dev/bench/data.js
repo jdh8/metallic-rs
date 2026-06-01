@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780272288094,
+  "lastUpdate": 1780273702124,
   "repoUrl": "https://github.com/jdh8/metallic-rs",
   "entries": {
     "Benchmark": [
@@ -803,6 +803,78 @@ window.BENCHMARK_DATA = {
             "name": "libm::log1pf",
             "value": 16,
             "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "committer": {
+            "email": "chen.pang.he@jdh8.org",
+            "name": "Chen-Pang He",
+            "username": "jdh8"
+          },
+          "distinct": true,
+          "id": "bb12bc6f3ee9f2bf9609d79d2eb0ada96e700573",
+          "message": "ci: parallelize tests with matrix and shared cache\n\nMirror the bench.yml pattern: a prepare job discovers integration test\ntargets, a build job compiles them once into a shared Rust cache, and a\nmatrix job runs each test file in parallel. Repeated for the FMA variant.\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-06-01T08:24:24+08:00",
+          "tree_id": "1c86ac3939a16077f42e77b7d6033177f7a2148e",
+          "url": "https://github.com/jdh8/metallic-rs/commit/bb12bc6f3ee9f2bf9609d79d2eb0ada96e700573"
+        },
+        "date": 1780273701338,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "metallic::f32::acos",
+            "value": 15,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::acosf",
+            "value": 12,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::acos",
+            "value": 20,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::acosf",
+            "value": 17,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "metallic::f32::tan",
+            "value": 14,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "core_math::tanf",
+            "value": 11,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "f32::tan",
+            "value": 19,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "libm::tanf",
+            "value": 10,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
