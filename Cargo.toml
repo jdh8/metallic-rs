@@ -28,6 +28,7 @@ regex = "1"
 
 [features]
 core-math = ["dep:core-math"]
+_no_fma = []
 
 [profile.dev]
 opt-level = 3

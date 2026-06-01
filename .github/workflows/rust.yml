@@ -49,6 +49,18 @@ jobs:
     - name: Build test binaries without FMA
       run: cargo test --no-run --verbose
 
+  build-nofma-fallback:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-nofma-fallback-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build test binaries forcing no-FMA fallback
+      run: cargo test --no-run --features _no_fma --verbose
+
   test:
     needs:
     - prepare
@@ -116,6 +128,38 @@ jobs:
         save-if: false
     - name: Run lib tests without FMA
       run: cargo test --lib --verbose
+
+  test-nofma-fallback:
+    needs:
+    - prepare
+    - build-nofma-fallback
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJson(needs.prepare.outputs.tests) }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-nofma-fallback-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+    - name: Run tests forcing no-FMA fallback
+      run: cargo test --test ${{ matrix.test }} --features _no_fma --verbose
+
+  test-lib-nofma-fallback:
+    needs: build-nofma-fallback
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-nofma-fallback-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+    - name: Run lib tests forcing no-FMA fallback
+      run: cargo test --lib --features _no_fma --verbose
 
   format:
     runs-on: ubuntu-latest
