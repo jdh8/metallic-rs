@@ -651,6 +651,10 @@ pub fn acosh(x: f32) -> f32 {
 }
 
 /// Hyperbolic cosine
+///
+/// Uses the same addition formula as [`sinh`]:
+/// `cosh(n·ln2 + r) = cosh(n·ln2)·cosh(r) + sinh(n·ln2)·sinh(r)`,
+/// reusing [`COSH_CORE`] and [`SINH_CORE`] with no division.
 #[must_use]
 #[inline]
 pub fn cosh(x: f32) -> f32 {
@@ -660,8 +664,22 @@ pub fn cosh(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    let y = finite_exp(x.into());
-    (0.5 * (y + y.recip())) as f32
+    let x: f64 = x.into();
+    let n = (x * core::f64::consts::LOG2_E).round_ties_even();
+    let r = crate::mul_add(n, -LN_2_HI, x);
+    let r = crate::mul_add(n, -LN_2_LO, r);
+    let r2 = r * r;
+
+    let cosh_r = crate::poly(r2, &COSH_CORE);
+    let sinh_r = r * crate::poly(r2, &SINH_CORE);
+
+    let n = n as i64;
+    let pow_n = kernel::fast_ldexp(1.0, n);
+    let pow_neg_n = kernel::fast_ldexp(1.0, -n);
+    let sinh_n = 0.5 * (pow_n - pow_neg_n);
+    let cosh_n = 0.5 * (pow_n + pow_neg_n);
+
+    crate::mul_add(cosh_n, cosh_r, sinh_n * sinh_r) as f32
 }
 
 /// `sinh(r) / r = P(r²)` on `r ∈ [-½·ln 2, ½·ln 2]`, relative error ≈ 2⁻⁴³
