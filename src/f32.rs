@@ -289,16 +289,80 @@ pub fn exp10(x: f32) -> f32 {
     kernel::fast_ldexp(x, n as i64) as f32
 }
 
+/// `32 · log₂e = 32 / ln2`, the scale of the `exp_m1` table reduction
+const FRAC_32_LN_2: f64 = 46.166_241_308_446_83;
+
+/// `2^(j/32)` for `j` in `0..32` — the table for [`exp_m1`]'s `1/32`-step reduction
+///
+/// Built from `mpmath.power(2, j/32)` rounded to `f64`.
+const EXP2_32: [f64; 32] = [
+    1.0,
+    1.021_897_148_654_116_6,
+    1.044_273_782_427_413_8,
+    1.067_140_400_676_823_7,
+    1.090_507_732_665_257_7,
+    1.114_386_742_595_892_4,
+    1.138_788_634_756_691_6,
+    1.163_724_858_777_577_5,
+    1.189_207_115_002_721,
+    1.215_247_359_980_469,
+    1.241_857_812_073_484,
+    1.269_050_957_191_733_2,
+    1.296_839_554_651_009_6,
+    1.325_236_643_159_741_3,
+    1.354_255_546_936_892_7,
+    1.383_909_881_963_832,
+    1.414_213_562_373_095_1,
+    1.445_180_806_977_046_7,
+    1.476_826_145_939_499_3,
+    1.509_164_427_593_422_8,
+    1.542_210_825_407_940_7,
+    1.575_980_845_107_886_5,
+    1.610_490_331_949_254_3,
+    1.645_755_478_153_965,
+    1.681_792_830_507_429,
+    1.718_619_298_122_478,
+    1.756_252_160_373_299_5,
+    1.794_709_075_003_107_2,
+    1.834_008_086_409_342_4,
+    1.874_167_634_110_3,
+    1.915_206_561_397_147_4,
+    1.957_144_124_175_400_2,
+];
+
+/// Minimax of `2^(h/32)` on `h ∈ [−½, ½]`, low-degree first — `exp_m1`'s kernel
+///
+/// Degree 4, max absolute error `2⁻⁴³·⁵`, from
+/// `mpmath.chebyfit(lambda h: 2**(h/32), [-0.5, 0.5], 5)`.  Multiplied by a table
+/// entry `2^(j/32)` and scaled by `2^q`, it reconstructs `exp(x)` over a `1/32`-
+/// step grid, so the polynomial only spans a `1/64`-wide band of `ln2`.
+const EXP2_32_POLY: [f64; 5] = [
+    1.0,
+    0.021_660_849_391_722_17,
+    0.000_234_596_198_199_444_9,
+    1.693_863_390_315_564_4e-6,
+    9.172_607_532_092_245e-9,
+];
+
 /// Compute `exp(x) - 1` accurately especially for small `x`
 ///
-/// Uses the identity `exp(x) − 1 = 2ⁿ·(exp(r)−1) + (2ⁿ−1)` to avoid
-/// catastrophic cancellation when `2ⁿ·exp(r) ≈ 1` and to unify the `n = 0`
-/// near-zero case with the main path.
+/// With `a = x·32·log₂e`, `m = round(a) = 32q + j`, and `h = a − m ∈ [−½, ½]`,
+/// the result is `2^q·2^(j/32)·2^(h/32) − 1`.  The `1/32`-step table folds `ln2`
+/// into the reduction, so the fast path costs one multiply, a round, and a
+/// subtract (no two-word `ln2` split) plus a degree-4 kernel; one exponent
+/// injection (`fast_ldexp` on the table entry) supplies `2^q·2^(j/32)`.
+///
+/// The naive `2^(m/32)·2^(h/32) − 1` cancels for the small results near `m = 0`,
+/// where the fractional table cannot form an exact `2^(m/32) − 1`.  A Ziv gate at
+/// `2⁻⁴²` (the fast path is good to ≈2⁻⁴³ relative) hands those few ambiguous
+/// inputs to the two-word, degree-10 path, which splits off the exact `2ⁿ − 1`.
+///
+/// - `m = 0` (`|x| ≤ ln2/64`): return `x·exp_slope(x) = exp(x) − 1` directly,
+///   so the cancellation a literal `exp(x) − 1` would suffer never arises.
 #[must_use]
 #[inline]
 pub fn exp_m1(x: f32) -> f32 {
     use core::f32::consts::LN_2;
-    use core::f64::consts;
 
     if x < (f32::MANTISSA_DIGITS + 1) as f32 * -LN_2 {
         return -1.0;
@@ -308,12 +372,42 @@ pub fn exp_m1(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    if x == 0.0 {
-        return x;
-    }
+    /// `1.5 · 2⁵²`: adding it rounds a small `f64` to the nearest integer
+    /// (ties to even) and parks that integer in the low mantissa bits, biased by
+    /// `2⁵¹`, so `m = round(a)` and its bit pattern come out together.
+    const BIG: f64 = f64::from_bits(0x4338_0000_0000_0000);
 
     let x: f64 = x.into();
-    let n = (x * consts::LOG2_E).round_ties_even();
+    let a = x * FRAC_32_LN_2;
+    let abig = a + BIG;
+    let m = abig - BIG;
+
+    if m == 0.0 {
+        return (x * kernel::exp_slope(x)) as f32;
+    }
+
+    // Low 52 bits of `abig` hold `2⁵¹ + m`; `j = m & 31` (since `2⁵¹ ≡ 0 mod 32`)
+    // indexes the table and `q = m >> 5` scales it — no `f64 → int` conversion.
+    let u = abig.to_bits();
+    let q = (((u & 0x000F_FFFF_FFFF_FFFF) as i64) - 0x0008_0000_0000_0000) >> 5;
+    let h = a - m;
+    let sv = kernel::fast_ldexp(EXP2_32[(u & 31) as usize], q);
+    let r = crate::mul_add(crate::poly(h, &EXP2_32_POLY), sv, -1.0);
+
+    // Ziv gate: the fast path is good to ≈2⁻⁴³ relative to `exp(x) ≈ sv`, so if
+    // both ends of the `±sv·2⁻⁴²` error interval round to the same `f32`, that
+    // `f32` is correct; otherwise refine.  Scaling the gate by `sv` (not by `r`)
+    // keeps it valid through the `m = ±1` cancellation, where `r` is tiny.
+    let epsilon = sv * crate::exp2i(-42);
+    let lower = (r - epsilon) as f32;
+
+    if lower == (r + epsilon) as f32 {
+        return lower;
+    }
+
+    // Accurate fallback: two-word `ln2` reduction, splitting off the exact
+    // `2ⁿ − 1` so the small-result cancellation never bites.
+    let n = (x * core::f64::consts::LOG2_E).round_ties_even();
     let r = crate::mul_add(n, -LN_2_HI, x);
     let r = crate::mul_add(n, -LN_2_LO, r);
     let y = kernel::exp_slope(r);
