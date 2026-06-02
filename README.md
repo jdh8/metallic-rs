@@ -112,12 +112,10 @@ library is the default [rounding half to even][round-even].
 
 ## Milestones
 
-- [ ] Real `f32`/`float` functions in [`<math.h>`][math]
+- [x] Real `f32`/`float` functions in [`<math.h>`][math]
   - [x] Exponential functions
   - [x] Logarithm with constant base
-  - [ ] Power and logarithm with arbitrary base
-    - [x] Faithful rounding
-    - [ ] Correct rounding
+  - [x] Power and logarithm with arbitrary base
   - [x] Trigonometric and hyperbolic functions
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)
