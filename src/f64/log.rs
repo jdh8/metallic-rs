@@ -317,6 +317,12 @@ const LN1P_Q_COEFFS: [f64; 8] = [
 /// fallback for `|ln x| ≲ 2⁻¹⁰`, i.e. `x` within ~2⁻¹⁰ of 1.
 const LN_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63
 
+/// Ziv gate for `ln_1p`'s small-`|x|` branch (`|x| < 1/256`), as a *relative*
+/// bound.  There `ln_1p_kernel_fast` is correct to ≈2⁻⁶⁰ relative (its tail error
+/// ≈2⁻⁵³·x² is negligible against the result ≈ x); `2⁻⁵⁶` keeps a ~16× margin and
+/// lets the fast path hold for arbitrarily small `x`.
+const LN1P_SMALL_ZIV_REL: f64 = 1.3877787807814457e-17; // 2^-56
+
 /// Ziv gate for `log2`/`log10`, scaled from [`LN_ZIV_EPS`] by `log2(e)` so it
 /// bounds the absolute error of `ln_fast(x) · log_b(e)`.
 const LOG2_ZIV_EPS: f64 = 1.5641377104174595e-19; // 2^-63 · log2(e), rounded up
@@ -539,7 +545,21 @@ pub fn ln_1p(x: f64) -> f64 {
     // `L[i] + ln(1+r)` cancellation, which would cap accuracy when the result is
     // tiny, and `x` is already an exact reduced argument in the kernel's range.
     if x.abs() < 1.0 / 256.0 {
-        let result = ln_1p_kernel(Sum { high: x, low: 0.0 });
+        let xr = Sum { high: x, low: 0.0 };
+
+        // Fast path: the lean kernel is correct to ≈2⁻⁶⁰ *relative* here (its tail
+        // error ≈2⁻⁵³·x² is tiny against the result ≈ x).  A relative Ziv gate keeps
+        // the fast path even for arbitrarily small `x`; the accurate kernel handles
+        // the rare straddling case.
+        let Sum { high, low } = ln_1p_kernel_fast(xr);
+        let err = LN1P_SMALL_ZIV_REL * high.abs();
+        let lo = high + (low - err);
+        let hi = high + (low + err);
+        if lo == hi {
+            return lo;
+        }
+
+        let result = ln_1p_kernel(xr);
         return result.high + result.low;
     }
 
@@ -567,6 +587,17 @@ pub fn ln_1p(x: f64) -> f64 {
         low: e * LN2_LO,
     };
     let (high, low) = L_TABLE[i];
+
+    // `|x| ≥ 1/256` keeps `|ln(1+x)| ≥ ln(255/256) ≈ 2⁻⁸` away from zero, so the
+    // same absolute gate as `ln` applies; fall back to the accurate kernel on a
+    // straddle.
+    let Sum { high: rh, low: rl } = e_ln2 + Sum { high, low } + ln_1p_kernel_fast(r);
+    let lo = rh + (rl - LN_ZIV_EPS);
+    let hi = rh + (rl + LN_ZIV_EPS);
+    if lo == hi {
+        return lo;
+    }
+
     let result = e_ln2 + Sum { high, low } + ln_1p_kernel(r);
     result.high + result.low
 }

@@ -503,7 +503,7 @@ pub fn exp_m1(x: f64) -> f64 {
     }
 
     let j = (n & (EXP_N - 1)) as usize;
-    let q = n >> 7;
+    let q0 = n >> 7;
 
     let a = scaled.mul_add(-LN2_OVER_N_HI, x);
     let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
@@ -511,12 +511,24 @@ pub fn exp_m1(x: f64) -> f64 {
     // exp(x) = 2^q · mantissa; form `2^q · mantissa − 1` as a double-double.  The
     // scaling stays normal (`q ∈ [−1022, 1023]`), and the double-double subtraction
     // absorbs the cancellation that plain `exp(x) − 1` would suffer near zero.
-    let (mantissa, q) = exp_mantissa(j, q, r);
-    let result = mantissa * crate::exp2i(q)
-        + Sum {
-            high: -1.0,
-            low: 0.0,
-        };
+    //
+    // Fast path: the lean mantissa, accepted by a Ziv test.  Its absolute error is
+    // bounded by `EXP_ZIV_EPS` (on the [1, 2) mantissa), so on the result it is
+    // bounded by `2^q · EXP_ZIV_EPS`.
+    let neg_one = Sum {
+        high: -1.0,
+        low: 0.0,
+    };
+    let (mantissa, q) = exp_mantissa_fast(j, q0, r);
+    let result = mantissa * crate::exp2i(q) + neg_one;
+    let eps = crate::exp2i(q) * EXP_ZIV_EPS;
+    let lo = result.high + (result.low - eps);
+    let hi = result.high + (result.low + eps);
+    if lo == hi {
+        return lo;
+    }
 
+    let (mantissa, q) = exp_mantissa(j, q0, r);
+    let result = mantissa * crate::exp2i(q) + neg_one;
     result.high + result.low
 }
