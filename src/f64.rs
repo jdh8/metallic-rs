@@ -8,6 +8,7 @@ mod exp;
 mod hyp;
 mod log;
 mod misc;
+pub(crate) mod pow;
 use crate::Sign;
 use core::{f64, num::FpCategory};
 
@@ -69,5 +70,6 @@ pub use exp::{exp, exp10, exp2, exp_m1};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
 pub use log::{ln, ln_1p, log, log10, log2};
 pub use misc::{cbrt, frexp, hypot, ldexp, round};
+pub use pow::powf;
 
 pub(crate) use log::ln_dd;

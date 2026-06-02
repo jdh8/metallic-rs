@@ -227,6 +227,10 @@ name = "f64_log10"
 harness = false
 
 [[bench]]
+name = "f64_powf"
+harness = false
+
+[[bench]]
 name = "f64_round"
 harness = false
 
