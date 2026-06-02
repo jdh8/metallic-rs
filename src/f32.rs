@@ -624,7 +624,9 @@ pub fn powf(x: f32, y: f32) -> f32 {
             _ => match x {
                 1.0 => 1.0,
                 x if x.is_sign_negative() => f32::NAN,
-                _ => kernel::exp2(f64::from(y) * kernel::log2(x.into())) as f32,
+                // xʸ = 2^(y·log₂x), evaluated in double-double so the `×y`
+                // amplification of `log₂x`'s error stays below an f32 ulp.
+                _ => kernel::exp2_dd(kernel::log2_dd(x.into()) * f64::from(y)),
             },
         }
     }

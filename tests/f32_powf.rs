@@ -7,11 +7,6 @@ fn test_parser() {
 }
 
 #[test]
-// Signal when precision improves
-#[cfg_attr(
-    not(feature = "core-math"),
-    should_panic = "Too many (>= 250) mismatches!  Aborting..."
-)]
 fn test_powf() {
     common::test_bivariate_cases(
         metal::powf,
