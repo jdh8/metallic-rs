@@ -142,3 +142,65 @@ impl Add for Sum {
         fast_sum(sum.high, low)
     }
 }
+
+/// Round a normalized positive double-double to the nearest `f32`
+///
+/// A plain `value.high as f32` can double-round when `value.high` lands on an
+/// `f32` midpoint: the cast rounds to even before the low word breaks the tie.
+/// Rounding `value.high` to odd in `f64` first (in the direction of `value.low`)
+/// sidesteps this — every `f32` midpoint has at least 28 trailing zero bits in
+/// `f64`, hence is even, so the odd nudge lands on the correct side before the
+/// final round to nearest.
+#[inline]
+pub fn round(value: Sum) -> f32 {
+    let bits = value.high.to_bits();
+
+    let odd = if value.low == 0.0 || bits & 1 == 1 {
+        value.high
+    } else if value.low > 0.0 {
+        f64::from_bits(bits + 1)
+    } else {
+        f64::from_bits(bits - 1)
+    };
+
+    odd as f32
+}
+
+/// Round a non-negative double-double to the nearest `f32`, safe across the
+/// subnormal range and overflow
+///
+/// In the normal range this is [`round`] (round-to-odd then cast, which sends
+/// overflow to `+∞`).  Below `f32::MIN_POSITIVE` a plain cast would round twice,
+/// so the value is quantized once on the `2⁻¹⁴⁹` subnormal grid, exactly like
+/// the subnormal branch of the `f64` exponential.
+#[inline]
+pub fn round_general(value: Sum) -> f32 {
+    if value.high >= f64::from(f32::MIN_POSITIVE) {
+        return round(value);
+    }
+
+    let high = value.high * crate::exp2i(149);
+    let low = value.low * crate::exp2i(149);
+    let n = high.round_ties_even();
+    let n = n + ((high - n) + low).round_ties_even();
+
+    (n * crate::exp2i(-149)) as f32
+}
+
+/// Round a signed normal-range double-double to the nearest `f32`
+///
+/// Rounds the magnitude to odd then restores the sign, so [`round`]'s
+/// positive-only round-to-odd applies on either side of zero.
+#[inline]
+pub fn round_signed(value: Sum) -> f32 {
+    let magnitude = round(Sum {
+        high: value.high.abs(),
+        low: if value.high < 0.0 {
+            -value.low
+        } else {
+            value.low
+        },
+    });
+
+    magnitude.copysign(value.high as f32)
+}
