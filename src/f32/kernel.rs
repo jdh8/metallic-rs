@@ -208,6 +208,35 @@ pub fn sin(x: f64) -> f32 {
     crate::mul_add(y, x, x) as f32
 }
 
+/// `|sin(πx)|`, accurate to ≈2⁻⁵¹ relative — the lgamma reflection's sine factor
+///
+/// Reduces to the distance to the nearest integer, `r = x − round(x) ∈ [−½, ½]`,
+/// where `|sin(πx)| = |r|·P(r²)`.  A single odd polynomial — no quadrant branch
+/// and no second cosine series like [`sinpi`] — keeps the `≈π|r|` behaviour exact
+/// at the integer poles, where `ln|sin(πx)|` and hence lgamma blow up.  The
+/// minimax `P(u) ≈ sin(π√u)/√u` on `u ∈ [0, ¼]` is from
+/// `mpmath.chebyfit(lambda u: sin(pi·√u)/√u, [0, 0.25], 8)`.
+#[inline]
+pub fn abs_sinpi(x: f32) -> f64 {
+    let x = f64::from(x);
+    let r = x - x.round_ties_even();
+
+    r.abs()
+        * crate::poly(
+            r * r,
+            &[
+                3.141_592_653_589_792_7,
+                -5.167_712_780_049_785_5,
+                2.550_164_039_861_867_7,
+                -0.599_264_528_825_224,
+                0.082_145_878_816_310_43,
+                -0.007_370_364_326_530_415_5,
+                0.000_465_987_015_804_337_8,
+                -2.113_362_735_205_297e-5,
+            ],
+        )
+}
+
 /// `sin(πx)`
 ///
 /// The argument is reduced modulo 2 into `[-1, 1]`, then into `[-¼, ¼]` with a

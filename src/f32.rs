@@ -1399,7 +1399,7 @@ fn lgamma_f64(z: f32) -> (f64, f64) {
     let x = f64::from(z);
     if z < 0.5 {
         let reflected = lgamma_pos_f64(1.0 - x);
-        let value = LN_PI - kernel::sinpi(z).abs().ln() - reflected;
+        let value = LN_PI - kernel::abs_sinpi(z).ln() - reflected;
         (
             value,
             crate::exp2i(-36) * reflected.abs() + crate::exp2i(-44),
