@@ -624,9 +624,10 @@ pub fn powf(x: f32, y: f32) -> f32 {
             _ => match x {
                 1.0 => 1.0,
                 x if x.is_sign_negative() => f32::NAN,
-                // xʸ = 2^(y·log₂x), evaluated in double-double so the `×y`
-                // amplification of `log₂x`'s error stays below an f32 ulp.
-                _ => kernel::exp2_dd(kernel::log2_dd(x.into()) * f64::from(y)),
+                // xʸ = 2^(y·log₂x): a fast f64 pass with a Ziv gate, falling
+                // back to double-double where the `×y` amplification of
+                // `log₂x`'s error would otherwise cross an f32 rounding bound.
+                _ => kernel::powf_core(x.into(), f64::from(y)),
             },
         }
     }

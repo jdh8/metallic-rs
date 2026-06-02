@@ -291,6 +291,94 @@ pub fn exp2_dd(e: Sum) -> f32 {
     })
 }
 
+/// `f64` minimax of `2·log₂e·atanh(t)/t` in `u = t²` — the fast `powf` path's log
+///
+/// Degree 10; the `f64` evaluation lands near `2⁻⁵²` relative, ample for the
+/// fast path since the Ziv gate catches whatever the single rounding leaves
+/// ambiguous.  Same shape as [`LOG2_CH`] without the double-double tail.
+const LOG2_FAST: [f64; 11] = [
+    2.885_390_081_777_926_8,
+    0.961_796_693_925_975_6,
+    0.577_078_016_355_585_4,
+    0.412_198_583_111_126_5,
+    0.320_598_897_976_929,
+    0.262_308_188_998_910_2,
+    0.221_953_108_190_537_57,
+    0.192_357_761_894_813_88,
+    0.169_792_595_323_944_22,
+    0.150_270_565_936_578_03,
+    0.159_545_555_181_741_27,
+];
+
+/// `f64` minimax of `2ʰ` on `h ∈ [−½, ½]` — the fast `powf` path's exp
+///
+/// Degree 10, error `2⁻⁵²`; counterpart to [`EXP2_CE`] without the low words.
+const EXP2_FAST: [f64; 11] = [
+    1.0,
+    0.693_147_180_559_95,
+    0.240_226_506_959_100_97,
+    0.055_504_108_664_447_72,
+    0.009_618_129_107_606_888,
+    0.001_333_355_823_016_497_4,
+    0.000_154_035_304_417_360_5,
+    1.525_265_726_020_083_7e-5,
+    1.321_544_258_792_169e-6,
+    1.020_869_029_995_830_6e-7,
+    7.072_585_949_269_223e-9,
+];
+
+/// `log₂(x)` as a plain `f64` for the fast [`powf_core`] path
+#[inline]
+fn log2_fast(x: f64) -> f64 {
+    use crate::f64::EXP_SHIFT;
+    use core::f64::consts::FRAC_1_SQRT_2;
+
+    #[allow(clippy::cast_possible_wrap)]
+    let i = x.to_bits() as i64;
+    let exponent = (i - FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
+
+    #[allow(clippy::cast_sign_loss)]
+    let m = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
+    let t = (m - 1.0) / (m + 1.0);
+
+    #[allow(clippy::cast_precision_loss)]
+    crate::mul_add(t, crate::poly(t * t, &LOG2_FAST), exponent as f64)
+}
+
+/// `xʸ` for finite positive `x ≠ 1`, correctly rounded to `f32`
+///
+/// Fast path: `2^(y·log₂x)` entirely in `f64`.  The fast result is good to
+/// ≈2⁻⁴⁵ relative, so unless its discarded low 29 bits land within `0x2000` of
+/// the round-to-nearest midpoint — or it falls outside the normal `f32` range,
+/// where the bit test does not apply — the single rounding is correct.  The few
+/// ambiguous inputs (and the subnormal / near-overflow ends) take the
+/// double-double [`log2_dd`]→`×y`→[`exp2_dd`] path.
+#[inline]
+pub fn powf_core(x: f64, y: f64) -> f32 {
+    let e = log2_fast(x) * y;
+
+    if e > 130.0 {
+        return f32::INFINITY;
+    }
+    if e < -160.0 {
+        return 0.0;
+    }
+
+    let n = e.round_ties_even();
+
+    #[allow(clippy::cast_possible_truncation)]
+    let r = fast_ldexp(crate::poly(e - n, &EXP2_FAST), n as i64);
+
+    if r >= f64::from(f32::MIN_POSITIVE)
+        && r < crate::exp2i(127)
+        && (((r.to_bits() & 0x1FFF_FFFF) as i64) - 0x1000_0000).abs() > 0x2000
+    {
+        return r as f32;
+    }
+
+    exp2_dd(log2_dd(x) * y)
+}
+
 /// Argument reduction for trigonometric functions
 ///
 /// - `x`: finite radians with a positive sign bit
