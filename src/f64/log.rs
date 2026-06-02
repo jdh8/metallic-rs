@@ -295,6 +295,33 @@ const LN1P_P_COEFFS: [(f64, f64); 13] = [
     (0.07692307692307693, -4.270088556250602e-18),
 ];
 
+/// Plain-`f64` tail of `ln(1+r)`: `(ln(1+s) − s)/s² = ∑ (−1)ᵏ⁺¹ sᵏ/(k+2)`,
+/// low-degree first.  Degree 7 over `|s| ≤ 1/256`; the truncation past `s⁷`,
+/// scaled by `s² ≲ 2⁻¹⁶`, is below `2⁻⁸³` — far under the fast path's `2⁻⁶⁸`.
+const LN1P_Q_COEFFS: [f64; 8] = [
+    -0.5,
+    0.3333333333333333,
+    -0.25,
+    0.2,
+    -0.16666666666666666,
+    0.14285714285714285,
+    -0.125,
+    0.1111111111111111,
+];
+
+/// Ziv gate for the natural log's fast path, as an absolute error bound.
+///
+/// `ln_fast` is good to ≈2⁻⁶⁸ absolute (the `e·ln2 + L[i]` terms are double-double
+/// and the lean `ln(1+r)` kernel tops out near 2⁻⁶⁸ since `|ln(1+r)| ≤ 1/256`);
+/// `2⁻⁶³` keeps a ~30× margin.  Being absolute, the gate only forces the accurate
+/// fallback for `|ln x| ≲ 2⁻¹⁰`, i.e. `x` within ~2⁻¹⁰ of 1.
+const LN_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63
+
+/// Ziv gate for `log2`/`log10`, scaled from [`LN_ZIV_EPS`] by `log2(e)` so it
+/// bounds the absolute error of `ln_fast(x) · log_b(e)`.
+const LOG2_ZIV_EPS: f64 = 1.5641377104174595e-19; // 2^-63 · log2(e), rounded up
+const LOG10_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63 (≥ 2^-63 · log10(e))
+
 const LOG2_E_HI: f64 = 1.4426950408889634;
 const LOG2_E_LO: f64 = 2.0355273740931033e-17;
 const LOG10_E_HI: f64 = 0.4342944819032518;
@@ -311,6 +338,28 @@ fn ln_1p_kernel(r: Sum) -> Sum {
     }
 
     p * r
+}
+
+/// Lean `ln(1 + r)` for `|r| ≤ 1/256`, via `ln(1+r) = r + r²·Q(r)` with `Q` in
+/// plain `f64`.  Good to ≈2⁻⁶⁸ absolute: the `r²·Q` term is only ≲2⁻¹⁶, so its
+/// `f64` rounding is negligible, while the linear `r` stays double-double.
+#[inline]
+fn ln_1p_kernel_fast(r: Sum) -> Sum {
+    let s = r.high;
+
+    // r² with the `2·r.high·r.low` cross term folded in by one FMA, then the small
+    // higher-order tail in plain f64.
+    let r2 = s.mul_add(s, 2.0 * s * r.low);
+    let tail = r2 * crate::poly(s, &LN1P_Q_COEFFS);
+
+    // ln(1+r) = (r.high + tail) + r.low.  `r.high + tail` is exact (Fast2Sum,
+    // `tail` is ~9 binades below `r.high`); the linear tail `r.low` joins the low
+    // word.
+    let head = fast_sum(s, tail);
+    Sum {
+        high: head.high,
+        low: head.low + r.low,
+    }
 }
 
 /// Decompose a finite positive `x` into `(e, i, m·inv − 1)` for the log family.
@@ -351,6 +400,25 @@ pub(crate) fn ln_dd(x: f64) -> Sum {
     e_ln2 + Sum { high, low } + ln_1p_kernel(r)
 }
 
+/// Lean natural logarithm of a finite positive `x ≠ 1`, as a double-double.
+///
+/// Same decomposition as [`ln_dd`] but with the lean [`ln_1p_kernel_fast`], so it
+/// is ≈2⁻⁶⁸ absolute instead of ≈2⁻⁸⁷.  The log family's fast paths gate this
+/// against an accurate fallback ([`dint::ln_accurate`] for `ln`, `ln_dd` for
+/// `log2`/`log10`) with a Ziv test.
+#[inline]
+fn ln_fast(x: f64) -> Sum {
+    let (e, i, r) = log_reduce(x);
+    let e = e as f64;
+
+    let e_ln2 = Sum {
+        high: e * LN2_HI,
+        low: e * LN2_LO,
+    };
+    let (high, low) = L_TABLE[i];
+    e_ln2 + Sum { high, low } + ln_1p_kernel_fast(r)
+}
+
 /// The natural logarithm
 #[must_use]
 #[inline]
@@ -368,19 +436,12 @@ pub fn ln(x: f64) -> f64 {
         return x - 1.0;
     }
 
-    // Two-step Ziv method.  The fast double-double path is correctly rounded
-    // unless the true value lies within `err` of a rounding boundary, in which
-    // case the always-correct 128-bit accurate path resolves it.
-    //
-    // Measured max fast-path absolute error (40M random x over all exponents
-    // plus a dense 2^-54 sweep near 1) is ≈ 2^-86.96.  `err = 2^-78` keeps a
-    // ~500× safety margin while staying far below CORE-MATH's rigorous 2^-69
-    // bound, so the gate is exactly clean.
-    const ERR: f64 = 3.308_722_450_212_111e-24; // 2^-78
-
-    let Sum { high, low } = ln_dd(x);
-    let left = high + (low - ERR);
-    let right = high + (low + ERR);
+    // Two-step Ziv method.  The lean fast path is correctly rounded unless the
+    // true value lies within `LN_ZIV_EPS` of a rounding boundary, in which case
+    // the always-correct 128-bit accurate path resolves it.
+    let Sum { high, low } = ln_fast(x);
+    let left = high + (low - LN_ZIV_EPS);
+    let right = high + (low + LN_ZIV_EPS);
     if left == right {
         left
     } else {
@@ -405,12 +466,21 @@ pub fn log2(x: f64) -> f64 {
         return x - 1.0;
     }
 
-    // log2(x) = ln(x) · log2(e)
-    let result = ln_dd(x)
-        * Sum {
-            high: LOG2_E_HI,
-            low: LOG2_E_LO,
-        };
+    // log2(x) = ln(x) · log2(e).  Fast path: lean ln × log2(e), accepted when the
+    // Ziv interval does not straddle a rounding boundary; otherwise the
+    // double-double ln resolves it.
+    let log2e = Sum {
+        high: LOG2_E_HI,
+        low: LOG2_E_LO,
+    };
+    let Sum { high, low } = ln_fast(x) * log2e;
+    let left = high + (low - LOG2_ZIV_EPS);
+    let right = high + (low + LOG2_ZIV_EPS);
+    if left == right {
+        return left;
+    }
+
+    let result = ln_dd(x) * log2e;
     result.high + result.low
 }
 
@@ -431,12 +501,19 @@ pub fn log10(x: f64) -> f64 {
         return x - 1.0;
     }
 
-    // log10(x) = ln(x) · log10(e)
-    let result = ln_dd(x)
-        * Sum {
-            high: LOG10_E_HI,
-            low: LOG10_E_LO,
-        };
+    // log10(x) = ln(x) · log10(e).  Fast path with a Ziv test, as in `log2`.
+    let log10e = Sum {
+        high: LOG10_E_HI,
+        low: LOG10_E_LO,
+    };
+    let Sum { high, low } = ln_fast(x) * log10e;
+    let left = high + (low - LOG10_ZIV_EPS);
+    let right = high + (low + LOG10_ZIV_EPS);
+    if left == right {
+        return left;
+    }
+
+    let result = ln_dd(x) * log10e;
     result.high + result.low
 }
 
