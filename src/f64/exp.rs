@@ -353,6 +353,16 @@ pub(super) fn exp_dd(x: f64) -> (Sum, i64) {
     exp_mantissa(j, q, r)
 }
 
+/// Lean counterpart of [`exp_dd`], using [`exp_mantissa_fast`] (≈2⁻⁶⁸ relative).
+///
+/// The hyperbolic functions take this as their fast path and Ziv-gate the result
+/// against [`exp_dd`].
+#[inline]
+pub(super) fn exp_dd_fast(x: f64) -> (Sum, i64) {
+    let (j, q, r) = exp_reduce(x);
+    exp_mantissa_fast(j, q, r)
+}
+
 /// The exponential function
 #[must_use]
 #[inline]

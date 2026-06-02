@@ -1,27 +1,31 @@
 use super::double::{fast_ldexp, Sum};
-use super::exp::exp_dd;
+use super::exp::{exp_dd, exp_dd_fast};
 
-/// `eˣ` and `e⁻ˣ` combined as `2`<sup>`q−1`</sup>` · (m ± 2⁻²q/m)` for `x ≥ 0`.
+/// Combine `(m, q)` — where `eˣ = 2`<sup>`q`</sup>` · m` for `x ≥ 0` — into the
+/// mantissa `m ± 2⁻²q/m` so that `½(eˣ ± e⁻ˣ) = 2`<sup>`q−1`</sup>` · mantissa`.
 ///
-/// `(m, q)` is `eˣ = 2`<sup>`q`</sup>` · m`.  The returned double-double is the
-/// mantissa `m ± t` (t = e⁻²ˣ-scaled reciprocal); the caller scales by `2`<sup>`q−1`</sup>.
+/// `t = 2⁻²q/m ≈ e⁻ˣ` relative to `eˣ`; `exp2i(-2q)` underflows to 0 once the term
+/// is negligible, so no explicit cutoff is needed.
 #[inline]
-fn cosh_sinh_mantissa(x: f64, add: bool) -> (Sum, i64) {
-    let (m, q) = exp_dd(x);
-
-    // t = 2⁻²q / m ≈ e⁻ˣ relative to eˣ.  `exp2i(-2q)` underflows to 0 once the
-    // term is negligible, so no explicit cutoff is needed.
+fn combine(m: Sum, q: i64, add: bool) -> Sum {
     let t = m.recip() * crate::exp2i(-2 * q);
-    let mantissa = if add {
+    if add {
         m + t
     } else {
         m + Sum {
             high: -t.high,
             low: -t.low,
         }
-    };
-    (mantissa, q)
+    }
 }
+
+/// Ziv gate for the hyperbolic fast path, as an absolute bound on the mantissa.
+///
+/// The fast `eˣ` mantissa is ≈2⁻⁶⁸ relative, and `m ± 2⁻²q/m` keeps that, so the
+/// mantissa is good to ≈2⁻⁶⁷ absolute; `2⁻⁶²` keeps a ~30× margin.  The gate is on
+/// the mantissa (∈ (0, 2]); for `sinh` it falls back automatically when `m − t`
+/// cancels to a value too small for `2⁻⁶²` to resolve (only `|x| ≲ 2⁻¹⁰`).
+const HYP_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
 
 /// Hyperbolic cosine
 #[must_use]
@@ -38,8 +42,18 @@ pub fn cosh(x: f64) -> f64 {
         return f64::INFINITY;
     }
 
-    // cosh(x) = ½(eˣ + e⁻ˣ) = 2^(q−1)·(m + 2⁻²q/m); the sum never cancels.
-    let (mantissa, q) = cosh_sinh_mantissa(x, true);
+    // cosh(x) = ½(eˣ + e⁻ˣ) = 2^(q−1)·(m + 2⁻²q/m); the sum never cancels.  Fast
+    // path: lean `eˣ` mantissa accepted by a Ziv test, else the accurate one.
+    let (m, q) = exp_dd_fast(x);
+    let mantissa = combine(m, q, true);
+    let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
+    let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
+    if lo == hi {
+        return fast_ldexp(lo, q - 1);
+    }
+
+    let (m, q) = exp_dd(x);
+    let mantissa = combine(m, q, true);
     fast_ldexp(mantissa.high + mantissa.low, q - 1)
 }
 
@@ -64,8 +78,18 @@ pub fn sinh(x: f64) -> f64 {
 
     // sinh(x) = ½(eˣ − e⁻ˣ) = 2^(q−1)·(m − 2⁻²q/m).  The double-double subtraction
     // `m − 2⁻²q/m` captures the cancellation exactly (2Sum), so no separate
-    // small-argument polynomial is needed above the 2⁻²⁶ threshold.
-    let (mantissa, q) = cosh_sinh_mantissa(s, false);
+    // small-argument polynomial is needed above the 2⁻²⁶ threshold.  Fast path
+    // with a Ziv test, as in `cosh`.
+    let (m, q) = exp_dd_fast(s);
+    let mantissa = combine(m, q, false);
+    let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
+    let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
+    if lo == hi {
+        return fast_ldexp(lo, q - 1).copysign(x);
+    }
+
+    let (m, q) = exp_dd(s);
+    let mantissa = combine(m, q, false);
     fast_ldexp(mantissa.high + mantissa.low, q - 1).copysign(x)
 }
 
