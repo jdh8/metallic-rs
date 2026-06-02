@@ -175,6 +175,26 @@ const EXPM1_S_COEFFS: [(f64, f64); 10] = [
     (2.755731922398589e-07, 2.3767714622250297e-23),
 ];
 
+/// Plain-`f64` tail of `exp(r)`: `(exp(z) − 1 − z)/z² = ∑ zᵏ/(k+2)!`, low-degree
+/// first.  Degree 5 over `|z| ≤ ln2/2N`; the truncation past `z⁵` is below `2⁻⁷⁷`
+/// and, scaled by `z² ≲ 2⁻¹⁷`, sits far under the fast path's `2⁻⁶⁸` budget.
+const EXP_TAIL_COEFFS: [f64; 6] = [
+    0.5,
+    0.16666666666666666,
+    0.041666666666666664,
+    0.008333333333333333,
+    0.001388888888888889,
+    0.0001984126984126984,
+];
+
+/// Ziv gate for the exponential family's fast path.
+///
+/// The fast double-double mantissa ([`exp_mantissa_fast`]) is good to ≈2⁻⁶⁸
+/// relative (measured max ≈2⁻⁶⁸·³ over 200M random arguments across the finite
+/// `exp` range); `2⁻⁶³` keeps a ~40× safety margin while still gating in the fast
+/// result for all but a ~2⁻¹⁰ fraction of inputs near a rounding boundary.
+const EXP_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63
+
 /// Table size for the exponential family: `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
 const EXP_N: i64 = 128;
 
@@ -209,14 +229,72 @@ fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     }
 }
 
+/// Fast double-double mantissa for the exponential family.
+///
+/// Same contract as [`exp_mantissa`] — returns `2`<sup>`j/N`</sup>` · exp(r)`
+/// normalized into [1, 2) with `q` adjusted — but evaluates `exp(r)` with a
+/// plain-`f64` tail polynomial instead of a double-double Horner.  This trades
+/// the accurate path's ≈2⁻¹⁰⁰ for ≈2⁻⁶⁸ relative error at a fraction of the cost;
+/// [`exp_reconstruct`] resolves the rare hard-to-round cases with a Ziv test.
+#[inline]
+fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
+    // The full reduced argument as one `f64`, for the small tail term.  `exp2`
+    // and `exp10` hand in an *un-normalized* `r` (the `ln2/N` low word lands in
+    // `r.low ≈ 2⁻⁴⁷`), so dropping `r.low` here would lose the `2·r.high·r.low`
+    // part of `r²` — a ≈2⁻⁵⁵ slip the Ziv gate could not catch.
+    let z = r.high + r.low;
+
+    // exp(r) − 1 − r ≈ z²·P(z), with P evaluated in plain f64: it only forms a
+    // term ≲2⁻¹⁷ of exp(r), so its `f64` rounding lands near 2⁻⁶⁸ relative.
+    let tail = (z * z) * crate::poly(z, &EXP_TAIL_COEFFS);
+
+    // exp(r) = (1 + r.high) + (r.low + tail) as a double-double.  `1 + r.high` is
+    // exact (Fast2Sum, `|r.high| ≤ ln2/2N`); the low word then gathers the
+    // reduction tail `r.low` in full and the polynomial tail.
+    let head = fast_sum(1.0, r.high);
+    let er = Sum {
+        high: head.high,
+        low: head.low + (r.low + tail),
+    };
+
+    // Fold in the table entry and normalize the mantissa into [1, 2), exactly as
+    // the accurate path does.
+    let (high, low) = EXP2_TABLE[j];
+    let scaled = Sum { high, low } * er;
+    let product = fast_sum(scaled.high, scaled.low);
+
+    if product.high < 1.0 {
+        (product * 2.0, q - 1)
+    } else if product.high >= 2.0 {
+        (product * 0.5, q + 1)
+    } else {
+        (product, q)
+    }
+}
+
 /// Reconstruct `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)` for the exponential family.
 ///
 /// `r` is the reduced argument as a double-double, `|r| ≤ ln2/2N`.  The result is
 /// correctly rounded, including gradual underflow into the subnormal range.
 #[inline]
 fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
-    // The mantissa is in [1, 2), so the result is subnormal exactly when
-    // `q < −1022`, and the integer-grid shift below stays within an exact `i64`.
+    // Fast path: a lean mantissa good to ≈2⁻⁶⁸ relative, accepted when both ends
+    // of its `±EXP_ZIV_EPS` error interval round to the same `f64`.  Restricting
+    // it to comfortably-normal results (`qf ≥ −1021`) keeps the normal/subnormal
+    // transition — where the mantissa's normalization can shift `q` — entirely on
+    // the accurate path below.
+    let (product, qf) = exp_mantissa_fast(j, q, r);
+    if qf >= -1021 {
+        let lo = product.high + (product.low - EXP_ZIV_EPS);
+        let hi = product.high + (product.low + EXP_ZIV_EPS);
+        if lo == hi {
+            return fast_ldexp(lo, qf);
+        }
+    }
+
+    // Accurate path.  The mantissa is in [1, 2), so the result is subnormal
+    // exactly when `q < −1022`, and the integer-grid shift below stays within an
+    // exact `i64`.
     let (product, q) = exp_mantissa(j, q, r);
 
     if q >= -1022 {
