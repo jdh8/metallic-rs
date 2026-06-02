@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic, clippy::approx_constant)]
 #![warn(clippy::unreadable_literal)]
 
+mod atan;
 mod dint;
 mod dint_consts;
 pub(crate) mod double;
@@ -67,6 +68,7 @@ const fn normalize(x: f64) -> (Sign, Magnitude) {
     }
 }
 
+pub use atan::{acos, asin, atan, atan2};
 pub use exp::{exp, exp10, exp2, exp_m1};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
 pub use log::{ln, ln_1p, log, log10, log2};

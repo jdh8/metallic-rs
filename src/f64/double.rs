@@ -187,6 +187,18 @@ pub fn round_general(value: Sum) -> f32 {
     (n * crate::exp2i(-149)) as f32
 }
 
+/// Square root of a non-negative double-double, refined by one Newton step
+/// `h + (s − h²)/(2h)` to ≈2⁻¹⁰⁵ relative
+///
+/// `s.high` must be strictly positive.
+#[inline]
+pub fn sqrt_dd(s: Sum) -> Sum {
+    let h = s.high.sqrt();
+    let h2 = Sum::from_product(h, h);
+    let residual = (s.high - h2.high) + (s.low - h2.low);
+    fast_sum(h, residual * (0.5 / h))
+}
+
 /// Round a non-negative double-double `value · 2ⁿ` to the nearest `f64`, safe
 /// across the subnormal range
 ///

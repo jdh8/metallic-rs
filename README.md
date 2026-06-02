@@ -124,8 +124,7 @@ library is the default [rounding half to even][round-even].
   - [x] Exponential functions
   - [x] Logarithm with constant base
   - [x] Power and logarithm with arbitrary base
-  - [ ] Trigonometric and hyperbolic functions
-    - [x] Hyperbolic functions
+  - [x] Trigonometric and hyperbolic functions
   - [ ] Miscellaneous elementary functions
   - [ ] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]

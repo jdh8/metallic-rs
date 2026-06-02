@@ -1,4 +1,4 @@
-use super::double::{fast_ldexp, fast_sum, Sum};
+use super::double::{fast_ldexp, sqrt_dd, Sum};
 use super::exp::{exp_dd, exp_dd_fast};
 use super::ln_dd;
 use core::cmp::Ordering;
@@ -14,16 +14,6 @@ const ONE: Sum = Sum {
     high: 1.0,
     low: 0.0,
 };
-
-/// Square root of a non-negative double-double, refined by one Newton step
-/// `h + (s − h²)/(2h)` to ≈2⁻¹⁰⁵ relative.  `s.high` must be strictly positive.
-#[inline]
-fn sqrt_dd(s: Sum) -> Sum {
-    let h = s.high.sqrt();
-    let h2 = Sum::from_product(h, h);
-    let residual = (s.high - h2.high) + (s.low - h2.low);
-    fast_sum(h, residual * (0.5 / h))
-}
 
 /// Natural logarithm of a positive double-double, as a double-double.
 ///
