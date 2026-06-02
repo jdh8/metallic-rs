@@ -241,6 +241,22 @@ name = "f64_round"
 harness = false
 
 [[bench]]
+name = "f64_sin"
+harness = false
+
+[[bench]]
+name = "f64_sin_cos"
+harness = false
+
+[[bench]]
+name = "f64_cos"
+harness = false
+
+[[bench]]
+name = "f64_tan"
+harness = false
+
+[[bench]]
 name = "f64_sinh"
 harness = false
 

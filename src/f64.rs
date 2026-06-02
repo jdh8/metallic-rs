@@ -9,6 +9,7 @@ mod hyp;
 mod log;
 mod misc;
 pub(crate) mod pow;
+mod trig;
 use crate::Sign;
 use core::{f64, num::FpCategory};
 
@@ -71,5 +72,6 @@ pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
 pub use log::{ln, ln_1p, log, log10, log2};
 pub use misc::{cbrt, frexp, hypot, ldexp, round};
 pub use pow::powf;
+pub use trig::{cos, sin, sin_cos, tan};
 
 pub(crate) use log::ln_dd;
