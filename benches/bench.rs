@@ -3,6 +3,9 @@
 /// The sign bit of an `f32`.
 const SIGN: u32 = 0x8000_0000;
 
+/// The sign bit of an `f64`.
+const SIGN_64: u64 = 0x8000_0000_0000_0000;
+
 /// Flip an `f32` (sign-magnitude) into a `u32` that increases monotonically
 /// with the float's value, so that a contiguous integer interval corresponds to
 /// a contiguous run of representations.  Inverse: [`from_ordered`].
@@ -14,6 +17,17 @@ const fn to_ordered(x: f32) -> u32 {
 /// Inverse of [`to_ordered`].
 const fn from_ordered(key: u32) -> f32 {
     f32::from_bits(key ^ ((key >> 31).wrapping_sub(1) | SIGN))
+}
+
+/// [`to_ordered`] for `f64`.
+const fn to_ordered_64(x: f64) -> u64 {
+    let bits = x.to_bits();
+    bits ^ (((bits as i64) >> 63) as u64 | SIGN_64)
+}
+
+/// Inverse of [`to_ordered_64`].
+const fn from_ordered_64(key: u64) -> f64 {
+    f64::from_bits(key ^ ((key >> 63).wrapping_sub(1) | SIGN_64))
 }
 
 /// A uniformly random `f32`: every one of the 2^32 bit patterns is equally
@@ -36,6 +50,14 @@ pub fn random_f32_repr(range: core::ops::RangeInclusive<f32>) -> f32 {
 /// likely (subnormals, ±∞, and NaN included).
 pub fn random_f64() -> f64 {
     f64::from_bits(rand::random())
+}
+
+/// A uniformly random `f64` among the representations in `range`: every bit
+/// pattern between the endpoints is equally likely (sign-magnitude order).
+pub fn random_f64_repr(range: core::ops::RangeInclusive<f64>) -> f64 {
+    let lo = to_ordered_64(*range.start());
+    let hi = to_ordered_64(*range.end());
+    from_ordered_64(rand::random_range(lo..=hi))
 }
 
 /// Draw one benchmark input described by a range.  The *form* of the range
@@ -84,6 +106,30 @@ impl Draw<f32> for core::ops::RangeFull {
 impl Draw<f64> for core::ops::RangeFull {
     fn draw(self) -> f64 {
         random_f64()
+    }
+}
+
+// Bounded → value-uniform.
+impl Draw<f64> for core::ops::RangeInclusive<f64> {
+    fn draw(self) -> f64 {
+        rand::random_range(self)
+    }
+}
+impl Draw<f64> for core::ops::Range<f64> {
+    fn draw(self) -> f64 {
+        rand::random_range(self)
+    }
+}
+
+// Open-ended → representation-uniform.
+impl Draw<f64> for core::ops::RangeFrom<f64> {
+    fn draw(self) -> f64 {
+        random_f64_repr(self.start..=f64::INFINITY)
+    }
+}
+impl Draw<f64> for core::ops::RangeTo<f64> {
+    fn draw(self) -> f64 {
+        random_f64_repr(f64::NEG_INFINITY..=self.end)
     }
 }
 

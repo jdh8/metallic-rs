@@ -161,3 +161,63 @@ harness = false
 [[bench]]
 name = "f64_cbrt"
 harness = false
+
+[[bench]]
+name = "f64_cosh"
+harness = false
+
+[[bench]]
+name = "f64_exp_m1"
+harness = false
+
+[[bench]]
+name = "f64_exp"
+harness = false
+
+[[bench]]
+name = "f64_exp2"
+harness = false
+
+[[bench]]
+name = "f64_exp10"
+harness = false
+
+[[bench]]
+name = "f64_frexp"
+harness = false
+
+[[bench]]
+name = "f64_ldexp"
+harness = false
+
+[[bench]]
+name = "f64_ln_1p"
+harness = false
+
+[[bench]]
+name = "f64_ln"
+harness = false
+
+[[bench]]
+name = "f64_log"
+harness = false
+
+[[bench]]
+name = "f64_log2"
+harness = false
+
+[[bench]]
+name = "f64_log10"
+harness = false
+
+[[bench]]
+name = "f64_round"
+harness = false
+
+[[bench]]
+name = "f64_sinh"
+harness = false
+
+[[bench]]
+name = "f64_tanh"
+harness = false
