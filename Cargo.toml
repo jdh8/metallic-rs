@@ -187,6 +187,10 @@ name = "f64_frexp"
 harness = false
 
 [[bench]]
+name = "f64_hypot"
+harness = false
+
+[[bench]]
 name = "f64_ldexp"
 harness = false
 

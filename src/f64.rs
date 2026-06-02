@@ -68,6 +68,6 @@ const fn normalize(x: f64) -> (Sign, Magnitude) {
 pub use exp::{exp, exp10, exp2, exp_m1};
 pub use hyp::{cosh, sinh, tanh};
 pub use log::{ln, ln_1p, log, log10, log2};
-pub use misc::{cbrt, frexp, ldexp, round};
+pub use misc::{cbrt, frexp, hypot, ldexp, round};
 
 pub(crate) use log::ln_dd;

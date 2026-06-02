@@ -114,16 +114,18 @@ pub fn test_all_f32<Output: Identity + Debug>(
 
 /// Check if `f` returns the same result as `g` for the provided pairs
 ///
-/// By "same result", I mean semantic identity as defined by [`is`].
-pub fn test_bivariate_cases(
-    f: impl Fn(f32, f32) -> f32,
-    g: impl Fn(f32, f32) -> f32,
-    cases: impl Iterator<Item = [f32; 2]>,
+/// By "same result", I mean semantic identity as defined by [`is`].  Generic
+/// over the input and output type, so it serves both `f32` and `f64` bivariate
+/// functions (`hypot`, `atan2`, `powf`).
+pub fn test_bivariate_cases<In: Copy + LowerExp, Out: Identity + Debug>(
+    f: impl Fn(In, In) -> Out,
+    g: impl Fn(In, In) -> Out,
+    cases: impl Iterator<Item = [In; 2]>,
 ) {
     truncate_errors(cases.filter_map(|[x, y]| {
         let f = f(x, y);
         let g = g(x, y);
-        (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:e} != {g:e}"))
+        (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:?} != {g:?}"))
     }));
 }
 
@@ -184,6 +186,13 @@ pub fn parse_f32_pair(s: &str) -> Result<[f32; 2], ParsePairError> {
     let mut fields = s.splitn(2, ',').map(str::trim_ascii);
     let x = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
     let y = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    Ok([x, y])
+}
+
+pub fn parse_f64_pair(s: &str) -> Result<[f64; 2], ParsePairError> {
+    let mut fields = s.splitn(2, ',').map(str::trim_ascii);
+    let x = parse_f64(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    let y = parse_f64(fields.next().ok_or(ParsePairError::EmptyField)?)?;
     Ok([x, y])
 }
 

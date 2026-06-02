@@ -292,32 +292,10 @@ fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
         }
     }
 
-    // Accurate path.  The mantissa is in [1, 2), so the result is subnormal
-    // exactly when `q < −1022`, and the integer-grid shift below stays within an
-    // exact `i64`.
+    // Accurate path.  The mantissa is in [1, 2), so `round_general64` resolves
+    // the result correctly across the normal/subnormal boundary.
     let (product, q) = exp_mantissa(j, q, r);
-
-    if q >= -1022 {
-        // Normal result: scaling by 2^q is exact, so one rounding of the pair.
-        return fast_ldexp(product.high + product.low, q);
-    }
-
-    // Subnormal result: rounding the pair to `f64` and then scaling would round
-    // twice.  Instead round the double-double on the integer grid at scale
-    // 2^-1074 (the subnormal ulp): `m = (high + low) · 2^(q + 1074)` lies in
-    // [0, 2^52], round it once to an integer, then `n · 2^-1074` is exact.
-    let shift = q + 1074;
-    let high = fast_ldexp(product.high, shift);
-    let low = fast_ldexp(product.low, shift);
-
-    // `high` may carry a half-integer resolution at this scale, so `high + low`
-    // would discard the fine part of `low`.  Round `high`, then correct with the
-    // exact residual `(high − n0) + low`.
-    let n0 = high.round_ties_even();
-    let n = n0 + ((high - n0) + low).round_ties_even();
-
-    // 2^-1074 is the smallest positive subnormal, i.e. `f64::from_bits(1)`.
-    n * f64::from_bits(1)
+    super::double::round_general64(product, q)
 }
 
 /// Argument reduction for the exponential family.

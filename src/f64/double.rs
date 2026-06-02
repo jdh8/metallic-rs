@@ -187,6 +187,40 @@ pub fn round_general(value: Sum) -> f32 {
     (n * crate::exp2i(-149)) as f32
 }
 
+/// Round a non-negative double-double `value · 2ⁿ` to the nearest `f64`, safe
+/// across the subnormal range
+///
+/// `value` must be a normalized pair with `value.high ∈ [1, 2)`, so the result
+/// is normal exactly when `n ≥ −1022` and the integer-grid shift below stays
+/// within an exact `i64`.  The caller must keep the result finite (clamp
+/// overflow before calling); gradual underflow into the subnormals is handled
+/// here.  This is the `f64`-output analogue of [`round_general`] and the shared
+/// reconstruction tail of the `f64` exponential family.
+#[inline]
+pub fn round_general64(value: Sum, n: i64) -> f64 {
+    if n >= -1022 {
+        // Normal result: scaling by 2ⁿ is exact, so one rounding of the pair.
+        return fast_ldexp(value.high + value.low, n);
+    }
+
+    // Subnormal result: rounding the pair to `f64` and then scaling would round
+    // twice.  Instead round the double-double on the integer grid at scale
+    // 2⁻¹⁰⁷⁴ (the subnormal ulp): `m = (high + low) · 2^(n + 1074)` lies in
+    // [0, 2⁵²], round it once to an integer, then `m · 2⁻¹⁰⁷⁴` is exact.
+    let shift = n + 1074;
+    let high = fast_ldexp(value.high, shift);
+    let low = fast_ldexp(value.low, shift);
+
+    // `high` may carry a half-integer resolution at this scale, so `high + low`
+    // would discard the fine part of `low`.  Round `high`, then correct with the
+    // exact residual `(high − n0) + low`.
+    let n0 = high.round_ties_even();
+    let n = n0 + ((high - n0) + low).round_ties_even();
+
+    // 2⁻¹⁰⁷⁴ is the smallest positive subnormal, i.e. `f64::from_bits(1)`.
+    n * f64::from_bits(1)
+}
+
 /// Round a signed normal-range double-double to the nearest `f32`
 ///
 /// Rounds the magnitude to odd then restores the sign, so [`round`]'s

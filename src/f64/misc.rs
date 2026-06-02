@@ -1,4 +1,4 @@
-use super::double::{fast_sum, Sum};
+use super::double::{fast_sum, round_general64, Sum};
 use super::{normalize, Magnitude, EXP_SHIFT};
 
 /// Rounds half-way cases away from zero
@@ -52,6 +52,89 @@ pub fn cbrt(x: f64) -> f64 {
     } / 3.0;
 
     coefficient * (sum.high + sum.low)
+}
+
+/// Hypotenuse of a right-angled triangle with sides `x` and `y`
+///
+/// Computes `√(x² + y²)` correctly rounded.  The larger leg is scaled into
+/// `[1, 2)` (exact, scale-invariant) so neither square over- nor underflows;
+/// `big² + small²` is then accumulated as a double-double, its square root is
+/// refined by one Newton step to ≈2⁻¹⁰⁵, and the subnormal-safe rounder finishes.
+#[must_use]
+#[inline]
+pub fn hypot(x: f64, y: f64) -> f64 {
+    let ax = x.abs();
+    let ay = y.abs();
+
+    // ±∞ in either argument ⇒ +∞, even when the other is NaN (IEEE 754 hypot).
+    if ax == f64::INFINITY || ay == f64::INFINITY {
+        return f64::INFINITY;
+    }
+    // Any remaining non-finite is NaN; `ax + ay` propagates it.
+    if ax.is_nan() || ay.is_nan() {
+        return ax + ay;
+    }
+
+    let big = ax.max(ay);
+    let small = ax.min(ay);
+
+    // `small == 0` (and possibly `big == 0`) ⇒ the result is exactly `big`.
+    if small == 0.0 {
+        return big;
+    }
+
+    // Negligible smaller leg: when `small < big·2⁻²⁷` the correction
+    // `small²/(2·big) < ½ ulp(big)`, so `√(big² + small²)` rounds to `big`.  This
+    // skips the square root for the common case of disparate magnitudes.
+    const SMALL_RATIO: f64 = 7.450580596923828e-9; // 2⁻²⁷
+    if small < big * SMALL_RATIO {
+        return big;
+    }
+
+    // Overflow guard.  When `big` sits in the top binade the result can exceed
+    // `f64::MAX`; rounding it through the bit-level reconstruction below would
+    // lose the `MAX`-vs-`∞` distinction.  Scale both legs down by 4 (exact),
+    // recurse once (the scaled `big ≤ MAX/8` cannot re-enter here), and scale the
+    // result back up with `ldexp`, which saturates to `+∞` correctly and, being an
+    // exact power of two, preserves correct rounding.
+    if big > f64::MAX * 0.5 {
+        return ldexp(hypot(big * 0.25, small * 0.25), 2);
+    }
+
+    // Scale so the larger leg lands in [1, 2): the result is then
+    // `√(big_s² + small_s²) · 2ᵉ` where `e` is the unbiased exponent of `big`.
+    // When `big` is normal (the overwhelmingly common case) the scale is just an
+    // exponent rewrite; only a subnormal `big` (both legs subnormal) needs the
+    // `frexp`/`ldexp` normalization.  `small_s` always goes through `ldexp`, which
+    // stays correct when `small ≪ big` underflows it toward zero (whereupon the
+    // double-double simply returns `big`).
+    let bits = big.to_bits();
+    let (big_s, small_s, e) = if bits >= f64::MIN_POSITIVE.to_bits() {
+        let e = (bits >> EXP_SHIFT) as i32 - (f64::MAX_EXP - 1);
+        let big_s = f64::from_bits(bits & (f64::MIN_POSITIVE.to_bits() - 1) | (0x3ff << EXP_SHIFT));
+        (big_s, ldexp(small, -e), e)
+    } else {
+        let (_, n) = frexp(big);
+        (ldexp(big, 1 - n), ldexp(small, 1 - n), n - 1)
+    };
+
+    // big_s² + small_s² in double-double (each square exact via the FMA in
+    // `from_product`), then one Newton step `h + (s2 − h²)/(2h)` on `h = √s2.high`.
+    let s2 = Sum::from_product(big_s, big_s) + Sum::from_product(small_s, small_s);
+    let h = s2.high.sqrt();
+    let h2 = Sum::from_product(h, h);
+    let residual = (s2.high - h2.high) + (s2.low - h2.low);
+    let corrected = fast_sum(h, residual * (0.5 / h));
+
+    // `corrected ∈ [1, 2√2)`; normalize into [1, 2) for the subnormal-safe rounder,
+    // folding the binade into the exponent `e`.  `big ≤ MAX/2` here, so the result
+    // is finite and the rounder never sees overflow.
+    let (value, exponent) = if corrected.high >= 2.0 {
+        (corrected * 0.5, e + 1)
+    } else {
+        (corrected, e)
+    };
+    round_general64(value, i64::from(exponent))
 }
 
 /// Multiply `x` by 2 raised to the power `n`
