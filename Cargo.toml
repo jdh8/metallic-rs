@@ -44,6 +44,12 @@ opt-level = 3
 # This avoids errors when passing Criterion/bencher options like --output-format.
 bench = false
 
+# Generator for the f32 `log(x, base)` hard-to-round corpus; needs the MPFR
+# oracle, so gate it behind `mpfr` to keep it out of the default build.
+[[example]]
+name = "gen_f32_log_cases"
+required-features = ["mpfr"]
+
 [[bench]]
 name = "f32_acos"
 harness = false

@@ -189,6 +189,14 @@ pub fn parse_f32_pair(s: &str) -> Result<[f32; 2], ParsePairError> {
     Ok([x, y])
 }
 
+pub fn parse_f32_triple(s: &str) -> Result<[f32; 3], ParsePairError> {
+    let mut fields = s.splitn(3, ',').map(str::trim_ascii);
+    let x = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    let y = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    let z = parse_f32(fields.next().ok_or(ParsePairError::EmptyField)?)?;
+    Ok([x, y, z])
+}
+
 pub fn parse_f64_pair(s: &str) -> Result<[f64; 2], ParsePairError> {
     let mut fields = s.splitn(2, ',').map(str::trim_ascii);
     let x = parse_f64(fields.next().ok_or(ParsePairError::EmptyField)?)?;
