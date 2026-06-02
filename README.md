@@ -123,9 +123,7 @@ library is the default [rounding half to even][round-even].
 - [ ] Real `f64`/`double` functions in [`<math.h>`][math]
   - [x] Exponential functions
   - [x] Logarithm with constant base
-  - [ ] Power and logarithm with arbitrary base
-    - [x] Faithful rounding
-    - [ ] Correct rounding
+  - [x] Power and logarithm with arbitrary base
   - [ ] Trigonometric and hyperbolic functions
     - [x] Hyperbolic functions
   - [ ] Miscellaneous elementary functions

@@ -17,6 +17,11 @@ core-math = { version = "1", optional = true }
 # `poly_array`/`rational_array`) requires; without it the library does not build
 # on its own (only under `cargo test`, where dev-dependencies pull it in).
 fast_polynomial = { version = "0.4", features = ["std"] }
+# Test-only MPFR oracle for the functions without a correctly-rounded core-math
+# f64 reference (arbitrary-base `log`, and the gamma functions).  Optional and
+# gated behind the `mpfr` feature so the default `cargo test` needs neither rug
+# nor a system MPFR/GMP build.
+rug = { version = "1", optional = true }
 
 [dev-dependencies]
 core-math = "1"
@@ -28,6 +33,7 @@ regex = "1"
 
 [features]
 core-math = ["dep:core-math"]
+mpfr = ["dep:rug"]
 _no_fma = []
 
 [profile.dev]

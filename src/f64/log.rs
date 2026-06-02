@@ -604,10 +604,21 @@ pub fn ln_1p(x: f64) -> f64 {
 
 /// The logarithm of `x` to an arbitrary `base`
 ///
-/// This is the ratio `log2(x) / log2(base)`; as a quotient of two logarithms it
-/// is faithfully — not correctly — rounded.
+/// `log_base(x) = log2(x) / log2(base)`, correctly rounded.  Both logarithms are
+/// formed as the double-double [`log2_dd`](super::pow::log2_dd) and the quotient
+/// is taken in double-double (≈2⁻⁹⁴, far past f64), so a single final rounding is
+/// correct — exactly the f32 `log`'s scheme, lifted a precision tier.
 #[must_use]
 #[inline]
 pub fn log(x: f64, base: f64) -> f64 {
-    log2(x) / log2(base)
+    // Non-finite / non-positive inputs, and `base == 1` (where `log2(base) = 0`),
+    // give ∞/0/NaN that the plain f64 ratio of the correctly-rounded `log2`s
+    // already produces (including `0/0 = NaN` for `log(1, 1)`).
+    if !(x.is_finite() && x > 0.0 && base.is_finite() && base > 0.0) || base == 1.0 {
+        return log2(x) / log2(base);
+    }
+
+    // Both finite positive with `base ≠ 1`: high-precision ratio, rounded once.
+    let ratio = super::pow::log2_dd(x) * super::pow::log2_dd(base).recip();
+    ratio.high + ratio.low
 }
