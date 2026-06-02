@@ -290,6 +290,10 @@ pub fn exp10(x: f32) -> f32 {
 }
 
 /// Compute `exp(x) - 1` accurately especially for small `x`
+///
+/// Uses the identity `exp(x) − 1 = 2ⁿ·(exp(r)−1) + (2ⁿ−1)` to avoid
+/// catastrophic cancellation when `2ⁿ·exp(r) ≈ 1` and to unify the `n = 0`
+/// near-zero case with the main path.
 #[must_use]
 #[inline]
 pub fn exp_m1(x: f32) -> f32 {
@@ -304,17 +308,17 @@ pub fn exp_m1(x: f32) -> f32 {
         return f32::INFINITY;
     }
 
-    let x: f64 = x.into();
-    let n = (x * consts::LOG2_E).round_ties_even();
-    let x = crate::mul_add(n + 0.0, -LN_2_HI, x);
-    let x = crate::mul_add(n, -LN_2_LO, x);
-    let y = kernel::exp_slope(x);
-
-    if n == 0.0 {
-        return (x * y) as f32;
+    if x == 0.0 {
+        return x;
     }
 
-    (kernel::fast_ldexp(crate::mul_add(x, y, 1.0), n as i64) - 1.0) as f32
+    let x: f64 = x.into();
+    let n = (x * consts::LOG2_E).round_ties_even();
+    let r = crate::mul_add(n, -LN_2_HI, x);
+    let r = crate::mul_add(n, -LN_2_LO, r);
+    let y = kernel::exp_slope(r);
+
+    (kernel::fast_ldexp(r * y, n as i64) + (crate::exp2i(n as i64) - 1.0)) as f32
 }
 
 /// Multiply `x` by 2 raised to the power of `n`
