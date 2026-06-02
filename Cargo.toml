@@ -159,6 +159,18 @@ name = "f32_tgamma"
 harness = false
 
 [[bench]]
+name = "f64_acosh"
+harness = false
+
+[[bench]]
+name = "f64_asinh"
+harness = false
+
+[[bench]]
+name = "f64_atanh"
+harness = false
+
+[[bench]]
 name = "f64_cbrt"
 harness = false
 
