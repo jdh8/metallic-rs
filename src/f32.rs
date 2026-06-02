@@ -1159,10 +1159,48 @@ fn finish(value: Sum, q: i64, negative: bool) -> f32 {
     }
 }
 
+/// `∏_{k=0}^{n-1}(base + k·step)` for `n ≥ 0`, on four parallel accumulators
+///
+/// The recurrence factors `(x−1)(x−2)…` form a product whose length `n = |i|`
+/// varies with the input, so a single dependency chain costs one multiply
+/// latency per factor.  Splitting it across four lanes cuts the dependency depth
+/// to `n/4`, while a single counted loop keeps the lone (CORE-MATH-matching)
+/// branch.  Every factor `base + k·step` (`step = ±1`, small integer `k`) is
+/// exact, so the only added error is reassociation — a few `2⁻⁵³` ulps, far
+/// inside the `2⁻³⁷` gate the [`tgamma`] fast path relies on.
+#[inline]
+fn recurrence_product(base: f64, step: f64, n: i32) -> f64 {
+    let stride = 4.0 * step;
+    let mut p = [1.0_f64; 4];
+    let mut f = [base, base + step, base + 2.0 * step, base + 3.0 * step];
+
+    let mut k = n;
+    while k >= 4 {
+        p[0] *= f[0];
+        p[1] *= f[1];
+        p[2] *= f[2];
+        p[3] *= f[3];
+        f[0] += stride;
+        f[1] += stride;
+        f[2] += stride;
+        f[3] += stride;
+        k -= 4;
+    }
+
+    // Combine the lanes and fold in the 0..3 leftover factors without a branch.
+    let main = (p[0] * p[2]) * (p[1] * p[3]);
+    let r0 = if k >= 1 { f[0] } else { 1.0 };
+    let r1 = if k >= 2 { f[1] } else { 1.0 };
+    let r2 = if k >= 3 { f[2] } else { 1.0 };
+    main * ((r0 * r1) * r2)
+}
+
 /// Fast plain-`f64` `Γ(z)` over the recurrence range, with a relative error bound
 ///
 /// Mirrors [`tgamma_dd`] in `f64`: reduce `z` into `[2.375, 3.375]`, evaluate the
-/// degree-11 minimax, and walk back by the same recurrence.  The error is
+/// degree-11 minimax, and walk back by the recurrence.  The factor product (see
+/// [`recurrence_product`]) runs on its own dependency chains, overlapping the
+/// polynomial, and is folded in with a single multiply or divide.  The error is
 /// dominated by the polynomial's `2⁻⁴²`, which the gate in [`tgamma`] uses.
 #[inline]
 fn tgamma_f64(x: f64) -> (f64, f64) {
@@ -1172,19 +1210,11 @@ fn tgamma_f64(x: f64) -> (f64, f64) {
     let steps = i.abs() as i32;
 
     if i > 0.0 {
-        let mut factor = x;
-        for _ in 0..steps {
-            factor -= 1.0;
-            value *= factor;
-        }
+        // Γ(x) = Γ(x−i)·∏_{j=1}^{i}(x−j)
+        value *= recurrence_product(x - 1.0, -1.0, steps);
     } else if i < 0.0 {
-        let mut product = x;
-        let mut factor = x;
-        for _ in 1..steps {
-            factor += 1.0;
-            product *= factor;
-        }
-        value /= product;
+        // Γ(x) = Γ(x−i)/∏_{j=0}^{-i-1}(x+j)
+        value /= recurrence_product(x, 1.0, steps);
     }
 
     (value, crate::exp2i(-37) * value.abs())
