@@ -1,4 +1,5 @@
 mod common;
+use common::Identity as _;
 use metallic::f64 as metal;
 
 #[test]
@@ -21,8 +22,8 @@ fn test_log_exact() {
 #[test]
 fn test_log_vs_std() {
     // Sanity vs `std`, which is only faithfully rounded, so allow 2 ulps (correct
-    // rounding is verified bit-exact by `test_log_correct_rounding` under
-    // `--features mpfr`).  Skip non-normal and near-1 inputs (result ≈ 0).
+    // rounding is verified bit-exact by `test_log_corpus`).  Skip non-normal and
+    // near-1 inputs (result ≈ 0).
     for i in (0..f64::INFINITY.to_bits()).step_by((1 << 46) + 1) {
         let x = f64::from_bits(i);
         if !x.is_normal() {
@@ -43,41 +44,23 @@ fn test_log_vs_std() {
     }
 }
 
-/// Correctly-rounded reference via MPFR: `ln(x)/ln(base)` at 200 bits, rounded
-/// once to f64.  Run with `cargo test --features mpfr`.
-#[cfg(feature = "mpfr")]
-fn correctly_rounded(x: f64, base: f64) -> f64 {
-    use rug::Float;
-    const PREC: u32 = 200;
-    let lx = Float::with_val(PREC, x).ln();
-    let lb = Float::with_val(PREC, base).ln();
-    (lx / lb).to_f64()
-}
-
-#[cfg(feature = "mpfr")]
+/// Regression guard over the frozen hard-to-round corpus.
+///
+/// `tests/cases/f64_log.wc` holds the inputs `metallic::f64::log` is most likely
+/// to mis-round (results near an `f64` midpoint) together with their
+/// correctly-rounded results, computed once via MPFR.  Verifying against those
+/// frozen answers needs no oracle, so this runs in the default `cargo test` (and
+/// in CI).  Regenerate it with
+/// `cargo run --release --features mpfr --example gen_f64_log_cases`; the
+/// generator also scans billions of fresh inputs and asserts none mis-round.
 #[test]
-fn test_log_correct_rounding() {
-    /// Finite positive normal f64 from a hash: exponent in [1, 2046], hashed
-    /// mantissa.
-    fn posf(hash: u64) -> f64 {
-        let exp = 1 + (hash >> 52) % 2046;
-        let mant = hash & 0x000F_FFFF_FFFF_FFFF;
-        f64::from_bits((exp << 52) | mant)
-    }
+fn test_log_corpus() {
+    let cases: Vec<[f64; 3]> =
+        common::parse_case_file("f64_log.wc", common::parse_f64_triple).collect();
+    assert_eq!(cases.len(), 2868, "corpus size changed; update this count");
 
-    // Wide (x, base) over the whole exponent range.
-    let wide = (0..2_000_000u64).map(|i| {
-        let x = posf(i.wrapping_mul(0x2545_F491_4F6C_DD1D));
-        let base = posf(i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xABCD);
-        [x, base]
-    });
-
-    // base near 1 (large results — the hardest rounding), x ∈ [1, 2).
-    let near1 = (0..2_000_000u64).map(|i| {
-        let xb = 0x3FF0_0000_0000_0000 | (i.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 12);
-        let bb = 0x3FF0_0000_0000_0000 | (i.wrapping_mul(0xC2B2_AE3D_27D4_EB4F) >> 14);
-        [f64::from_bits(xb), f64::from_bits(bb)]
-    });
-
-    common::test_bivariate_cases(metal::log, correctly_rounded, wide.chain(near1));
+    common::truncate_errors(cases.into_iter().filter_map(|[x, base, want]| {
+        let got = metal::log(x, base);
+        (!got.is(&want)).then(|| println!("log({x:e}, {base:e}) = {got:e} != {want:e} (correct)"))
+    }));
 }

@@ -17,10 +17,11 @@ core-math = { version = "1", optional = true }
 # `poly_array`/`rational_array`) requires; without it the library does not build
 # on its own (only under `cargo test`, where dev-dependencies pull it in).
 fast_polynomial = { version = "0.4", features = ["std"] }
-# Test-only MPFR oracle for the functions without a correctly-rounded core-math
-# f64 reference (arbitrary-base `log`, and the gamma functions).  Optional and
-# gated behind the `mpfr` feature so the default `cargo test` needs neither rug
-# nor a system MPFR/GMP build.
+# MPFR oracle used only by the corpus generators (`gen_f32_log_cases`,
+# `gen_f64_log_cases`).  They freeze the hard-to-round `log(x, base)` cases into
+# `tests/cases/*.wc`, which the default `cargo test` then checks with no oracle.
+# Optional and gated behind the `mpfr` feature so neither the default test run
+# nor the library build needs rug or a system MPFR/GMP build.
 rug = { version = "1", optional = true }
 
 [dev-dependencies]
@@ -44,10 +45,14 @@ opt-level = 3
 # This avoids errors when passing Criterion/bencher options like --output-format.
 bench = false
 
-# Generator for the f32 `log(x, base)` hard-to-round corpus; needs the MPFR
-# oracle, so gate it behind `mpfr` to keep it out of the default build.
+# Generators for the `log(x, base)` hard-to-round corpora; need the MPFR oracle,
+# so gate them behind `mpfr` to keep them out of the default build.
 [[example]]
 name = "gen_f32_log_cases"
+required-features = ["mpfr"]
+
+[[example]]
+name = "gen_f64_log_cases"
 required-features = ["mpfr"]
 
 [[bench]]
