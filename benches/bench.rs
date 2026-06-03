@@ -133,6 +133,30 @@ impl Draw<f64> for core::ops::RangeTo<f64> {
     }
 }
 
+/// Log-uniform magnitudes: a random sign times a mantissa in `[1, 2)` scaled by
+/// `2ᵉ`, with the exponent `e` drawn uniformly from the given inclusive range.
+///
+/// Use this for a function whose kernel runs only inside a bounded magnitude
+/// band, where the magnitude-gated fast paths would otherwise swallow almost
+/// every sample.  For example `f64::atan` reduces `atan(x) = atan(1/x)` for
+/// `|x| > 1` and fast-returns `x` itself once `min(|x|, 1/|x|) < 2⁻⁴⁰`, so under
+/// representation-uniform `..` roughly 96% of inputs skip the kernel entirely;
+/// `Exponents(-40..=39)` keeps every sample in `[2⁻⁴⁰, 2⁴⁰)` so the kernel
+/// always runs, spread uniformly across its active binades.
+pub struct Exponents(pub core::ops::RangeInclusive<i32>);
+
+impl Draw<f64> for Exponents {
+    fn draw(self) -> f64 {
+        let e = rand::random_range(self.0);
+        // Mantissa uniform in [1, 2): bias exponent field, randomize the 52-bit
+        // fraction.  `2ᵉ` is built by bit pattern, exact for any normal `e`.
+        let mantissa = f64::from_bits(0x3FF0_0000_0000_0000 | (rand::random::<u64>() >> 12));
+        let scale = f64::from_bits(((e + 1023) as u64) << 52);
+        let signed = if rand::random() { mantissa } else { -mantissa };
+        signed * scale
+    }
+}
+
 // Integer exponent (e.g. `ldexp`) → value-uniform.
 impl Draw<i32> for core::ops::Range<i32> {
     fn draw(self) -> i32 {
