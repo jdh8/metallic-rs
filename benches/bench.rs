@@ -157,6 +157,23 @@ impl Draw<f64> for Exponents {
     }
 }
 
+/// Like [`Exponents`] but always positive — a log-uniform magnitude with no sign
+/// flip (mantissa in `[1, 2)` scaled by `2ᵉ`, `e` uniform in the range).
+///
+/// Use for a positive-only domain whose kernel runs across many binades — a
+/// `powf` base, a `log` argument — where the signed [`Exponents`] would waste
+/// half its draws on the negative-input fast return.
+pub struct PositiveExponents(pub core::ops::RangeInclusive<i32>);
+
+impl Draw<f64> for PositiveExponents {
+    fn draw(self) -> f64 {
+        let e = rand::random_range(self.0);
+        let mantissa = f64::from_bits(0x3FF0_0000_0000_0000 | (rand::random::<u64>() >> 12));
+        let scale = f64::from_bits(((e + 1023) as u64) << 52);
+        mantissa * scale
+    }
+}
+
 // Integer exponent (e.g. `ldexp`) → value-uniform.
 impl Draw<i32> for core::ops::Range<i32> {
     fn draw(self) -> i32 {
