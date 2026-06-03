@@ -103,10 +103,93 @@ the optional `core-math` feature *replaces* metallic's own f32 trig / `powf` wit
 CORE-MATH implementations, so under `--all-features` the suite would compare
 CORE-MATH against itself instead of testing metallic.
 
+## Generating worst cases for bivariate (and complex) functions
+
+When a function has **no published worst-case table**, you must find the
+hard-to-round (HR) inputs yourself. First check whether you actually need to:
+CORE-MATH already publishes HR databases for the binary32 functions it covers —
+**including the bivariate `powf`, `hypot`, and `atan2`** — so for those, *use the
+published cases* (via the `core-math` crate) rather than regenerating. The gap is
+functions outside that set: metallic's two-argument **`log(x, base)`** (`= ln x /
+ln base`, neither a C99 function nor in CORE-MATH) is the case in point, as the
+real/imag components of a future complex function would be.
+
+The approach metallic-rs's own generators (`gen_f32_log_cases`, `gen_f64_log_cases`)
+take — scan inputs, keep those whose MPFR value lands within a normalized threshold
+of an `f32`/`f64` midpoint, freeze the survivors with their correct answers — is
+exactly the **"naive exhaustive search"** the CORE-MATH paper measures and rejects:
+an MPFR evaluation per input costs ~37 s to cover *one* binary32 binade,
+extrapolating to ~10⁴ core-years for the full 2⁵⁶ regular `powf` pairs. It is fine as
+a **regression-guard corpus** (and the only practical option when the kernel is a
+double-double ≈2⁻⁹⁴ — already far past the format, so true HR cases are
+astronomically rare and a margin-padded near-midpoint scan suffices), but it does
+**not** enumerate the true worst cases. When you need that, use the structured
+methods below — the paper demonstrates them on `powf` (and `hypot`/`atan2`); none
+targets `log(x, base)`, but Algorithm 1 is general and applies. (Source: *The
+CORE-MATH Project*, Sibidanov–Zimmermann–Glondu, ARITH 2022, §II — local copy
+`~/doc/core-math-final.pdf`.)
+
+**The key reframing.** "There is at present no *general* clever algorithm for HR
+search of bivariate functions" (Stehlé's SLZ extension was never implemented;
+Brisebarre–Hanrot [2], integer points near a transcendental curve, is the recent
+candidate). The practical wins come from **fixing one argument** to make the problem
+univariate, then either a fast per-slice scan or a function-specific shortcut.
+
+1. **Fix one argument, scan the other with finite differences (CORE-MATH
+   Algorithm 1, `worst_powf`).** For a fixed `y`, you want every `x` with `xʸ`
+   m-HR (≥ m identical bits past the round bit). On each binade take a **degree-2
+   Taylor** model of `xʸ` with a rigorous error term, reduce the m-HR test to
+   `|frac(α + βi + γi²)| < p(i)` in integers **mod 2⁶⁴**, and evaluate that
+   quadratic over consecutive `i` by the **table-of-differences method**: keep a
+   running value `α′`, first difference `β′`, second difference `γ′` and step with
+   just `α′ += β′; β′ += γ′` (two 64-bit adds, ~1 cycle each) — no multiply, no
+   per-point polynomial eval. This is ~18.6 cycles per `x` (≈12 s per exponent),
+   **~17× faster than the BaCSeL tool**, and applies to *any* bivariate function
+   (and to univariate, since the second argument is then just a constant).
+
+2. **Search the inverse where the function contracts.** When one argument makes the
+   map contracting (small `|y|` for `powf`, so many `x` collapse to few outputs),
+   enumerating the **inverse** (`z^{1/y}`) is cheaper — fewer `z` cover the range.
+   CORE-MATH switches to the inverse for `|y| < 2⁻⁹` and to a trivial scan for
+   `|y| > 2¹⁴` (few `x` even land in range), Algorithm 1 elsewhere.
+
+3. **Exploit number-theoretic structure when it exists.** Some bivariate functions
+   have HR cases pinned by arithmetic, no transcendental search needed:
+   - **`hypot`** (`√(x²+y²)`): HR cases are **"almost-Pythagorean triples"**
+     `x² + y² = z² ± 1` with `z` exactly representable on 25 bits — test integer
+     triples in range instead of scanning floats.
+   - **`atan2`**: for each 25-bit value `z`, you need `y/x ≈ tan z`; take the
+     **continued-fraction convergents of `tan z`** and keep the last one that is
+     exactly a ratio of two representable values — that ratio is the HR input.
+
+4. **Exact and midpoint cases are separate, and cheap.** For round-to-nearest you
+   also need ties. In binary32, a **midpoint** is a result representable on **25
+   bits but not 24**; an **exact** case is representable outright. Enumerate these
+   directly (Lauter–Lefèvre rounding-boundary test [12]) rather than hoping a scan
+   lands on them — a `Sum`-collapsing kernel can round a true midpoint either way,
+   so they must be in the corpus explicitly.
+
+**Complex functions** are not in the paper, but a complex `f(z)` is a pair of real
+**bivariate** functions of `(re, im)` (e.g. `clog`'s real part is
+`½·log(x²+y²)` = `log(hypot)`, its imag part is `atan2(y, x)`). Correct rounding is
+per-component, so generate worst cases for each component with the methods above —
+and since `hypot`/`atan2` are CORE-MATH functions with published HR tables, complex
+log/abs/arg can reuse those directly rather than regenerate anything.
+
+**General-purpose HR tools** (reach for these before writing a bespoke search):
+**BaCSeL** (Hanrot–Lefèvre–Stehlé–Zimmermann, <https://gitlab.inria.fr/zimmerma/bacsel>)
+for one- and two-variable HR search; the **SLZ algorithm** (Stehlé–Lefèvre–Zimmermann,
+IEEE TC 2005, lattice reduction) and **Lefèvre's algorithm**
+(<https://www.vinc17.net/research/testlibm/>, with the `testlibm` worst-case data) for
+univariate slices.
+
 ## Tooling
 
 - `core-math` crate (CORE-MATH) — the primary oracle and reference.
 - `rug` — MPFR-backed arbitrary-precision ground truth for f64.
+- **BaCSeL** <https://gitlab.inria.fr/zimmerma/bacsel> — hard-to-round search for
+  one- and two-variable functions when no published table exists (see the
+  bivariate worst-case section above before scanning by brute force).
 - Gappa <https://gappa.gitlabpages.inria.fr/> — machine-checked proofs of the
   kernel's rounding-error bound (the ε that Ziv's strategy and the binary64
   argument both depend on).
