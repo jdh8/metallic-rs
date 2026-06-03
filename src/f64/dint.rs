@@ -302,7 +302,6 @@ mod tests {
     use super::*;
 
     /// The accurate path must match the CORE-MATH oracle bit-for-bit.
-    #[cfg(feature = "core-math")]
     #[test]
     fn accurate_matches_oracle() {
         let mut state = 0x2545_f491_4f6c_dd1du64;

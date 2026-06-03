@@ -65,11 +65,7 @@ fn powf_core(x: f64, y: f64) -> f32 {
     exp2_dd(log2_dd(x) * y)
 }
 
-#[cfg(feature = "core-math")]
-pub use core_math::powf;
-
 /// Raise to a floating-point power
-#[cfg(not(feature = "core-math"))]
 #[must_use]
 #[inline]
 pub fn powf(x: f32, y: f32) -> f32 {

@@ -12,7 +12,6 @@ exclude = ["/tests/*/huge"]
 autobenches = false
 
 [dependencies]
-core-math = { version = "1", optional = true }
 # `std` enables `num-traits`' `MulAdd for f64`, which `PolyNum` (used by
 # `poly_array`/`rational_array`) requires; without it the library does not build
 # on its own (only under `cargo test`, where dev-dependencies pull it in).
@@ -33,7 +32,6 @@ rand = "0.10"
 regex = "1"
 
 [features]
-core-math = ["dep:core-math"]
 mpfr = ["dep:rug"]
 _no_fma = []
 
