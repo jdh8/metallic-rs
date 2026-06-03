@@ -6,7 +6,7 @@
 //! them (`pub(crate)`) and adds the f64-output `exp2_dd`/`powf_core`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{round_general64, Sum};
+use super::double::{fast_ldexp, round_general64, Sum};
 use super::EXP_SHIFT;
 use core::cmp::Ordering;
 use core::f64::consts::FRAC_1_SQRT_2;
@@ -295,15 +295,73 @@ fn exp2_dd(e: Sum) -> f64 {
     round_general64(m, n)
 }
 
+/// `log₂(e)` as a double-double, so `log₂x = ln x · log₂e`.
+const LOG2_E: Sum = Sum {
+    high: 1.4426950408889634,
+    low: 2.0355273740931033e-17,
+};
+
+/// Ziv-gate unit for the [`powf`] fast path, scaled by `1 + |y|`.
+///
+/// The fast mantissa's absolute error is `≲ (1 + |y|)·2⁻⁶⁷`: the lean table `exp2`
+/// contributes ≈1 unit, and the `×y` amplification of [`ln_fast`](super::ln_fast)'s
+/// ≈2⁻⁶⁸ absolute slip in `log₂x` contributes `|y|` units — the `log₂e` and `ln2`
+/// factors cancel exactly across the `log₂ → ×y → exp2` round trip, leaving a bare
+/// `|y|`.  `2⁻⁶⁴` keeps an ≈8× margin over that bound while still gating the fast
+/// result in for the vast majority of inputs.
+const POWF_ZIV_UNIT: f64 = 5.421010862427522e-20; // 2^-64
+
+/// Fast path for [`powf_core`].
+///
+/// `2^(y·log₂x)` through the lean `ln_fast`→`log₂e`→table-`exp2` chain — the same
+/// kernels that make `log2` and `exp2` fast — accepted by a Ziv gate.  `slack`
+/// bounds the error of `e = y·log₂x` (and of the [1, 2) mantissa) by
+/// `(1 + |y|)·2⁻⁶⁴`, so gross overflow / underflow is decided here directly and
+/// only the narrow boundary bands, the subnormal range, and the rare Ziv straddles
+/// return `None` for the accurate path.
+#[inline]
+fn powf_fast(x: f64, y: f64) -> Option<f64> {
+    // e = y·log₂x = y · (ln x · log₂e), with `ln_fast` good to ≈2⁻⁶⁸ absolute, so
+    // `e`'s absolute error is below `slack`.
+    let e = super::ln_fast(x) * LOG2_E * y;
+    let slack = (1.0 + y.abs()) * POWF_ZIV_UNIT;
+
+    // Gross overflow / underflow, decided directly (the `ln_fast` chain already
+    // pins `e` more tightly than `log2_dd` would for these out-of-range inputs).
+    if e.high - slack > 1024.0 {
+        return Some(f64::INFINITY);
+    }
+    if e.high + slack < -1075.0 {
+        return Some(0.0);
+    }
+
+    // Leave the over/underflow boundary bands and the normal/subnormal transition
+    // to the accurate path, which rounds them exactly.
+    if !(e.high + slack < 1023.0 && e.high - slack > -1022.0) {
+        return None;
+    }
+
+    let (j, q, r) = super::exp::exp2_reduce_dd(e);
+    let (m, q) = super::exp::exp_mantissa_fast(j, q, r);
+
+    // Ziv test on the [1, 2) mantissa: accept when both ends of its `±slack` error
+    // interval round to the same f64, and the result is comfortably normal.
+    let lo = m.high + (m.low - slack);
+    let hi = m.high + (m.low + slack);
+    (lo == hi && (-1021..=1022).contains(&q)).then(|| fast_ldexp(lo, q))
+}
+
 /// `xʸ` for finite positive `x ≠ 1`, correctly rounded to `f64`
 ///
-/// `2^(y·log₂x)` evaluated entirely in double-double: [`log2_dd`] → `×y` →
-/// [`exp2_dd`].  Unlike the f32 [`powf`](crate::f32::powf), there is no plain-f64
-/// fast path — an f64 fast result carries no extra precision to Ziv-test against,
-/// so the double-double chain (good to ≈2⁻⁸⁴ after the `×y` amplification) is the
-/// only path.  Overflow / underflow are handled inside [`exp2_dd`].
+/// Fast path: [`powf_fast`], a lean `2^(y·log₂x)` accepted by a Ziv gate.  The rare
+/// hard-to-round cases (and the over/underflow / subnormal edges) fall back to the
+/// double-double chain [`log2_dd`] → `×y` → [`exp2_dd`], good to ≈2⁻⁸⁴ after the
+/// `×y` amplification — the correctly-rounded reference.
 #[inline]
 fn powf_core(x: f64, y: f64) -> f64 {
+    if let Some(result) = powf_fast(x, y) {
+        return result;
+    }
     exp2_dd(log2_dd(x) * y)
 }
 

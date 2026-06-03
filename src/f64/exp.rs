@@ -204,7 +204,7 @@ const EXP_N: i64 = 128;
 /// `r` is the reduced argument, `|r| ≤ ln2/2N`.  The full value is `2`<sup>`q`</sup>
 /// times the returned mantissa.
 #[inline]
-fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
+pub(super) fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     // exp(r) by double-double Horner over the degree-8 minimax polynomial.
     let (high, low) = EXP_R_COEFFS[EXP_R_COEFFS.len() - 1];
     let mut acc = Sum { high, low };
@@ -237,7 +237,7 @@ fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
 /// the accurate path's ≈2⁻¹⁰⁰ for ≈2⁻⁶⁸ relative error at a fraction of the cost;
 /// [`exp_reconstruct`] resolves the rare hard-to-round cases with a Ziv test.
 #[inline]
-fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
+pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     // The full reduced argument as one `f64`, for the small tail term.  `exp2`
     // and `exp10` hand in an *un-normalized* `r` (the `ln2/N` low word lands in
     // `r.low ≈ 2⁻⁴⁷`), so dropping `r.low` here would lose the `2·r.high·r.low`
@@ -270,6 +270,37 @@ fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     } else {
         (product, q)
     }
+}
+
+/// Argument reduction for `2`<sup>`e`</sup> with a *double-double* exponent `e`.
+///
+/// Returns `(j, q, r)` with `2`<sup>`e`</sup>` = 2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
+/// and `|r| ≤ ln2/2N` — the base-2 counterpart of [`exp2`]'s reduction, lifted to a
+/// double-double argument for [`powf`](super::powf), where `e = y·log₂x`.  The
+/// caller must keep `|e.high|` inside the finite `2`<sup>`e`</sup> range
+/// (`< ~1075`) so `round(N·e)` fits an `i64`.
+#[inline]
+pub(super) fn exp2_reduce_dd(e: Sum) -> (usize, i64, Sum) {
+    let scaled = (e.high * EXP_N as f64).round_ties_even();
+
+    // SAFETY: the caller keeps `e.high` within the finite 2^e range, so
+    // `|scaled| < 2^18`.
+    let m = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (m & (EXP_N - 1)) as usize;
+    let q = m >> 7;
+
+    // sigma = N·e − m.  `e.high·N` is exact (N is a power of two) and within ½ of
+    // the integer `scaled`, so the high word is exact (Sterbenz); `e.low·N` is also
+    // exact, and 2Sum normalizes the pair regardless of their relative size.
+    let sigma = Sum::from_sum(e.high.mul_add(EXP_N as f64, -scaled), e.low * EXP_N as f64);
+
+    // r = sigma · ln2/N as a double-double, `|r| ≤ ln2/2N`.
+    let r = sigma
+        * Sum {
+            high: LN2_OVER_N_HI,
+            low: LN2_OVER_N_LO,
+        };
+    (j, q, r)
 }
 
 /// Reconstruct `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)` for the exponential family.
