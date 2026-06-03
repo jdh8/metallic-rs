@@ -66,13 +66,31 @@ emit_dd_array("SIN_KERNEL", sin_coeffs)
 print(f"// cos(r) kernel max error ~ {mp.log(cos_err, 2)} bits")
 emit_dd_array("COS_KERNEL", cos_coeffs)
 
-# Fast (plain-f64) kernels: lower degree, ~2^-60.
-sin_fast, sin_fast_err = chebyfit(sin_over_r, [0, U_MAX], 6, error=True)
-cos_fast, cos_fast_err = chebyfit(cos_u, [0, U_MAX], 7, error=True)
-print(f"// SIN_FAST max error ~ {mp.log(sin_fast_err, 2)} bits")
-emit_f64_array("SIN_FAST", sin_fast[::-1])
-print(f"// COS_FAST max error ~ {mp.log(cos_fast_err, 2)} bits")
-emit_f64_array("COS_FAST", cos_fast[::-1])
+# Fast-path tail kernels.  Peel the THREE exact leading terms into double-double
+#   sin(r)/r = 1 - u/6 + u^2/120 + u^3 * SIN_TAIL(u)
+#   cos(r)   = 1 - u/2 + u^2/24  + u^3 * COS_TAIL(u)
+# and fit only the tiny u^3 remainder TAIL(u) in plain f64.  The peeled terms
+# (1, -1/6 or -1/2, 1/120 or 1/24) carry the value to ~2^-60, while the tail
+# value is only ~2^-12 so its f64 evaluation rounding (~2^-53 relative) is
+# ~2^-65 absolute on the kernel — negligible.  This is what lets the Ziv gate run
+# tight; the full f64 poly would be only ~2^-48.  The effective approximation
+# error on the kernel value is U_MAX^3 times the fit residual.
+sin_tail_fn = lambda u: (sin_over_r(u) - 1 + mpf(u) / 6 - mpf(u) ** 2 / 120) / mpf(u) ** 3 if u != 0 else -mpf(1) / 5040
+cos_tail_fn = lambda u: (cos_u(u) - 1 + mpf(u) / 2 - mpf(u) ** 2 / 24) / mpf(u) ** 3 if u != 0 else -mpf(1) / 720
+sin_tail, sin_tail_err = chebyfit(sin_tail_fn, [0, U_MAX], 6, error=True)
+cos_tail, cos_tail_err = chebyfit(cos_tail_fn, [0, U_MAX], 6, error=True)
+print(f"// SIN_TAIL fit ~ {mp.log(sin_tail_err, 2)} bits; on sin(r)/r ~ {mp.log(U_MAX ** 3 * sin_tail_err, 2)} bits")
+emit_f64_array("SIN_TAIL", sin_tail[::-1])
+print(f"// COS_TAIL fit ~ {mp.log(cos_tail_err, 2)} bits; on cos(r) ~ {mp.log(U_MAX ** 3 * cos_tail_err, 2)} bits")
+emit_f64_array("COS_TAIL", cos_tail[::-1])
+
+# The exact u^2 coefficients peeled into the double-double leads, carried as
+# double-doubles so the term is not capped at the f64 rounding of 1/120 (1/24).
+print()
+for name, value in [("FRAC_1_120", mpf(1) / 120), ("FRAC_1_24", mpf(1) / 24)]:
+    hi, lo = dd(value)
+    print(f"const {name}: Sum = Sum {{ high: {hi!r}, low: {lo!r} }};")
+print()
 
 # --- pi/2 in three words, each with low 21 mantissa bits cleared so that
 # q * word is exact for |q| < 2^21 (medium range |x| < 2^20). ---

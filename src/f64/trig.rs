@@ -119,6 +119,60 @@ const COS_KERNEL: [Sum; 13] = [
     },
 ];
 
+/// Fast-path tail of `sin(r)/r`: coefficients of the `u³` remainder after the
+/// three exact leading terms are peeled off, low-degree first in `u = r²`
+/// (`sin(r)/r = 1 − u/6 + u²/120 + u³·SIN_TAIL(u)`).  Approximation error on
+/// `sin(r)/r` ≈ 2⁻⁷⁴, so once evaluated in plain `f64` the fast kernel is good
+/// to ≈2⁻⁶⁰ — enough for the Ziv gate, far cheaper than the double-double Horner.
+const SIN_TAIL: [f64; 6] = [
+    -0.0001984126984126984,
+    2.7557319223985634e-06,
+    -2.505210838495563e-08,
+    1.6059043500527755e-10,
+    -7.647058546227501e-13,
+    2.7962863666189794e-15,
+];
+
+/// Fast-path tail of `cos(r)`: the `u³` remainder after the three exact leading
+/// terms (`cos(r) = 1 − u/2 + u²/24 + u³·COS_TAIL(u)`).  Approximation error on
+/// `cos(r)` ≈ 2⁻⁷⁰.  See [`SIN_TAIL`].
+const COS_TAIL: [f64; 6] = [
+    -0.001388888888888889,
+    2.4801587301586814e-05,
+    -2.755731922306274e-07,
+    2.087675634918288e-09,
+    -1.1470545821738428e-11,
+    4.750660993437302e-14,
+];
+
+/// Relative half-width of the trig fast-path Ziv gate.  Over a dense sweep of
+/// the `[-π/4, π/4]` octant the fast kernel's relative error peaks at ≈2⁻⁶¹·⁶
+/// (cos) and ≈2⁻⁶⁵ (sin); `2⁻⁵⁹` keeps a ~6× margin over that while the gate
+/// stays tight enough that only a few percent of inputs fall through to the
+/// accurate kernel.
+const TRIG_ZIV_EPS: f64 = 1.734723475976807e-18; // 2⁻⁵⁹
+
+/// `1` as a double-double.
+const ONE: Sum = Sum {
+    high: 1.0,
+    low: 0.0,
+};
+
+/// `1/120` as a double-double — the exact `u²` coefficient peeled from
+/// `sin(r)/r`.  Carried in double-double so the term does not cap the fast
+/// kernel at the `f64` rounding of `1/120` (≈2⁻⁵⁹).
+const FRAC_1_120: Sum = Sum {
+    high: 0.008333333333333333,
+    low: 1.1564823173178714e-19,
+};
+
+/// `1/24` as a double-double — the exact `u²` coefficient peeled from `cos(r)`.
+/// See [`FRAC_1_120`].
+const FRAC_1_24: Sum = Sum {
+    high: 0.041666666666666664,
+    low: 2.3129646346357427e-18,
+};
+
 /// 2/π as f64, for the medium-range quotient `round(x·2/π)`.
 const FRAC_2_PI_F64: f64 = 0.6366197723675814;
 
@@ -260,12 +314,82 @@ fn rem_pio2(x: f64) -> (i64, Sum) {
 }
 
 /// `(sin(r), cos(r))` for `r ∈ [-π/4, π/4]`, both as double-doubles.
+///
+/// The accurate kernel: full double-double Horner of [`SIN_KERNEL`]/[`COS_KERNEL`]
+/// (≈2⁻¹²²), the correctly-rounded fallback behind [`sin_cos_kernel_fast`].
 #[inline]
 fn sin_cos_kernel(r: Sum) -> (Sum, Sum) {
     let u = r * r;
     let s = r * poly_dd(u, &SIN_KERNEL);
     let c = poly_dd(u, &COS_KERNEL);
     (s, c)
+}
+
+/// Lean counterpart of [`sin_cos_kernel`], the trig functions' fast path.
+///
+/// Peels the three exact leading terms of each series into double-double and
+/// evaluates only the tiny `u³` tail ([`SIN_TAIL`]/[`COS_TAIL`]) in plain `f64`,
+/// so `sin(r)` and `cos(r)` come out to ≈2⁻⁶⁰ for a fraction of the accurate
+/// kernel's cost.  A Ziv test ([`ziv`]) accepts the result or defers.
+#[inline]
+fn sin_cos_kernel_fast(r: Sum) -> (Sum, Sum) {
+    let uu = r * r;
+    let u = uu.high;
+    let u2 = uu * uu;
+    let u3 = u * u * u;
+
+    // sin(r)/r = 1 − u/6 + u²/120 + u³·SIN_TAIL(u)
+    let sin_lead = ONE + uu / -6.0 + u2 * FRAC_1_120;
+    let sin_over_r = sin_lead
+        + Sum {
+            high: u3 * crate::poly(u, &SIN_TAIL),
+            low: 0.0,
+        };
+    let s = r * sin_over_r;
+
+    // cos(r) = 1 − u/2 + u²/24 + u³·COS_TAIL(u)
+    let cos_lead = ONE + uu * -0.5 + u2 * FRAC_1_24;
+    let c = cos_lead
+        + Sum {
+            high: u3 * crate::poly(u, &COS_TAIL),
+            low: 0.0,
+        };
+
+    (s, c)
+}
+
+/// Reconstruct `sin(|x|)` from the kernel pair and quadrant `q` (before the sign
+/// of `x` is restored).  Shared by the fast and accurate paths so they select
+/// identically.
+#[inline]
+fn select_sin(q: i64, s: Sum, c: Sum) -> Sum {
+    let v = if q & 1 == 0 { s } else { c };
+    if q & 2 == 0 {
+        v
+    } else {
+        neg(v)
+    }
+}
+
+/// Reconstruct `cos(|x|)` from the kernel pair and quadrant `q`.
+#[inline]
+fn select_cos(q: i64, s: Sum, c: Sum) -> Sum {
+    let v = if q & 1 == 0 { c } else { s };
+    if q.wrapping_add(1) & 2 == 0 {
+        v
+    } else {
+        neg(v)
+    }
+}
+
+/// Ziv gate: round `v` to `f64` when both ends of its `±TRIG_ZIV_EPS` (relative)
+/// error interval agree, else `None` to fall back to the accurate kernel.
+#[inline]
+fn ziv(v: Sum) -> Option<f64> {
+    let eps = v.high.abs() * TRIG_ZIV_EPS;
+    let lo = v.high + (v.low - eps);
+    let hi = v.high + (v.low + eps);
+    (lo == hi).then_some(lo)
 }
 
 /// Sine
@@ -277,12 +401,14 @@ pub fn sin(x: f64) -> f64 {
     }
 
     let (q, r) = rem_pio2(x.abs());
-    let (s, c) = sin_cos_kernel(r);
 
     // sin(|x|): quadrant picks sin(r)/cos(r) and its sign; sin is odd in x.
-    let v = if q & 1 == 0 { s } else { c };
-    let v = if q & 2 == 0 { v } else { neg(v) };
-    let magnitude = v.high + v.low;
+    let (s, c) = sin_cos_kernel_fast(r);
+    let magnitude = ziv(select_sin(q, s, c)).unwrap_or_else(|| {
+        let (s, c) = sin_cos_kernel(r);
+        let v = select_sin(q, s, c);
+        v.high + v.low
+    });
 
     if x.is_sign_negative() {
         -magnitude
@@ -300,15 +426,13 @@ pub fn cos(x: f64) -> f64 {
     }
 
     let (q, r) = rem_pio2(x.abs());
-    let (s, c) = sin_cos_kernel(r);
 
-    let v = if q & 1 == 0 { c } else { s };
-    let v = if q.wrapping_add(1) & 2 == 0 {
-        v
-    } else {
-        neg(v)
-    };
-    v.high + v.low
+    let (s, c) = sin_cos_kernel_fast(r);
+    ziv(select_cos(q, s, c)).unwrap_or_else(|| {
+        let (s, c) = sin_cos_kernel(r);
+        let v = select_cos(q, s, c);
+        v.high + v.low
+    })
 }
 
 /// Simultaneous sine and cosine
@@ -320,19 +444,21 @@ pub fn sin_cos(x: f64) -> (f64, f64) {
     }
 
     let (q, r) = rem_pio2(x.abs());
-    let (s, c) = sin_cos_kernel(r);
 
-    let (sin_v, cos_v) = if q & 1 == 0 { (s, c) } else { (c, s) };
-    let sin_v = if q & 2 == 0 { sin_v } else { neg(sin_v) };
-    let cos_v = if q.wrapping_add(1) & 2 == 0 {
-        cos_v
-    } else {
-        neg(cos_v)
+    let (s, c) = sin_cos_kernel_fast(r);
+    // Both components must pass the gate; otherwise recompute both accurately.
+    let (sin, cos) = match (ziv(select_sin(q, s, c)), ziv(select_cos(q, s, c))) {
+        (Some(sin), Some(cos)) => (sin, cos),
+        _ => {
+            let (s, c) = sin_cos_kernel(r);
+            let sin_v = select_sin(q, s, c);
+            let cos_v = select_cos(q, s, c);
+            (sin_v.high + sin_v.low, cos_v.high + cos_v.low)
+        }
     };
 
-    let sin = sin_v.high + sin_v.low;
     let sin = if x.is_sign_negative() { -sin } else { sin };
-    (sin, cos_v.high + cos_v.low)
+    (sin, cos)
 }
 
 /// Tangent
@@ -344,20 +470,14 @@ pub fn tan(x: f64) -> f64 {
     }
 
     let (q, r) = rem_pio2(x.abs());
-    let (s, c) = sin_cos_kernel(r);
 
     // tan(|x|) = sin(|x|) / cos(|x|), each reconstructed from the quadrant.
-    let sin_v = if q & 1 == 0 { s } else { c };
-    let sin_v = if q & 2 == 0 { sin_v } else { neg(sin_v) };
-    let cos_v = if q & 1 == 0 { c } else { s };
-    let cos_v = if q.wrapping_add(1) & 2 == 0 {
-        cos_v
-    } else {
-        neg(cos_v)
-    };
-
-    let t = sin_v * cos_v.recip();
-    let magnitude = t.high + t.low;
+    let (s, c) = sin_cos_kernel_fast(r);
+    let magnitude = ziv(select_sin(q, s, c) * select_cos(q, s, c).recip()).unwrap_or_else(|| {
+        let (s, c) = sin_cos_kernel(r);
+        let t = select_sin(q, s, c) * select_cos(q, s, c).recip();
+        t.high + t.low
+    });
 
     if x.is_sign_negative() {
         -magnitude
