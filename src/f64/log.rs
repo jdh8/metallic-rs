@@ -604,21 +604,40 @@ pub fn ln_1p(x: f64) -> f64 {
 
 /// The logarithm of `x` to an arbitrary `base`
 ///
-/// `log_base(x) = log2(x) / log2(base)`, correctly rounded.  Both logarithms are
-/// formed as the double-double [`log2_dd`](super::pow::log2_dd) and the quotient
-/// is taken in double-double (≈2⁻⁹⁴, far past f64), so a single final rounding is
-/// correct — exactly the f32 `log`'s scheme, lifted a precision tier.
+/// `log_base(x) = ln(x) / ln(base)`, correctly rounded.  Fast path: the lean
+/// [`ln_fast`] for both logarithms, the quotient in double-double, accepted by a
+/// Ziv gate.  The rare straddles (and the sensitive `base ≈ 1` / large-quotient
+/// regimes) fall back to the double-double [`log2_dd`](super::pow::log2_dd) ratio
+/// (≈2⁻⁹⁴, far past f64), rounded once — the correctly-rounded reference.
 #[must_use]
 #[inline]
 pub fn log(x: f64, base: f64) -> f64 {
-    // Non-finite / non-positive inputs, and `base == 1` (where `log2(base) = 0`),
+    // Non-finite / non-positive inputs, and `base == 1` (where `ln(base) = 0`),
     // give ∞/0/NaN that the plain f64 ratio of the correctly-rounded `log2`s
     // already produces (including `0/0 = NaN` for `log(1, 1)`).
     if !(x.is_finite() && x > 0.0 && base.is_finite() && base > 0.0) || base == 1.0 {
         return log2(x) / log2(base);
     }
 
-    // Both finite positive with `base ≠ 1`: high-precision ratio, rounded once.
+    // Both finite positive with `base ≠ 1`.  `ln(x)/ln(base)` cancels the base of
+    // the intermediate logarithm, so any common log base works; `ln_fast` is the
+    // cheapest, ≈2⁻⁶⁸ absolute.
+    let num = ln_fast(x);
+    let den = ln_fast(base);
+    let q = num * den.recip();
+
+    // Both `ln_fast` results are within `LN_ZIV_EPS` of the true log, so the
+    // quotient `q = num/den` is within `LN_ZIV_EPS·(1 + |q|)/|ln base|`: the
+    // numerator slip scaled by `1/|den|`, plus the denominator slip amplified by
+    // `|q|/|den|`.  The gate widens (→ fallback) as `base → 1` or `|q|` grows.
+    let eps = LN_ZIV_EPS * (1.0 + q.high.abs()) / den.high.abs();
+    let lo = q.high + (q.low - eps);
+    let hi = q.high + (q.low + eps);
+    if lo == hi {
+        return lo;
+    }
+
+    // Accurate fallback: the double-double `log2` ratio, rounded once.
     let ratio = super::pow::log2_dd(x) * super::pow::log2_dd(base).recip();
     ratio.high + ratio.low
 }
