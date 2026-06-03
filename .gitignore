@@ -20,6 +20,10 @@ Cargo.lock
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Added by cargo
-
-/target
+# Claude and AI context
+/.claude/settings.local.json
+/.claude/backups/
+/.claude/history/
+/.claude/worktrees/
+/.claude/scheduled_tasks.lock
+*.local.md
