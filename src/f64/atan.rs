@@ -78,6 +78,21 @@ const ATAN_COEFFS: [Sum; 16] = [
     },
 ];
 
+/// Fast-path tail of the atan series in `w = u²`: `w²·(1/5 − w/7 + w²/9 − …)`,
+/// the remainder after the two leading terms `1 − w/3` are peeled into
+/// double-double.  Evaluated in plain `f64`; `|u| ≤ 1/16` so `w ≤ 2⁻⁸` and the
+/// 8 terms reach below 2⁻⁶⁴ relative to `atan(u)`.  See [`atan_dd_fast`].
+const ATAN_TAIL: [f64; 8] = [
+    0.2,
+    -0.14285714285714285,
+    0.1111111111111111,
+    -0.09090909090909091,
+    0.07692307692307693,
+    -0.06666666666666667,
+    0.058823529411764705,
+    -0.05263157894736842,
+];
+
 /// `atan(k/8)` as a double-double for `k` in `0..=8`.
 const ATAN_TABLE: [Sum; 9] = [
     Sum {
@@ -130,6 +145,18 @@ const PI: Sum = Sum {
     low: 1.2246467991473532e-16,
 };
 
+/// One as a double-double.
+const ONE: Sum = Sum {
+    high: 1.0,
+    low: 0.0,
+};
+
+/// Relative half-width of the inverse-trig fast-path Ziv gate.  Over a dense
+/// sweep of the active band the fast kernel's relative error peaks well below
+/// 2⁻⁶⁸; the gate at 2⁻⁶³ keeps a comfortable margin and defers the rest to the
+/// double-double kernel, which stays the correctly-rounded reference.
+const ATAN_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2⁻⁶³
+
 /// Negate a double-double.
 #[inline]
 fn neg(v: Sum) -> Sum {
@@ -137,6 +164,16 @@ fn neg(v: Sum) -> Sum {
         high: -v.high,
         low: -v.low,
     }
+}
+
+/// Ziv gate: round `v` to `f64` when both ends of its `±ATAN_ZIV_EPS` (relative)
+/// error interval agree, else `None` to fall back to the accurate kernel.
+#[inline]
+fn ziv(v: Sum) -> Option<f64> {
+    let eps = v.high.abs() * ATAN_ZIV_EPS;
+    let lo = v.high + (v.low - eps);
+    let hi = v.high + (v.low + eps);
+    (lo == hi).then_some(lo)
 }
 
 /// Arctangent of a double-double `q ∈ [0, 1]`, as a double-double.
@@ -168,29 +205,70 @@ fn atan_dd(q: Sum) -> Sum {
     table + u * poly_dd(u * u, &ATAN_COEFFS)
 }
 
+/// Lean counterpart of [`atan_dd`], the inverse-trig functions' fast path.
+///
+/// The cell reduction is identical, but `atan(u)/u = 1 − w/3 + w²·(…)` peels the
+/// two leading terms into double-double (`w = u²`, `1/3` carried as a
+/// double-double coefficient) and evaluates only the tiny tail ([`ATAN_TAIL`])
+/// in plain `f64`, replacing the 16-term double-double Horner.  A [`ziv`] gate on
+/// the reconstructed result accepts it or defers to [`atan_dd`].
+#[inline]
+fn atan_dd_fast(q: Sum) -> Sum {
+    if q.high < 9.094947017729282e-13 {
+        return Sum {
+            high: q.high,
+            low: 0.0,
+        };
+    }
+
+    let k = (q.high * 8.0).round_ties_even();
+    let c = k * 0.125;
+    let table = ATAN_TABLE[k as usize];
+
+    let denom = q * c + ONE;
+    let u = (q + Sum { high: -c, low: 0.0 }) * denom.recip();
+
+    let w = u * u;
+    let wh = w.high;
+    let w2 = wh * wh;
+    // 1 − w/3 in double-double (ATAN_COEFFS[1] = −1/3); tail w²·(1/5 − w/7 + …).
+    let bracket = (ONE + w * ATAN_COEFFS[1])
+        + Sum {
+            high: w2 * crate::poly(wh, &ATAN_TAIL),
+            low: 0.0,
+        };
+    table + u * bracket
+}
+
 /// `asin(|x|)` for `a = |x| ∈ [0, 1]`, as a double-double in `[0, π/2]`.
 ///
 /// `asin(a) = atan(a/√(1−a²))`; the branch keeps the `atan` argument in `[0, 1]`.
 #[inline]
-fn asin_pos(a: f64) -> Sum {
+fn asin_pos<K: Fn(Sum) -> Sum>(a: f64, kernel: K) -> Sum {
     if a == 1.0 {
         return FRAC_PI_2;
     }
 
     // c = √(1 − a²) as a double-double (a² exact, so the cancellation near a = 1
     // is captured).
-    let c = sqrt_dd(
-        Sum {
-            high: 1.0,
-            low: 0.0,
-        } + neg(Sum::from_product(a, a)),
-    );
+    let c = sqrt_dd(ONE + neg(Sum::from_product(a, a)));
 
     if a <= c.high {
-        atan_dd(Sum { high: a, low: 0.0 } * c.recip())
+        kernel(Sum { high: a, low: 0.0 } * c.recip())
     } else {
         // a/c > 1 ⇒ atan(a/c) = π/2 − atan(c/a)
-        FRAC_PI_2 + neg(atan_dd(c / a))
+        FRAC_PI_2 + neg(kernel(c / a))
+    }
+}
+
+/// Magnitude of `atan(|x|)` in `[0, π/2]`, as a double-double, via `kernel`.
+#[inline]
+fn atan_mag<K: Fn(Sum) -> Sum>(a: f64, kernel: K) -> Sum {
+    if a > 1.0 {
+        // atan(a) = π/2 − atan(1/a)
+        FRAC_PI_2 + neg(kernel(ONE / a))
+    } else {
+        kernel(Sum { high: a, low: 0.0 })
     }
 }
 
@@ -207,20 +285,11 @@ pub fn atan(x: f64) -> f64 {
         return core::f64::consts::FRAC_PI_2.copysign(x);
     }
 
-    let m = if a > 1.0 {
-        // atan(a) = π/2 − atan(1/a)
-        FRAC_PI_2
-            + neg(atan_dd(
-                Sum {
-                    high: 1.0,
-                    low: 0.0,
-                } / a,
-            ))
-    } else {
-        atan_dd(Sum { high: a, low: 0.0 })
-    };
-
-    (m.high + m.low).copysign(x)
+    let magnitude = ziv(atan_mag(a, atan_dd_fast)).unwrap_or_else(|| {
+        let m = atan_mag(a, atan_dd);
+        m.high + m.low
+    });
+    magnitude.copysign(x)
 }
 
 /// Arcsine
@@ -232,8 +301,11 @@ pub fn asin(x: f64) -> f64 {
         return f64::NAN; // |x| > 1 or NaN
     }
 
-    let m = asin_pos(a);
-    (m.high + m.low).copysign(x)
+    let magnitude = ziv(asin_pos(a, atan_dd_fast)).unwrap_or_else(|| {
+        let m = asin_pos(a, atan_dd);
+        m.high + m.low
+    });
+    magnitude.copysign(x)
 }
 
 /// Arccosine
@@ -245,13 +317,18 @@ pub fn acos(x: f64) -> f64 {
     }
 
     // acos(x) = π/2 − asin(x): π/2 − asin_pos(x) for x ≥ 0, π/2 + asin_pos(|x|) for x < 0.
-    let s = asin_pos(x.abs());
-    let m = if x.is_sign_negative() {
-        FRAC_PI_2 + s
-    } else {
-        FRAC_PI_2 + neg(s)
+    let acos_dd = |kernel: fn(Sum) -> Sum| {
+        let s = asin_pos(x.abs(), kernel);
+        if x.is_sign_negative() {
+            FRAC_PI_2 + s
+        } else {
+            FRAC_PI_2 + neg(s)
+        }
     };
-    m.high + m.low
+    ziv(acos_dd(atan_dd_fast)).unwrap_or_else(|| {
+        let m = acos_dd(atan_dd);
+        m.high + m.low
+    })
 }
 
 /// Magnitude of `atan2(y, x)` in `[0, π]` for finite nonzero `a = |x|`, `b = |y|`.
@@ -259,28 +336,38 @@ pub fn acos(x: f64) -> f64 {
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
     let (big, small, swapped) = if a >= b { (a, b, false) } else { (b, a, true) };
 
-    // φ = atan(small/big) ∈ [0, π/4], or π/2 − atan(small/big) when `swapped`.
-    let q = small / big;
-    let inner = if q < 9.094947017729282e-13 {
-        // Tiny ratio: atan(q) = q far below ½ ulp, and the *unscaled* IEEE quotient
-        // `small/big` is correctly rounded down into the subnormals.
-        Sum { high: q, low: 0.0 }
-    } else {
-        // Scale both legs so the larger lands in [1, 2): exact, ratio-preserving,
-        // and it keeps the `from_quotient` residual out of the subnormal range.
-        let (_, exp) = super::frexp(big);
-        let big = super::ldexp(big, 1 - exp);
-        let small = super::ldexp(small, 1 - exp);
-        atan_dd(Sum::from_quotient(small, big))
+    let theta = |kernel: fn(Sum) -> Sum| {
+        // φ = atan(small/big) ∈ [0, π/4], or π/2 − atan(small/big) when `swapped`.
+        let q = small / big;
+        let inner = if q < 9.094947017729282e-13 {
+            // Tiny ratio: atan(q) = q far below ½ ulp, and the *unscaled* IEEE
+            // quotient `small/big` is correctly rounded down into the subnormals.
+            Sum { high: q, low: 0.0 }
+        } else {
+            // Scale both legs so the larger lands in [1, 2): exact, ratio-preserving,
+            // and it keeps the `from_quotient` residual out of the subnormal range.
+            let (_, exp) = super::frexp(big);
+            let big = super::ldexp(big, 1 - exp);
+            let small = super::ldexp(small, 1 - exp);
+            kernel(Sum::from_quotient(small, big))
+        };
+
+        let phi = if swapped {
+            FRAC_PI_2 + neg(inner)
+        } else {
+            inner
+        };
+        if x_negative {
+            PI + neg(phi)
+        } else {
+            phi
+        }
     };
 
-    let phi = if swapped {
-        FRAC_PI_2 + neg(inner)
-    } else {
-        inner
-    };
-    let theta = if x_negative { PI + neg(phi) } else { phi };
-    theta.high + theta.low
+    ziv(theta(atan_dd_fast)).unwrap_or_else(|| {
+        let m = theta(atan_dd);
+        m.high + m.low
+    })
 }
 
 /// Arctangent of `y / x`, using the signs of both to select the quadrant
