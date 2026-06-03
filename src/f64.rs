@@ -76,4 +76,4 @@ pub use misc::{cbrt, frexp, hypot, ldexp, round};
 pub use pow::powf;
 pub use trig::{cos, sin, sin_cos, tan};
 
-pub(crate) use log::ln_dd;
+pub(crate) use log::{ln_dd, ln_fast};

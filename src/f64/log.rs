@@ -413,7 +413,7 @@ pub(crate) fn ln_dd(x: f64) -> Sum {
 /// against an accurate fallback ([`dint::ln_accurate`] for `ln`, `ln_dd` for
 /// `log2`/`log10`) with a Ziv test.
 #[inline]
-fn ln_fast(x: f64) -> Sum {
+pub(crate) fn ln_fast(x: f64) -> Sum {
     let (e, i, r) = log_reduce(x);
     let e = e as f64;
 

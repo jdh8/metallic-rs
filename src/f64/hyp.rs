@@ -1,6 +1,6 @@
 use super::double::{fast_ldexp, sqrt_dd, Sum};
 use super::exp::{exp_dd, exp_dd_fast};
-use super::ln_dd;
+use super::{ln_dd, ln_fast};
 use core::cmp::Ordering;
 
 /// `ln(2)` as a double-double (CORE-MATH's split, matching `log.rs`).
@@ -26,6 +26,45 @@ fn ln_sum(s: Sum) -> Sum {
             high: s.low / s.high,
             low: 0.0,
         }
+}
+
+/// Lean variant of [`ln_sum`] using the fast [`ln_fast`] kernel (≈2⁻⁶⁸ absolute
+/// instead of ≈2⁻⁸⁷).  Only the leading `ln(s.high)` is leaner; the linear
+/// correction `s.low/s.high` is identical, so it cancels in the Ziv comparison.
+#[inline]
+fn ln_sum_fast(s: Sum) -> Sum {
+    ln_fast(s.high)
+        + Sum {
+            high: s.low / s.high,
+            low: 0.0,
+        }
+}
+
+/// Ziv gate for the inverse-hyperbolic fast path, as an absolute bound on the
+/// result (`scale · ln(u)`).
+///
+/// `ln_fast` differs from the accurate `ln_dd` by ≈2⁻⁶⁸ *absolute* whatever the
+/// result's magnitude — the `e·ln2 + L[i]` terms are double-double and shared, so
+/// only the `ln(1+r)` tail (≤ 1/256) carries the lean kernel's error — and `½·ln`
+/// (atanh) only halves it.  `2⁻⁶³` keeps a ~30× margin.  Being absolute, the gate
+/// forces the accurate fallback only when `|result| ≲ 2⁻¹⁰`, where the lean kernel
+/// cannot round correctly anyway.
+const IHYP_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63
+
+/// Round `scale · ln(u)` for a positive double-double `u` via a two-step Ziv
+/// test: the lean [`ln_sum_fast`] is accepted unless it straddles a rounding
+/// boundary, in which case the accurate [`ln_sum`] resolves it.
+#[inline]
+fn ln_sum_rounded(u: Sum, scale: f64) -> f64 {
+    let Sum { high, low } = ln_sum_fast(u) * scale;
+    let lo = high + (low - IHYP_ZIV_EPS);
+    let hi = high + (low + IHYP_ZIV_EPS);
+    if lo == hi {
+        return lo;
+    }
+
+    let r = ln_sum(u) * scale;
+    r.high + r.low
 }
 
 /// Combine `(m, q)` — where `eˣ = 2`<sup>`q`</sup>` · m` for `x ≥ 0` — into the
@@ -186,8 +225,7 @@ pub fn asinh(x: f64) -> f64 {
         r.high + r.low
     } else {
         let c = sqrt_dd(Sum::from_product(s, s) + ONE);
-        let r = ln_sum(c + Sum { high: s, low: 0.0 });
-        r.high + r.low
+        ln_sum_rounded(c + Sum { high: s, low: 0.0 }, 1.0)
     };
 
     magnitude.copysign(x)
@@ -226,8 +264,7 @@ pub fn acosh(x: f64) -> f64 {
                 low: 0.0,
             },
     );
-    let r = ln_sum(c + Sum { high: x, low: 0.0 });
-    r.high + r.low
+    ln_sum_rounded(c + Sum { high: x, low: 0.0 }, 1.0)
 }
 
 /// Inverse hyperbolic tangent
@@ -249,8 +286,7 @@ pub fn atanh(x: f64) -> f64 {
 
             // (1 + |x|)/(1 − |x|) in double-double, then ½·ln of it.
             let u = Sum::from_sum(1.0, s) * Sum::from_sum(1.0, -s).recip();
-            let r = ln_sum(u) * 0.5;
-            (r.high + r.low).copysign(x)
+            ln_sum_rounded(u, 0.5).copysign(x)
         }
         Some(Ordering::Equal) => f64::INFINITY.copysign(x),
         // |x| > 1 is outside the domain; NaN (the `None` case) propagates.
