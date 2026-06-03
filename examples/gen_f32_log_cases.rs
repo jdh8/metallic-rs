@@ -88,8 +88,8 @@ fn hexf32(x: f32) -> String {
 
 fn main() {
     const THRESHOLD: f64 = 1.0 / 262_144.0; // 2⁻¹⁸
-    const WIDE: u64 = 200_000_000;
-    const NEAR1: u64 = 100_000_000;
+    const WIDE: u64 = 2_000_000_000;
+    const NEAR1: u64 = 1_000_000_000;
 
     // Wide (x, base) over the whole exponent range.
     let wide = (0..WIDE).map(|i| {

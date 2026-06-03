@@ -17,7 +17,7 @@ use common::Identity as _;
 fn test_log_corpus() {
     let cases: Vec<[f32; 3]> =
         common::parse_case_file("f32_log.wc", common::parse_f32_triple).collect();
-    assert_eq!(cases.len(), 1120, "corpus size changed; update this count");
+    assert_eq!(cases.len(), 11304, "corpus size changed; update this count");
 
     common::truncate_errors(cases.into_iter().filter_map(|[x, base, want]| {
         let got = metallic::f32::log(x, base);
