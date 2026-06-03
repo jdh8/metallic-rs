@@ -10,8 +10,6 @@ After updating the codebase, please
 - Run the tests with `cargo test`.
 - Propose a clear and descriptive commit message.
 
-Note: do **not** run tests with `--all-features`.  Enabling the optional
-`core-math` feature replaces several metallic functions (notably the `f32`
-trigonometric functions and `f32::powf`) with CORE-MATH's implementations.
-Running the test suite with that feature would silently exercise CORE-MATH
-instead of metallic for those functions, defeating the purpose of the tests.
+Note: do **not** run tests with `--all-features`.  The `_no_fma` feature
+disables FMA usage and would cause tests to exercise a different code path than
+the default build, producing misleading results.
