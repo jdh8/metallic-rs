@@ -233,6 +233,33 @@ pub fn round_general64(value: DoubleDouble, n: i64) -> f64 {
     n * f64::from_bits(1)
 }
 
+/// Round a signed double-double `value · 2ⁿ` to the nearest `f64`, safe across
+/// the subnormal range, for an arbitrary-magnitude `value`
+///
+/// Unlike [`round_general64`] (which needs `value.high ∈ [1, 2)`), this
+/// normalizes any nonzero-`high` `value` to a `[1, 2)` mantissa first, folds its
+/// binary exponent into `n`, and restores the sign — the finisher for `tgamma`,
+/// whose double-double result carries its own large dynamic range and sign.  The
+/// caller must keep the result finite (clamp overflow beforehand); `value.high`
+/// must be a nonzero normal `f64`.
+#[inline]
+pub fn round_general_signed64(value: DoubleDouble, n: i64) -> f64 {
+    // Take the magnitude as a positive pair, then normalize its high word to [1, 2).
+    let high = value.high.abs();
+    let low = if value.high < 0.0 {
+        -value.low
+    } else {
+        value.low
+    };
+    let e = (high.to_bits() >> (f64::MANTISSA_DIGITS - 1)) as i64 - 1023;
+    let mantissa = DoubleDouble {
+        high: fast_ldexp(high, -e),
+        low: fast_ldexp(low, -e),
+    };
+
+    round_general64(mantissa, e + n).copysign(value.high)
+}
+
 /// Round a signed normal-range double-double to the nearest `f32`
 ///
 /// Rounds the magnitude to odd then restores the sign, so [`round`]'s

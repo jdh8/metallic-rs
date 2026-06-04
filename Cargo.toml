@@ -44,14 +44,18 @@ opt-level = 3
 # This avoids errors when passing Criterion/bencher options like --output-format.
 bench = false
 
-# Generators for the `log(x, base)` hard-to-round corpora; need the MPFR oracle,
-# so gate them behind `mpfr` to keep them out of the default build.
+# Generators for the hard-to-round corpora; need the MPFR oracle, so gate them
+# behind `mpfr` to keep them out of the default build.
 [[example]]
 name = "gen_f32_log_cases"
 required-features = ["mpfr"]
 
 [[example]]
 name = "gen_f64_log_cases"
+required-features = ["mpfr"]
+
+[[example]]
+name = "gen_f64_tgamma_cases"
 required-features = ["mpfr"]
 
 [[bench]]
@@ -296,4 +300,8 @@ harness = false
 
 [[bench]]
 name = "f64_tanh"
+harness = false
+
+[[bench]]
+name = "f64_tgamma"
 harness = false
