@@ -120,13 +120,13 @@ library is the default [rounding half to even][round-even].
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)
 - [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
-- [ ] Real `f64`/`double` functions in [`<math.h>`][math]
+- [x] Real `f64`/`double` functions in [`<math.h>`][math]
   - [x] Exponential functions
   - [x] Logarithm with constant base
   - [x] Power and logarithm with arbitrary base
   - [x] Trigonometric and hyperbolic functions
-  - [ ] Miscellaneous elementary functions
-  - [ ] Non-elementary functions (optional)
+  - [x] Miscellaneous elementary functions
+  - [x] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
 
 [math]: https://en.cppreference.com/w/c/numeric/math
