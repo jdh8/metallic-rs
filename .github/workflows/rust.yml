@@ -51,6 +51,26 @@ jobs:
     - name: Build test binaries forcing no-FMA fallback
       run: cargo test --no-run --features _no_fma --verbose
 
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install Rust 1.85 (declared MSRV)
+      uses: dtolnay/rust-toolchain@1.85
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: msrv
+    # Verify the library compiles on the `rust-version` floor in Cargo.toml.
+    # Only the library and its normal dependencies are subject to the MSRV;
+    # dev-dependencies (criterion, etc.) may require newer Rust, so this builds
+    # `--lib` rather than the test/bench harness. Both the FMA and `_no_fma`
+    # code paths are checked.
+    - name: Build library on MSRV
+      run: cargo build --lib --verbose
+    - name: Build library on MSRV forcing no-FMA fallback
+      run: cargo build --lib --features _no_fma --verbose
+
   test:
     needs:
     - prepare
