@@ -85,9 +85,9 @@ const EXP2_32_POLY: [f64; 5] = [
 #[inline]
 pub(super) fn finite_exp(x: f64) -> f64 {
     let n = (x * core::f64::consts::LOG2_E).round_ties_even();
-    let x = crate::mul_add(n, -LN_2_HI, x);
-    let x = crate::mul_add(n, -LN_2_LO, x);
-    let y = crate::mul_add(exp_slope(x), x, 1.0);
+    let x = crate::fast_mul_add(n, -LN_2_HI, x);
+    let x = crate::fast_mul_add(n, -LN_2_LO, x);
+    let y = crate::fast_mul_add(exp_slope(x), x, 1.0);
 
     fast_ldexp(y, n as i64)
 }
@@ -164,8 +164,8 @@ pub fn exp10(x: f32) -> f32 {
 
     let x: f64 = x.into();
     let n = (x * core::f64::consts::LOG2_10).round_ties_even();
-    let x = crate::mul_add(n, -LOG10_2_HI, x);
-    let x = crate::mul_add(n, -LOG10_2_LO, x);
+    let x = crate::fast_mul_add(n, -LOG10_2_HI, x);
+    let x = crate::fast_mul_add(n, -LOG10_2_LO, x);
     let x = crate::poly(
         x,
         &[
@@ -234,7 +234,7 @@ pub fn exp_m1(x: f32) -> f32 {
     let q = (((u & 0x000F_FFFF_FFFF_FFFF) as i64) - 0x0008_0000_0000_0000) >> 5;
     let h = a - m;
     let sv = fast_ldexp(EXP2_32[(u & 31) as usize], q);
-    let r = crate::mul_add(crate::poly(h, &EXP2_32_POLY), sv, -1.0);
+    let r = crate::fast_mul_add(crate::poly(h, &EXP2_32_POLY), sv, -1.0);
 
     // Ziv gate: the fast path is good to ≈2⁻⁴³ relative to `exp(x) ≈ sv`, so if
     // both ends of the `±sv·2⁻⁴²` error interval round to the same `f32`, that
@@ -250,8 +250,8 @@ pub fn exp_m1(x: f32) -> f32 {
     // Accurate fallback: two-word `ln2` reduction, splitting off the exact
     // `2ⁿ − 1` so the small-result cancellation never bites.
     let n = (x * core::f64::consts::LOG2_E).round_ties_even();
-    let r = crate::mul_add(n, -LN_2_HI, x);
-    let r = crate::mul_add(n, -LN_2_LO, r);
+    let r = crate::fast_mul_add(n, -LN_2_HI, x);
+    let r = crate::fast_mul_add(n, -LN_2_LO, r);
     let y = exp_slope(r);
 
     (fast_ldexp(r * y, n as i64) + (crate::exp2i(n as i64) - 1.0)) as f32

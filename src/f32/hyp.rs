@@ -46,8 +46,8 @@ pub fn cosh(x: f32) -> f32 {
 
     let x: f64 = x.into();
     let n = (x * core::f64::consts::LOG2_E).round_ties_even();
-    let r = crate::mul_add(n, -LN_2_HI, x);
-    let r = crate::mul_add(n, -LN_2_LO, r);
+    let r = crate::fast_mul_add(n, -LN_2_HI, x);
+    let r = crate::fast_mul_add(n, -LN_2_LO, r);
     let r2 = r * r;
 
     let cosh_r = crate::poly(r2, &COSH_CORE);
@@ -59,7 +59,7 @@ pub fn cosh(x: f32) -> f32 {
     let sinh_n = 0.5 * (pow_n - pow_neg_n);
     let cosh_n = 0.5 * (pow_n + pow_neg_n);
 
-    crate::mul_add(cosh_n, cosh_r, sinh_n * sinh_r) as f32
+    crate::fast_mul_add(cosh_n, cosh_r, sinh_n * sinh_r) as f32
 }
 
 /// Hyperbolic sine
@@ -78,8 +78,8 @@ pub fn sinh(x: f32) -> f32 {
         x => {
             let x: f64 = x.into();
             let n = (x * core::f64::consts::LOG2_E).round_ties_even();
-            let r = crate::mul_add(n, -LN_2_HI, x);
-            let r = crate::mul_add(n, -LN_2_LO, r);
+            let r = crate::fast_mul_add(n, -LN_2_HI, x);
+            let r = crate::fast_mul_add(n, -LN_2_LO, r);
             let r2 = r * r;
 
             let sinh_r = r * crate::poly(r2, &SINH_CORE);
@@ -91,7 +91,7 @@ pub fn sinh(x: f32) -> f32 {
             let sinh_n = 0.5 * (pow_n - pow_neg_n);
             let cosh_n = 0.5 * (pow_n + pow_neg_n);
 
-            crate::mul_add(cosh_n, sinh_r, sinh_n * cosh_r) as f32
+            crate::fast_mul_add(cosh_n, sinh_r, sinh_n * cosh_r) as f32
         }
     };
 
@@ -149,7 +149,7 @@ pub fn atanh(x: f32) -> f32 {
 
             let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
 
-            crate::mul_add(
+            crate::fast_mul_add(
                 0.5 * consts::LN_2,
                 exponent as f64,
                 atanh_kernel((x - 1.0) / (x + 1.0)),
@@ -175,7 +175,7 @@ pub fn asinh(x: f32) -> f32 {
         s if s.is_nan() => f32::NAN,
         _ => {
             let s: f64 = s.into();
-            let c = crate::mul_add(s, s, 1.0).sqrt();
+            let c = crate::fast_mul_add(s, s, 1.0).sqrt();
             let i = (c + s).to_bits() as i64;
             let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
             let (s, c) = if exponent == 0 {
@@ -185,7 +185,7 @@ pub fn asinh(x: f32) -> f32 {
                 (c - 1.0, c)
             };
 
-            crate::mul_add(
+            crate::fast_mul_add(
                 consts::LN_2,
                 exponent as f64,
                 2.0 * atanh_kernel(s / (c + 1.0)),
@@ -209,13 +209,13 @@ pub fn acosh(x: f32) -> f32 {
             use core::f64::consts;
 
             let c: f64 = x.into();
-            let s = crate::mul_add(c, c, -1.0).sqrt();
+            let s = crate::fast_mul_add(c, c, -1.0).sqrt();
             let i = (c + s).to_bits() as i64;
             let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
 
             let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
 
-            crate::mul_add(
+            crate::fast_mul_add(
                 consts::LN_2,
                 exponent as f64,
                 2.0 * atanh_kernel((x - 1.0) / (x + 1.0)),

@@ -254,7 +254,7 @@ pub(crate) fn log2_fast_path(x: f64) -> f64 {
     let t = (m - 1.0) / (m + 1.0);
 
     #[allow(clippy::cast_precision_loss)]
-    crate::mul_add(t, crate::poly(t * t, &LOG2_FAST), exponent as f64)
+    crate::fast_mul_add(t, crate::poly(t * t, &LOG2_FAST), exponent as f64)
 }
 
 /// `2^e` correctly rounded to `f64`, taking a double-double exponent

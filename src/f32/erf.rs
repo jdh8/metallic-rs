@@ -22,10 +22,18 @@ fn erf_small(x: f64) -> f64 {
     let z2 = x * x;
     let z4 = z2 * z2;
     let z8 = z4 * z4;
-    let c0 = z4.mul_add(z2.mul_add(C[3], C[2]), z2.mul_add(C[1], C[0]));
-    let c4 = z4.mul_add(z2.mul_add(C[7], C[6]), z2.mul_add(C[5], C[4]));
+    let c0 = crate::fast_mul_add(
+        z4,
+        crate::fast_mul_add(z2, C[3], C[2]),
+        crate::fast_mul_add(z2, C[1], C[0]),
+    );
+    let c4 = crate::fast_mul_add(
+        z4,
+        crate::fast_mul_add(z2, C[7], C[6]),
+        crate::fast_mul_add(z2, C[5], C[4]),
+    );
 
-    x * z8.mul_add(c4, c0)
+    x * crate::fast_mul_add(z8, c4, c0)
 }
 
 /// `erfc(x)` as a double-double for finite `x` in `[0.4375, 0x1.41bbf8p+3]`

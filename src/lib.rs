@@ -38,20 +38,24 @@ const fn u64_sign_bit(sign: Sign) -> u64 {
 /// This function picks the faster way to compute `x * y + a` depending on the
 /// target architecture.  The FMA instruction is used if available.  Otherwise,
 /// it falls back to `x * y + a` that is faster but gives less accurate results
-/// than [`f64::mul_add`].
+/// than a true FMA.
 ///
 /// # Not an error-free transform
 ///
 /// Because the fallback path rounds the product *before* the addition, this
 /// helper is **not** fused on every target.  Do not use it where correctness
-/// depends on the single rounding of a true FMA — error-free transforms
-/// (`two_product`, residual tests) and high-precision compensation must call
-/// [`f64::mul_add`] directly.  Reserve `mul_add` for hot polynomial-style spots
-/// where a lost low bit is absorbed by later rounding.
-// Not `const`: the hardware path calls the non-const [`f64::mul_add`].
-#[allow(unreachable_code, clippy::missing_const_for_fn)]
+/// depends on the single rounding of a true FMA — error-free transforms,
+/// residual tests, and high-precision compensation must use
+/// [`correct_mul_add`].  Reserve this for hot polynomial-style spots where a
+/// lost low bit is absorbed by later rounding.
+// Not `const`: the hardware path calls the non-const `f64::mul_add`.
+#[allow(
+    unreachable_code,
+    clippy::missing_const_for_fn,
+    clippy::disallowed_methods
+)]
 #[inline]
-fn mul_add(x: f64, y: f64, a: f64) -> f64 {
+fn fast_mul_add(x: f64, y: f64, a: f64) -> f64 {
     #[cfg(feature = "_no_fma")]
     #[allow(clippy::suboptimal_flops)]
     return x * y + a;
@@ -80,6 +84,45 @@ fn mul_add(x: f64, y: f64, a: f64) -> f64 {
     // Every other target (compile-time FMA, aarch64 where fp-armv8 is
     // baseline, wasm32, …): delegate to Rust's `mul_add`, which LLVM
     // lowers correctly.
+    x.mul_add(y, a)
+}
+
+/// Correctly-rounded multiply-add with runtime FMA dispatch
+///
+/// Always computes `x * y + a` as a single fused operation.  On x86/x86_64
+/// without a compile-time `+fma` target feature the FMA instruction is
+/// selected at runtime; on targets where the FMA instruction is unavailable
+/// it falls back to the platform's software `fma` implementation.
+///
+/// Use this instead of `x.mul_add(y, a)` for error-free transforms, residual
+/// tests, and double-double compensation, where the single rounding of a true
+/// FMA is required for correctness.  For polynomial hot paths where a lost low
+/// bit is acceptable, prefer [`fast_mul_add`], which avoids the software `fma`
+/// fallback cost on old hardware.
+// Not `const`: the hardware path calls the non-const `f64::mul_add`.
+#[allow(
+    unreachable_code,
+    clippy::missing_const_for_fn,
+    clippy::disallowed_methods
+)]
+#[inline]
+fn correct_mul_add(x: f64, y: f64, a: f64) -> f64 {
+    // x86/x86_64 without compile-time FMA: runtime dispatch to the hardware
+    // FMA instruction; fall back to the software `fma` for old CPUs.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(not(target_feature = "fma"))]
+    {
+        #[target_feature(enable = "fma")]
+        unsafe fn force_fma(x: f64, y: f64, a: f64) -> f64 {
+            x.mul_add(y, a)
+        }
+
+        if std::is_x86_feature_detected!("fma") {
+            // SAFETY: runtime check confirmed FMA is available on this CPU.
+            return unsafe { force_fma(x, y, a) };
+        }
+    }
+
     x.mul_add(y, a)
 }
 

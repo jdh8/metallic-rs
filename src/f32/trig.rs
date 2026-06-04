@@ -36,8 +36,8 @@ fn rem_pio2(x: f32) -> (i64, f64) {
     if x < core::f32::consts::PI * crate::exp2i(27) as f32 {
         let x: f64 = x.into();
         let q = (x * consts::FRAC_2_PI).round_ties_even();
-        let y = crate::mul_add(q, -PI_2_HI, x);
-        let y = crate::mul_add(q, -PI_2_LO, y);
+        let y = crate::fast_mul_add(q, -PI_2_HI, x);
+        let y = crate::fast_mul_add(q, -PI_2_LO, y);
 
         // SAFETY: q < 2^28
         return (unsafe { q.to_int_unchecked() }, y);
@@ -93,7 +93,7 @@ fn sin_kernel(x: f64) -> f32 {
             1.589_594_452_434_234_8e-10,
         ],
     );
-    crate::mul_add(y, x, x) as f32
+    crate::fast_mul_add(y, x, x) as f32
 }
 
 /// Sine

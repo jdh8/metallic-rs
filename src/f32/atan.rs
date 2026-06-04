@@ -27,7 +27,7 @@ const ASIN_NEAR_ZERO: [f64; 11] = [
 /// `asin(t)` for `t ∈ [0, ½]`, where `u = t²`, via `t + t³·P(t²)`.
 #[inline]
 fn asin_near_zero(t: f64, u: f64) -> f64 {
-    crate::mul_add(t * u, crate::poly(u, &ASIN_NEAR_ZERO), t)
+    crate::fast_mul_add(t * u, crate::poly(u, &ASIN_NEAR_ZERO), t)
 }
 
 /// `atan(k / 8)` as a double-double for `k` in `0..=8`
@@ -247,7 +247,7 @@ pub fn atan(x: f32) -> f32 {
     if use_outer {
         use core::f64::consts::FRAC_PI_2;
         let recip = x.recip();
-        crate::mul_add(-recip, kernel(recip), FRAC_PI_2.copysign(x)) as f32
+        crate::fast_mul_add(-recip, kernel(recip), FRAC_PI_2.copysign(x)) as f32
     } else {
         (x * kernel(x)) as f32
     }

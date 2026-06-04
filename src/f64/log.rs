@@ -355,7 +355,7 @@ fn ln_1p_kernel_fast(r: DoubleDouble) -> DoubleDouble {
 
     // r² with the `2·r.high·r.low` cross term folded in by one FMA, then the small
     // higher-order tail in plain f64.
-    let r2 = s.mul_add(s, 2.0 * s * r.low);
+    let r2 = crate::correct_mul_add(s, s, 2.0 * s * r.low);
     let tail = r2 * crate::poly(s, &LN1P_Q_COEFFS);
 
     // ln(1+r) = (r.high + tail) + r.low.  `r.high + tail` is exact (Fast2Sum,

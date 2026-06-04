@@ -24,7 +24,7 @@ pub(super) fn atanh(x: f64) -> f64 {
             0.083_116_173_891_988_07,
         ],
     );
-    crate::mul_add(y, x, x)
+    crate::fast_mul_add(y, x, x)
 }
 
 /// Base 2 logarithm for a finite positive `f64`
@@ -42,7 +42,7 @@ fn log2_f64(x: f64) -> f64 {
     let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
 
     #[allow(clippy::cast_precision_loss)]
-    crate::mul_add(
+    crate::fast_mul_add(
         2.0 * consts::LOG2_E,
         atanh((x - 1.0) / (x + 1.0)),
         exponent as f64,
@@ -78,7 +78,7 @@ pub fn ln(x: f32) -> f32 {
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> super::EXP_SHIFT;
             let x: f64 = f32::from_bits((i - (exponent << super::EXP_SHIFT)) as u32).into();
 
-            crate::mul_add(
+            crate::fast_mul_add(
                 core::f64::consts::LN_2,
                 exponent.into(),
                 2.0 * atanh((x - 1.0) / (x + 1.0)),
@@ -114,7 +114,7 @@ pub fn ln_1p(x: f32) -> f32 {
             let y = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
             let z = if exponent == 0 { x } else { y - 1.0 };
 
-            crate::mul_add(
+            crate::fast_mul_add(
                 -core::f64::consts::LN_2,
                 -exponent as f64,
                 2.0 * atanh(z / (z + 2.0)),
@@ -137,7 +137,7 @@ pub fn log2(x: f32) -> f32 {
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> super::EXP_SHIFT;
             let x: f64 = f32::from_bits((i - (exponent << super::EXP_SHIFT)) as u32).into();
 
-            crate::mul_add(
+            crate::fast_mul_add(
                 2.0 * core::f64::consts::LOG2_E,
                 atanh((x - 1.0) / (x + 1.0)),
                 exponent.into(),
@@ -168,12 +168,12 @@ pub fn log10(x: f32) -> f32 {
 
             let exponent = (i - FRAC_1_SQRT_2.to_bits() as i32) >> super::EXP_SHIFT;
             let x: f64 = f32::from_bits((i - (exponent << super::EXP_SHIFT)) as u32).into();
-            let x = crate::mul_add(
+            let x = crate::fast_mul_add(
                 2.0 * consts::LOG10_E,
                 atanh((x - 1.0) / (x + 1.0)),
                 LOG10_2_LO * f64::from(exponent),
             );
-            crate::mul_add(LOG10_2_HI, exponent.into(), x) as f32
+            crate::fast_mul_add(LOG10_2_HI, exponent.into(), x) as f32
         }
     }
 }

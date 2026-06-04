@@ -184,9 +184,9 @@ fn abs_sinpi(x: f32) -> f64 {
 /// quadrant `q`, where `sin(πx)` is one of `±sin(πr)`, `±cos(πr)`.
 #[inline]
 fn sinpi(x: f32) -> f64 {
-    let x = 2.0f32.mul_add(-(0.5 * x).round_ties_even(), x);
+    let x = crate::correct_mul_add(2.0, -(0.5f32 * x).round_ties_even() as f64, x as f64) as f32;
     let q = (2.0 * x).round_ties_even();
-    let r = f64::from(0.5f32.mul_add(-q, x));
+    let r = crate::correct_mul_add(0.5, -(q as f64), x as f64);
     let r2 = r * r;
 
     let sin = r * crate::poly(
@@ -290,7 +290,12 @@ fn finish(value: DoubleDouble, q: i64, negative: bool) -> f32 {
 fn recurrence_product(base: f64, step: f64, n: i32) -> f64 {
     let stride = 4.0 * step;
     let mut p = [1.0_f64; 4];
-    let mut f = [base, base + step, base + 2.0 * step, base + 3.0 * step];
+    let mut f = [
+        base,
+        base + step,
+        crate::fast_mul_add(2.0, step, base),
+        crate::fast_mul_add(3.0, step, base),
+    ];
 
     let mut k = n;
     while k >= 4 {
@@ -499,7 +504,7 @@ fn lgamma_pos_f64(y: f64) -> f64 {
 
     let u = 1.0 / (y * y);
     let s = 1.0 / (12.0 * y) + crate::poly(u, &LGAMMA_TAIL) * (u / y);
-    (y - 0.5) * y.ln() - y + 0.918_938_533_204_672_8 + s
+    crate::fast_mul_add(y - 0.5, y.ln(), -y) + 0.918_938_533_204_672_8 + s
 }
 
 /// Fast `f64` approximation of `ln|Γ(z)|` with an absolute error bound

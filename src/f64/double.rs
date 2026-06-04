@@ -56,7 +56,7 @@ impl DoubleDouble {
     #[inline]
     pub fn from_product(x: f64, y: f64) -> Self {
         let high = x * y;
-        let low = x.mul_add(y, -high);
+        let low = crate::correct_mul_add(x, y, -high);
         Self { high, low }
     }
 
@@ -64,7 +64,7 @@ impl DoubleDouble {
     #[inline]
     pub fn from_quotient(x: f64, y: f64) -> Self {
         let high = x / y;
-        let low = high.mul_add(-y, x) / y;
+        let low = crate::correct_mul_add(high, -y, x) / y;
         Self { high, low }
     }
 
@@ -92,9 +92,9 @@ impl Mul for DoubleDouble {
     fn mul(self, other: Self) -> Self {
         let product = Self::from_product(self.high, other.high);
         // Cross terms are compensation: use the true FMA so the low word stays
-        // meaningful even on targets without hardware FMA (see `crate::mul_add`).
-        let low = self.high.mul_add(other.low, product.low);
-        let low = self.low.mul_add(other.high, low);
+        // meaningful even on targets without hardware FMA (see `crate::correct_mul_add`).
+        let low = crate::correct_mul_add(self.high, other.low, product.low);
+        let low = crate::correct_mul_add(self.low, other.high, low);
 
         Self {
             high: product.high,
@@ -113,8 +113,8 @@ impl Mul<f64> for DoubleDouble {
 
         Self {
             high: product.high,
-            // Compensation term: use the true FMA (see `crate::mul_add`).
-            low: self.low.mul_add(other, product.low),
+            // Compensation term: use the true FMA (see `crate::correct_mul_add`).
+            low: crate::correct_mul_add(self.low, other, product.low),
         }
     }
 }
@@ -126,7 +126,7 @@ impl Div<f64> for DoubleDouble {
     #[inline]
     fn div(self, other: f64) -> Self {
         let high = self.high / other;
-        let low = (high.mul_add(-other, self.high) + self.low) / other;
+        let low = (crate::correct_mul_add(high, -other, self.high) + self.low) / other;
         Self { high, low }
     }
 }

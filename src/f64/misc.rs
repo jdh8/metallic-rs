@@ -40,9 +40,9 @@ pub fn cbrt(x: f64) -> f64 {
 
     let magnitude = (0x2A9F_7AF1_96E8_E6E8 + magnitude / 3) as u64;
     let y = f64::from_bits(crate::u64_sign_bit(sign) | magnitude);
-    let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
+    let y = crate::fast_mul_add(1.0 / 3.0, x / (y * y) - y, y);
+    let y = crate::fast_mul_add(1.0 / 3.0, x / (y * y) - y, y);
+    let y = y * (0.5 + 1.5 * x / crate::fast_mul_add(2.0 * y, y * y, x));
 
     let quotient = DoubleDouble::from_quotient(x, y) / y;
     let sum = fast_sum(2.0 * y, quotient.high);
