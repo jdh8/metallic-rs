@@ -284,6 +284,15 @@ fn atan_dd_fast(q: DoubleDouble) -> DoubleDouble {
     let denom = q * c + ONE;
     let u = (q + DoubleDouble { high: -c, low: 0.0 }) * denom.recip();
 
+    atan_cell_fast(table, u)
+}
+
+/// Finish the fast path from a reduced cell: `atan(k/8 + …) = table + u·(1 − u²/3 + …)`.
+///
+/// `table = atan(k/8)` and `u` is the cell-reduced argument (`|u| ≤ 1/16`).  Shared
+/// by [`atan_dd_fast`] and [`atan_recip_fast`], which differ only in how they form `u`.
+#[inline]
+fn atan_cell_fast(table: DoubleDouble, u: DoubleDouble) -> DoubleDouble {
     let w = u * u;
     let wh = w.high;
     let w2 = wh * wh;
@@ -294,6 +303,41 @@ fn atan_dd_fast(q: DoubleDouble) -> DoubleDouble {
             low: 0.0,
         };
     table + u * bracket
+}
+
+/// `atan(1/a)` for `a > 1`, the fast path's reflection leg, without ever forming
+/// `1/a` as a double-double.
+///
+/// With `v = 1/a`, the cell reduction `u = (v − c)/(1 + v·c)` becomes
+/// `u = (1 − a·c)/(a + c)` after multiplying through by `a`.  So the leg spends one
+/// `1/a` (a plain `f64`, only to pick the cell `k = round(8/a)`) plus the cell's own
+/// `recip` — **two** divisions, versus the **three** of `atan_dd_fast(ONE / a)`, whose
+/// `DoubleDouble / f64` reciprocal alone costs two.  `1 − a·c` is exact (`a·c ≈ 1`
+/// inside the cell and `from_product` is exact), so `u` is at least as accurate as
+/// the original, and `|u| ≤ 1/16` exactly as in [`atan_dd_fast`].
+#[inline]
+fn atan_recip_fast(a: f64) -> DoubleDouble {
+    let inv = 1.0 / a;
+
+    // a > 1.1e12: atan(1/a) = 1/a to far below ½ ulp (matches `atan_dd_fast`'s guard,
+    // since `(ONE / a).high == 1.0 / a`).
+    if inv < 9.094947017729282e-13 {
+        return DoubleDouble {
+            high: inv,
+            low: 0.0,
+        };
+    }
+
+    let k = (inv * 8.0).round_ties_even();
+    let c = k * 0.125;
+    let table = ATAN_TABLE[k as usize];
+
+    // u = (1 − a·c)/(a + c).  `1 − a·c` is exact and `a + c` is a normalized pair.
+    let num = ONE + neg(DoubleDouble::from_product(a, c));
+    let den = DoubleDouble::from_sum(a, c);
+    let u = num * den.recip();
+
+    atan_cell_fast(table, u)
 }
 
 /// `asin(t)` for `t ∈ [−½, ½]`, as a double-double, via the direct series
@@ -422,7 +466,15 @@ pub fn atan(x: f64) -> f64 {
         return core::f64::consts::FRAC_PI_2.copysign(x);
     }
 
-    let magnitude = ziv(atan_mag(a, atan_dd_fast)).unwrap_or_else(|| {
+    // Fast path: for |x| > 1 reflect via atan(a) = π/2 − atan(1/a) using the
+    // division-frugal [`atan_recip_fast`]; otherwise the direct cell kernel.  The
+    // accurate fallback keeps the shared [`atan_mag`] reflection.
+    let fast = if a > 1.0 {
+        FRAC_PI_2 + neg(atan_recip_fast(a))
+    } else {
+        atan_dd_fast(DoubleDouble { high: a, low: 0.0 })
+    };
+    let magnitude = ziv(fast).unwrap_or_else(|| {
         let m = atan_mag(a, atan_dd);
         m.high + m.low
     });
