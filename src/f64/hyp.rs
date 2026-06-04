@@ -67,6 +67,38 @@ fn ln_sum_rounded(u: Sum, scale: f64) -> f64 {
     r.high + r.low
 }
 
+/// `2²⁷`.  Above this magnitude `asinh`/`acosh` switch from `sqrt_dd(x² ± 1)` to
+/// the sqrt-free asymptotic [`ln_2x_corrected`].
+const LARGE_IHYP: f64 = 134_217_728.0;
+
+/// Large-magnitude `asinh`/`acosh`: `ln(2·|x|) + correction`, where
+/// `correction = ±0.25/x²` is `+1/(4x²)` for `asinh` and `−1/(4x²)` for `acosh`.
+///
+/// From `√(x² ± 1) = |x|·√(1 ± 1/x²)`, `asinh(x) = ln(2|x|) + 1/(4x²) − 5/(32x⁴) + …`
+/// and `acosh(x) = ln(2x) − 1/(4x²) − 3/(32x⁴) − …`.  For `|x| ≥ 2²⁷` the dropped
+/// `O(1/x⁴)` term is below 2⁻¹¹⁰, so the single `correction` makes the result
+/// correctly rounded with no square root.  The lean `ln_fast` is accepted by the
+/// absolute Ziv gate or deferred to the accurate `ln_dd`; `correction` is the same
+/// in both legs, so it cancels in the comparison and the gate bounds only
+/// `ln_fast`'s slip.  For `|x| > 1.34e154`, `x·x` overflows and `0.25/∞ = +0.0` —
+/// the correct negligible value, subsuming the old `ln(2x)`-only branch.
+#[inline]
+fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
+    let corr = Sum {
+        high: correction,
+        low: 0.0,
+    };
+    let Sum { high, low } = ln_fast(s) + LN2 + corr;
+    let lo = high + (low - IHYP_ZIV_EPS);
+    let hi = high + (low + IHYP_ZIV_EPS);
+    if lo == hi {
+        return lo;
+    }
+
+    let r = ln_dd(s) + LN2 + corr;
+    r.high + r.low
+}
+
 /// Combine `(m, q)` — where `eˣ = 2`<sup>`q`</sup>` · m` for `x ≥ 0` — into the
 /// mantissa `m ± 2⁻²q/m` so that `½(eˣ ± e⁻ˣ) = 2`<sup>`q−1`</sup>` · mantissa`.
 ///
@@ -200,9 +232,10 @@ pub fn tanh(x: f64) -> f64 {
 
 /// Inverse hyperbolic sine
 ///
-/// `asinh(x) = ln(x + √(x² + 1))`, odd.  The log argument is carried as a
-/// double-double and fed to [`ln_sum`]; for huge `|x|` (where `x²` would
-/// overflow) it collapses to `ln(2·|x|) = ln|x| + ln 2`.
+/// `asinh(x) = ln(x + √(x² + 1))`, odd.  For `|x| ≤ 2²⁷` the log argument is
+/// carried as a double-double and fed to [`ln_sum`]; for larger `|x|` it collapses
+/// to the sqrt-free [`ln_2x_corrected`] (`ln(2|x|) + 1/(4x²)`), which also avoids
+/// the `x²` overflow at the top of the range.
 #[must_use]
 #[inline]
 pub fn asinh(x: f64) -> f64 {
@@ -218,11 +251,9 @@ pub fn asinh(x: f64) -> f64 {
         return x;
     }
 
-    let magnitude = if s > 1.0e150 {
-        // `x²` would overflow; asinh(x) = ln(2·|x|), the `1/(2x)` correction being
-        // below 2⁻¹⁰⁰ relative.
-        let r = ln_dd(s) + LN2;
-        r.high + r.low
+    let magnitude = if s > LARGE_IHYP {
+        // asinh(x) = ln(2|x|) + 1/(4x²) − …, no square root.
+        ln_2x_corrected(s, 0.25 / (s * s))
     } else {
         let c = sqrt_dd(Sum::from_product(s, s) + ONE);
         ln_sum_rounded(c + Sum { high: s, low: 0.0 }, 1.0)
@@ -233,9 +264,11 @@ pub fn asinh(x: f64) -> f64 {
 
 /// Inverse hyperbolic cosine
 ///
-/// `acosh(x) = ln(x + √(x² − 1))` for `x ≥ 1`.  `x² − 1` is formed as a
-/// double-double (exact, so the cancellation near `x = 1` is harmless) and the
-/// log argument fed to [`ln_sum`]; huge `x` collapses to `ln(2x)`.
+/// `acosh(x) = ln(x + √(x² − 1))` for `x ≥ 1`.  For `x ≤ 2²⁷`, `x² − 1` is formed
+/// as a double-double (exact, so the cancellation near `x = 1` is harmless) and the
+/// log argument fed to [`ln_sum`]; larger `x` collapses to the sqrt-free
+/// [`ln_2x_corrected`] (`ln(2x) − 1/(4x²)`), which also avoids the `x²` overflow at
+/// the top of the range.
 #[must_use]
 #[inline]
 pub fn acosh(x: f64) -> f64 {
@@ -251,10 +284,9 @@ pub fn acosh(x: f64) -> f64 {
         return x;
     }
 
-    if x > 1.0e150 {
-        // `x²` would overflow; acosh(x) = ln(2x).
-        let r = ln_dd(x) + LN2;
-        return r.high + r.low;
+    if x > LARGE_IHYP {
+        // acosh(x) = ln(2x) − 1/(4x²) − …, no square root.
+        return ln_2x_corrected(x, -0.25 / (x * x));
     }
 
     let c = sqrt_dd(
