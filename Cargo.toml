@@ -58,6 +58,10 @@ required-features = ["mpfr"]
 name = "gen_f64_tgamma_cases"
 required-features = ["mpfr"]
 
+[[example]]
+name = "gen_f64_lgamma_cases"
+required-features = ["mpfr"]
+
 [[bench]]
 name = "f32_acos"
 harness = false
@@ -304,4 +308,8 @@ harness = false
 
 [[bench]]
 name = "f64_tgamma"
+harness = false
+
+[[bench]]
+name = "f64_lgamma"
 harness = false

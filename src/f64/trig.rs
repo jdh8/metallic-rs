@@ -508,6 +508,41 @@ fn ziv(v: DoubleDouble) -> Option<f64> {
     (lo == hi).then_some(lo)
 }
 
+/// π as a double-double, for `sin(πx)` (the lgamma reflection).
+const PI_DD: DoubleDouble = DoubleDouble {
+    high: 3.141_592_653_589_793,
+    low: 1.224_646_799_147_353_2e-16,
+};
+
+/// `sin(πx)` as a double-double for `|x| < 2⁵²`, where `x − q/2` is exact
+///
+/// Reduces `x = q/2 + r`, `r ∈ [−¼, ¼]`, and selects `±sin(πr)`/`±cos(πr)` by
+/// `q mod 4`, with `πr ∈ [−π/4, π/4]` carried as a double-double into the
+/// trigonometric kernels.
+#[inline]
+fn sinpi_dd(x: f64) -> DoubleDouble {
+    let q = (2.0 * x).round_ties_even();
+    let theta = PI_DD * (x - q * 0.5);
+    // SAFETY: `|x| < 2⁵²`, so `|q| < 2⁵³` fits an `i64`.
+    match unsafe { q.to_int_unchecked::<i64>() } & 3 {
+        0 => sin_kernel(theta),
+        1 => cos_kernel(theta),
+        2 => neg(sin_kernel(theta)),
+        _ => neg(cos_kernel(theta)),
+    }
+}
+
+/// `|sin(πx)|` as a double-double for `|x| < 2⁵²` (see [`sinpi_dd`])
+///
+/// The lgamma reflection needs `ln|sin(πz)|` accurate even as `z` nears an
+/// integer; there `|sin(πz)| ≈ π·|r|` with `r = z − round(z)` exact, so the
+/// kernel's leading term keeps full relative accuracy.
+#[inline]
+pub(super) fn abs_sinpi_dd(x: f64) -> DoubleDouble {
+    let v = sinpi_dd(x);
+    if v.high < 0.0 { neg(v) } else { v }
+}
+
 /// Sine
 #[must_use]
 #[inline]

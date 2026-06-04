@@ -13,7 +13,7 @@ Design (recurrence around a central minimax, mirroring `f32::tgamma`):
 The accurate path runs entirely in double-double (≈2⁻¹¹⁰); residual hard-to-round
 cases are caught by the MPFR corpus and patched with `match` fixups.
 """
-from mpmath import mp, mpf, gamma, chebyfit, floor, pi, sin
+from mpmath import mp, mpf, gamma, chebyfit, floor, pi, sin, log, bernoulli
 import struct
 
 mp.prec = 400
@@ -101,3 +101,42 @@ print(f"\n/// At or below this `z`, every `Γ(z)` hump rounds to a signed zero")
 print(f"const TGAMMA_UNDERFLOW: f64 = {hexf(underflow)};")
 print(f"// checks: Γ(overflow)≈{float(gamma(mpf(overflow))):.3e} (MAX={float(MAX):.3e}); "
       f"Γ(tiny)≈{float(1/mpf(tiny)):.3e}; |Γ(underflow)|≈{float(abs(gamma(mpf(underflow)))):.3e}")
+
+# --- lgamma constants -----------------------------------------------------
+# ln Γ(t) for t ≥ CUTOFF via Stirling; below it, reduce up by ln Γ(y) = ln Γ(t)
+# − ln ∏(y+j).  The asymptotic tail Σ_{k≥1} B_2k/(2k(2k−1)) t^(1−2k) = P(u)/t with
+# u = 1/t² is carried in double-double (its leading 1/(12t) needs > f64 precision).
+
+
+def dd_const(name, value, doc):
+    hi, lo = dd(value)
+    print(f"\n/// {doc}")
+    print(f"const {name}: DoubleDouble = DoubleDouble {{ high: {hexf(hi)}, low: {hexf(lo)} }};")
+
+
+# A high cutoff keeps the Bernoulli tail short (K ≈ 10): with few terms the
+# coefficients stay O(1), so Horner over them does not catastrophically cancel (at
+# t = 14 the K = 19 terms reach 3·10¹¹ and lose ~42 bits; at t = 40, ~4 bits).
+LGAMMA_CUTOFF = 40
+print(f"\n/// Argument above which the Stirling series for `ln Γ` converges fast enough")
+print(f"const LGAMMA_CUTOFF: f64 = {hexf(f64(LGAMMA_CUTOFF))};")
+
+dd_const("GAMMA_PI", pi, "π as a double-double (the lgamma reflection's `ln π`)")
+dd_const("HALF_LN_2PI", log(2 * pi) / 2, "`½·ln(2π)`, the additive Stirling constant")
+
+# Stirling tail coefficients c_k = B_2k / (2k(2k−1)), as P(u) = Σ c_k u^(k-1).
+# Pick K so the truncation residual at t = CUTOFF is below 2⁻¹⁰⁵.
+def tail_partial(t, K):
+    return sum(bernoulli(2 * k) / (2 * k * (2 * k - 1)) * t ** (1 - 2 * k) for k in range(1, K + 1))
+
+t = mpf(LGAMMA_CUTOFF)
+true_tail = tail_partial(t, 60)
+K = 1
+while abs(tail_partial(t, K) - true_tail) > mpf(2) ** -105 and K < 30:
+    K += 1
+resid = abs(tail_partial(t, K) - true_tail)
+coeffs = [bernoulli(2 * k) / (2 * k * (2 * k - 1)) for k in range(1, K + 1)]
+print(f"// lgamma Stirling tail: {K} double-double coeffs, residual at t={LGAMMA_CUTOFF} is "
+      f"2^{float(mp.log(resid,2)):.1f}, max|c|={float(max(abs(c) for c in coeffs)):.2e}")
+print_dd_array("LGAMMA_TAIL_DD", coeffs,
+               f"Stirling tail `P(u) = Σ B_2k/(2k(2k−1)) u^(k−1)`, `u = 1/t²` ({K} terms, double-double)")
