@@ -257,7 +257,16 @@ fn atan_dd(q: DoubleDouble) -> DoubleDouble {
         };
     let u = (q + DoubleDouble { high: -c, low: 0.0 }) * denom.recip();
 
-    // atan(u) = u · Σ (-1)ᵏ u²ᵏ/(2k+1), evaluated in double-double.
+    atan_cell(table, u)
+}
+
+/// Accurate counterpart of [`atan_cell_fast`]: finish from a reduced cell via the
+/// full double-double series `atan(k/8 + …) = table + u·Σ(−1)ᵏu²ᵏ/(2k+1)`.
+///
+/// `table = atan(k/8)` and `|u| ≤ 1/16`.  Shared by [`atan_dd`] and the fused
+/// `atan2` reduction, which differ only in how they form `u`.
+#[inline]
+fn atan_cell(table: DoubleDouble, u: DoubleDouble) -> DoubleDouble {
     table + u * poly_dd(u * u, &ATAN_COEFFS)
 }
 
@@ -523,7 +532,7 @@ pub fn acos(x: f64) -> f64 {
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
     let (big, small, swapped) = if a >= b { (a, b, false) } else { (b, a, true) };
 
-    let theta = |kernel: fn(DoubleDouble) -> DoubleDouble| {
+    let theta = |cell: fn(DoubleDouble, DoubleDouble) -> DoubleDouble| {
         // φ = atan(small/big) ∈ [0, π/4], or π/2 − atan(small/big) when `swapped`.
         let q = small / big;
         let inner = if q < 9.094947017729282e-13 {
@@ -531,12 +540,36 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
             // quotient `small/big` is correctly rounded down into the subnormals.
             DoubleDouble { high: q, low: 0.0 }
         } else {
-            // Scale both legs so the larger lands in [1, 2): exact, ratio-preserving,
-            // and it keeps the `from_quotient` residual out of the subnormal range.
+            // Scale both legs so the larger lands in [1, 2): exact and
+            // ratio-preserving, keeping `small − c·big` / `big + c·small` clear of
+            // overflow and the small leg out of the subnormals.
             let (_, exp) = super::frexp(big);
             let big = super::ldexp(big, 1 - exp);
             let small = super::ldexp(small, 1 - exp);
-            kernel(DoubleDouble::from_quotient(small, big))
+
+            // Cell reduction without forming small/big as a double-double: with
+            // ratio = small/big, `u = (ratio − c)/(1 + ratio·c) = (small − c·big)/(big
+            // + c·small)`.  `k = round(8·ratio)` reuses the `q` already in hand
+            // (scaling preserves the ratio exactly), so the leg spends only that one
+            // `q` division plus this `recip` — two, versus the four of the
+            // `from_quotient` path (the `q` test, the two-division quotient, the cell
+            // `recip`).  `small − c·big` is exact (c·big ≈ small in-cell, `from_product`
+            // exact), so `u` is at least as accurate, and `|u| ≤ 1/16` as before.
+            let k = (q * 8.0).round_ties_even();
+            let c = k * 0.125;
+            let table = ATAN_TABLE[k as usize];
+
+            let num = DoubleDouble {
+                high: small,
+                low: 0.0,
+            } + neg(DoubleDouble::from_product(c, big));
+            let den = DoubleDouble {
+                high: big,
+                low: 0.0,
+            } + DoubleDouble::from_product(c, small);
+            let u = num * den.recip();
+
+            cell(table, u)
         };
 
         let phi = if swapped {
@@ -551,8 +584,8 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
         }
     };
 
-    ziv(theta(atan_dd_fast)).unwrap_or_else(|| {
-        let m = theta(atan_dd);
+    ziv(theta(atan_cell_fast)).unwrap_or_else(|| {
+        let m = theta(atan_cell);
         m.high + m.low
     })
 }
