@@ -26,7 +26,7 @@ import struct
 
 mp.prec = 2200
 
-PEEL = 6  # number of exact leading terms carried in double-double
+PEEL = 5  # number of exact leading terms carried in double-double
 
 
 def f64(x):
