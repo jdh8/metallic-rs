@@ -8,8 +8,8 @@
     clippy::approx_constant
 )]
 
-use super::double::{fast_sum, DoubleDouble};
-use super::{normalize, Magnitude, EXP_SHIFT};
+use super::double::{DoubleDouble, fast_sum};
+use super::{EXP_SHIFT, Magnitude, normalize};
 
 // CORE-MATH's split of ln2: `LN2_HI = 0x1.62e42fefa38p-1` is an integer multiple
 // of 2^-42, so `e · LN2_HI` is exact for |e| ≤ 1074 (the full f64 exponent range).

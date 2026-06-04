@@ -1,4 +1,4 @@
-use super::double::{fast_ldexp, sqrt_dd, DoubleDouble};
+use super::double::{DoubleDouble, fast_ldexp, sqrt_dd};
 use super::exp::{exp_dd, exp_dd_fast};
 use super::{ln_dd, ln_fast};
 use core::cmp::Ordering;

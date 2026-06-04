@@ -8,7 +8,7 @@
     clippy::approx_constant
 )]
 
-use super::double::{fast_ldexp, fast_sum, DoubleDouble};
+use super::double::{DoubleDouble, fast_ldexp, fast_sum};
 
 const LN2_OVER_N_HI: f64 = 0.005415212348111709;
 const LN2_OVER_N_LO: f64 = 1.2864023111638346e-14;

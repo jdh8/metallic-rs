@@ -6,8 +6,8 @@
 //! them (crate-visible) and adds the f64-output `exp2_dd`/`powf_core`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{fast_ldexp, round_general64, DoubleDouble};
 use super::EXP_SHIFT;
+use super::double::{DoubleDouble, fast_ldexp, round_general64};
 use core::cmp::Ordering;
 use core::f64::consts::FRAC_1_SQRT_2;
 use core::num::FpCategory;

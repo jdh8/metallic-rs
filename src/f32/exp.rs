@@ -1,4 +1,4 @@
-use super::{normalize, Magnitude, EXP_SHIFT, LN_2_HI, LN_2_LO};
+use super::{EXP_SHIFT, LN_2_HI, LN_2_LO, Magnitude, normalize};
 use crate::f64::double::fast_ldexp;
 
 /// Polynomial approximation of restriction of `(exp(x) - 1) / x`

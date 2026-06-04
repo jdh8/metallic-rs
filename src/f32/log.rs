@@ -1,5 +1,5 @@
-use crate::f64::double::{fast_sum, DoubleDouble};
 use crate::f64::EXP_SHIFT as F64_EXP_SHIFT;
+use crate::f64::double::{DoubleDouble, fast_sum};
 use core::num::FpCategory;
 
 /// Polynomial approximation of inverse hyperbolic tangent restricted to

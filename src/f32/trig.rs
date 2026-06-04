@@ -137,11 +137,7 @@ pub fn cos(x: f32) -> f32 {
     let c = cos_kernel(x);
     let y = if q & 1 == 0 { c } else { s };
 
-    if (q.wrapping_add(1)) & 2 == 0 {
-        y
-    } else {
-        -y
-    }
+    if (q.wrapping_add(1)) & 2 == 0 { y } else { -y }
 }
 
 /// Compute sine and cosine simultaneously

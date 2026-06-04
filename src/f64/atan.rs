@@ -11,7 +11,7 @@
 //! `tools/gen_inv_f64.py`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{sqrt_dd, DoubleDouble};
+use super::double::{DoubleDouble, sqrt_dd};
 use super::pow::poly_dd;
 
 /// `(-1)ᵏ/(2k+1)` as a double-double, low-degree first in `u²` — the atan series.
@@ -577,11 +577,7 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
         } else {
             inner
         };
-        if x_negative {
-            PI + neg(phi)
-        } else {
-            phi
-        }
+        if x_negative { PI + neg(phi) } else { phi }
     };
 
     ziv(theta(atan_cell_fast)).unwrap_or_else(|| {

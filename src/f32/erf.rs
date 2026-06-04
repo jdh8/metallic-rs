@@ -1,5 +1,5 @@
 use super::exp::finite_exp;
-use crate::f64::double::{round, round_general, DoubleDouble};
+use crate::f64::double::{DoubleDouble, round, round_general};
 
 /// `erf(x)` for `|x| < 0.4375` as `x·P(x²)`
 ///

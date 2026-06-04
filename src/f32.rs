@@ -81,10 +81,10 @@ const fn normalize(x: f32) -> (Sign, Magnitude) {
 
 pub use atan::{acos, asin, atan, atan2};
 pub use erf::{erf, erfc};
-pub use exp::{exp, exp10, exp2, exp_m1, frexp, ldexp};
+pub use exp::{exp, exp_m1, exp2, exp10, frexp, ldexp};
 pub use gamma::{lgamma, tgamma};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
-pub use log::{ln, ln_1p, log, log10, log2};
+pub use log::{ln, ln_1p, log, log2, log10};
 pub use misc::{cbrt, hypot, round};
 pub use pow::powf;
 pub use trig::{cos, sin, sin_cos, tan};

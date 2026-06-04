@@ -1,5 +1,5 @@
-use super::double::{fast_sum, round_general64, DoubleDouble};
-use super::{normalize, Magnitude, EXP_SHIFT};
+use super::double::{DoubleDouble, fast_sum, round_general64};
+use super::{EXP_SHIFT, Magnitude, normalize};
 
 /// Rounds half-way cases away from zero
 #[must_use]

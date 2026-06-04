@@ -2,7 +2,8 @@
 name = "metallic"
 version = "0.3.0-dev"
 authors = ["Chen-Pang He (https://jdh8.org)"]
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 description = "C math functions from scratch"
 repository = "https://github.com/jdh8/metallic-rs"
 license = "MIT"

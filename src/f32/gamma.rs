@@ -1,4 +1,4 @@
-use crate::f64::double::{fast_ldexp, round_general, round_signed, DoubleDouble};
+use crate::f64::double::{DoubleDouble, fast_ldexp, round_general, round_signed};
 
 /// π as a double-double (needed for lgamma reflection)
 const PI: DoubleDouble = DoubleDouble {
@@ -270,11 +270,7 @@ fn finish(value: DoubleDouble, q: i64, negative: bool) -> f32 {
         ))
     };
 
-    if negative {
-        -magnitude
-    } else {
-        magnitude
-    }
+    if negative { -magnitude } else { magnitude }
 }
 
 /// `∏_{k=0}^{n-1}(base + k·step)` for `n ≥ 0`, on four parallel accumulators
@@ -442,11 +438,7 @@ pub fn tgamma(z: f32) -> f32 {
     let lo = (value - err) as f32;
     let hi = (value + err) as f32;
 
-    if lo == hi {
-        lo
-    } else {
-        tgamma_dd(x)
-    }
+    if lo == hi { lo } else { tgamma_dd(x) }
 }
 
 /// `ln Γ(y)` as a double-double for `y ≥ ½`
@@ -582,9 +574,5 @@ pub fn lgamma(z: f32) -> f32 {
     let lo = (f - err) as f32;
     let hi = (f + err) as f32;
 
-    if lo == hi {
-        lo
-    } else {
-        lgamma_dd(z)
-    }
+    if lo == hi { lo } else { lgamma_dd(z) }
 }

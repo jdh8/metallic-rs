@@ -1,8 +1,8 @@
 use super::exp::finite_exp;
 use super::log::atanh as atanh_kernel;
 use super::{LN_2_HI, LN_2_LO};
-use crate::f64::double::fast_ldexp;
 use crate::f64::EXP_SHIFT as F64_EXP_SHIFT;
+use crate::f64::double::fast_ldexp;
 
 /// `sinh(r) / r = P(r²)` on `r ∈ [-½·ln 2, ½·ln 2]`, relative error ≈ 2⁻⁴³
 ///

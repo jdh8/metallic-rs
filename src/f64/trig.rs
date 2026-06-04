@@ -4,7 +4,7 @@
 //! Do not edit by hand; re-run the generator instead.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{fast_sum, DoubleDouble};
+use super::double::{DoubleDouble, fast_sum};
 use super::pow::poly_dd;
 
 /// `sin(r)/r` as a double-double in `u = r²`, low-degree first (max error ≈2⁻¹²⁷).
@@ -484,11 +484,7 @@ fn tan_kernel_fast(r: DoubleDouble) -> DoubleDouble {
 #[inline]
 fn select_sin(q: i64, s: DoubleDouble, c: DoubleDouble) -> DoubleDouble {
     let v = if q & 1 == 0 { s } else { c };
-    if q & 2 == 0 {
-        v
-    } else {
-        neg(v)
-    }
+    if q & 2 == 0 { v } else { neg(v) }
 }
 
 /// Reconstruct `cos(|x|)` from the kernel pair and quadrant `q`.

@@ -1,4 +1,4 @@
-use super::{normalize, Magnitude};
+use super::{Magnitude, normalize};
 use core::cmp::Ordering;
 use core::f32;
 

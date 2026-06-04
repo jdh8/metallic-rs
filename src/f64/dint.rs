@@ -7,7 +7,7 @@
 //! CORE-MATH stores the significand as two `u64` words `{hi, lo}`; here they are
 //! packed as `m = (hi << 64) | lo`.
 
-use super::dint_consts::{INVERSE_2, LOG2, LOG_INV_2, M_ONE, P_2, ZERO};
+use super::dint_consts::{INVERSE_2, LOG_INV_2, LOG2, M_ONE, P_2, ZERO};
 
 /// 128-bit fixed-point number used by the accurate logarithm path.
 ///

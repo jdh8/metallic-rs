@@ -1,4 +1,4 @@
-use crate::f64::double::{round, DoubleDouble};
+use crate::f64::double::{DoubleDouble, round};
 
 /// Minimax coefficients of `P` in `asin(t) = t + t³·P(t²)` on `t² ∈ [0, ¼]`.
 ///
