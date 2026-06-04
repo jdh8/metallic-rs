@@ -129,3 +129,56 @@ print(f"const FRAC_2_PI: [u64; {NWORDS}] = [")
 for w in words:
     print(f"    0x{w:016X},")
 print("];")
+
+# --- tan fast-path kernel: tan(r) = r * T(v), v = r^2 in [0, (pi/4)^2]. ---
+# Like asin, tan has a pole (at pi/2) so T converges only geometrically; peel the
+# 6 exact leading terms into double-double and fit the v^6 remainder in plain f64.
+# Reconstruction uses tan(r) for even quadrants and -1/tan(r) for odd ones, so the
+# kernel must clear the 2^-59 trig gate after a reciprocal (relative error is
+# preserved by 1/t): target ~2^-65, a ~64x margin.
+from mpmath import tan as mp_tan
+
+TAN_PEEL = 6
+
+# b_k = coefficient of v^k in tan(r)/r; from tan's odd Taylor coefficients.
+tan_taylor = taylor(mp_tan, 0, 2 * TAN_PEEL + 40)
+def b(k):
+    return tan_taylor[2 * k + 1]
+
+def tan_T(v):
+    return mp_tan(v ** mpf('0.5')) / v ** mpf('0.5') if v != 0 else mpf(1)
+
+def tan_tail_fn(v):
+    if v == 0:
+        return b(TAN_PEEL)
+    lead = sum(b(k) * mpf(v) ** k for k in range(TAN_PEEL))
+    return (tan_T(v) - lead) / mpf(v) ** TAN_PEEL
+
+print()
+emit_dd_array("TAN_LEADS", [b(k) for k in range(TAN_PEEL)])
+
+TAN_TARGET = mpf(2) ** -65
+for TAN_TAIL_DEG in range(4, 24):
+    ttail, ttail_err = chebyfit(tan_tail_fn, [0, U_MAX], TAN_TAIL_DEG + 1, error=True)
+    if U_MAX ** TAN_PEEL * ttail_err < TAN_TARGET:
+        break
+print(f"// TAN_TAIL deg {TAN_TAIL_DEG} fit ~ {mp.nstr(mp.log(ttail_err, 2), 5)} bits;"
+      f" on tan(r)/r ~ {mp.nstr(mp.log(U_MAX ** TAN_PEEL * ttail_err, 2), 5)} bits")
+emit_f64_array("TAN_TAIL", ttail[::-1])
+
+# Certify the assembled kernel (double-double leads, f64 tail) vs tan over
+# r in (0, pi/4]; the f64 evaluation rounding (~2^-62) is verified by cargo test.
+leads_dd = [sum(map(mpf, dd(b(k)))) for k in range(TAN_PEEL)]
+tail64 = [f64(c) for c in ttail[::-1]]
+worst = mpf(0)
+N = 200000
+for i in range(1, N + 1):
+    r = (pi / 4) * mpf(i) / N
+    v = r * r
+    t = sum(leads_dd[k] * v ** k for k in range(TAN_PEEL))
+    t += v ** TAN_PEEL * sum(mpf(tail64[j]) * v ** j for j in range(len(tail64)))
+    rel = abs(r * t / mp_tan(r) - 1)
+    if rel > worst:
+        worst = rel
+print(f"// assembled TAN kernel max relative error ~ {mp.nstr(mp.log(worst, 2), 5)} bits"
+      f" (trig gate TRIG_ZIV_EPS = 2^-59)")
