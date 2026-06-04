@@ -9,7 +9,7 @@ fn test_lgamma_exact() {
     assert!(metal::lgamma(2.0).eq(&0.0));
     assert!(metal::lgamma(0.5).eq(&5.723_649_429_247_001e-1)); // ln √π
     assert!(metal::lgamma(-0.5).eq(&1.265_512_123_484_645_4)); // ln 2√π
-    assert!(metal::lgamma(3.0).eq(&6.931_471_805_599_453e-1)); // ln 2
+    assert!(metal::lgamma(3.0).eq(&core::f64::consts::LN_2)); // ln 2! = ln 2
 
     // Poles and infinities: non-positive integers → +∞.
     assert!(metal::lgamma(0.0).eq(&f64::INFINITY));

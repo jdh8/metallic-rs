@@ -10,7 +10,7 @@ fn test_tgamma_exact() {
     assert!(metal::tgamma(3.0).eq(&2.0));
     assert!(metal::tgamma(6.0).eq(&120.0));
     assert!(metal::tgamma(0.5).eq(&1.772_453_850_905_516)); // √π
-    assert!(metal::tgamma(-0.5).eq(&-3.544_907_701_811_032_2)); // −2√π
+    assert!(metal::tgamma(-0.5).eq(&-3.544_907_701_811_032)); // −2√π
 
     // Poles and signed infinities.
     assert!(metal::tgamma(0.0).eq(&f64::INFINITY));
