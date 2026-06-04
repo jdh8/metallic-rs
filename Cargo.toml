@@ -211,6 +211,14 @@ name = "f64_cosh"
 harness = false
 
 [[bench]]
+name = "f64_erf"
+harness = false
+
+[[bench]]
+name = "f64_erfc"
+harness = false
+
+[[bench]]
 name = "f64_exp_m1"
 harness = false
 

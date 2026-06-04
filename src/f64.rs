@@ -5,6 +5,7 @@ mod atan;
 mod dint;
 mod dint_consts;
 pub(crate) mod double;
+mod erf;
 mod exp;
 mod hyp;
 mod log;
@@ -69,6 +70,7 @@ const fn normalize(x: f64) -> (Sign, Magnitude) {
 }
 
 pub use atan::{acos, asin, atan, atan2};
+pub use erf::{erf, erfc};
 pub use exp::{exp, exp_m1, exp2, exp10};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
 pub use log::{ln, ln_1p, log, log2, log10};

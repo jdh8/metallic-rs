@@ -355,6 +355,49 @@ fn exp_reduce(x: f64) -> (usize, i64, DoubleDouble) {
     (j, q, DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO))
 }
 
+/// Argument reduction for `eᵂ` with a *double-double* exponent `W`.
+///
+/// Returns `(j, q, r)` with `eᵂ = 2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
+/// and `|r| ≤ ln2/2N` — the base-`e` counterpart of [`exp_reduce`], lifted to a
+/// double-double argument for `erfc`, where `W = Q(t) − x²`.  The caller must keep
+/// `|W.high|` within the finite `eᵂ` range (`< ~746`) so `round(N·W/ln2)` fits an
+/// `i64`.
+#[inline]
+pub(super) fn exp_reduce_dd(w: DoubleDouble) -> (usize, i64, DoubleDouble) {
+    /// `N / ln(2)`, the scale that maps `W` to the reduction index
+    const N_OVER_LN2: f64 = 184.664_965_233_787_3;
+
+    let scaled = (w.high * N_OVER_LN2).round_ties_even();
+
+    // SAFETY: the caller keeps `|W.high| < 746`, so `|scaled| < 2^18`.
+    let n = unsafe { scaled.to_int_unchecked::<i64>() };
+    let j = (n & (EXP_N - 1)) as usize;
+    let q = n >> 7;
+
+    // r = W − scaled·ln2/N as a double-double.  `scaled · LN2_OVER_N_HI` is exact
+    // (the high word has 17 trailing zero bits), giving the high residual; the low
+    // residual gathers `W.low` and the `LN2_OVER_N_LO` correction.
+    let a = crate::correct_mul_add(scaled, -LN2_OVER_N_HI, w.high);
+    let b = crate::correct_mul_add(scaled, -LN2_OVER_N_LO, w.low);
+    (j, q, DoubleDouble::from_sum(a, b))
+}
+
+/// `eᵂ` as `2`<sup>`q`</sup>` · mantissa` (mantissa a double-double in [1, 2)) for
+/// a double-double exponent `W`, the accurate counterpart of [`exp_dd_of_dd_fast`].
+#[inline]
+pub(super) fn exp_dd_of_dd(w: DoubleDouble) -> (DoubleDouble, i64) {
+    let (j, q, r) = exp_reduce_dd(w);
+    exp_mantissa(j, q, r)
+}
+
+/// Lean `eᵂ` for a double-double exponent `W` (≈2⁻⁶⁸ relative), the fast leg
+/// `erfc` Ziv-gates against [`exp_dd_of_dd`].
+#[inline]
+pub(super) fn exp_dd_of_dd_fast(w: DoubleDouble) -> (DoubleDouble, i64) {
+    let (j, q, r) = exp_reduce_dd(w);
+    exp_mantissa_fast(j, q, r)
+}
+
 /// `eˣ` as `2`<sup>`q`</sup>` · mantissa` with the mantissa a double-double in [1, 2).
 ///
 /// The caller must ensure `x` is finite and within the non-overflow range
