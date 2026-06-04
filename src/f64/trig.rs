@@ -242,6 +242,13 @@ const PIO2: DoubleDouble = DoubleDouble {
     low: 6.123233995736766e-17,
 };
 
+/// Below this magnitude `sin(x)` and `tan(x)` round to `x`, and `cos(x)` rounds
+/// to `1`.  The corrections `x³/6` (sin), `x³/3` (tan) and `x²/2` (cos) all stay
+/// under half an ulp here, so the fast return is correctly rounded (with a ~6×
+/// margin) — the same short-circuit `core-math` takes, sparing the kernel on the
+/// roughly half of all `f64` bit patterns that are this small.
+const SMALL: f64 = 7.450580596923828e-9; // 2⁻²⁷
+
 /// Fractional bits of 2/π, most-significant 64-bit group first (`FRAC_2_PI[0]`
 /// holds bits 1..64).  Used by [`payne_hanek`] for `|x| ≥ 2²⁰`.
 const FRAC_2_PI: [u64; 24] = [
@@ -367,49 +374,86 @@ fn rem_pio2(x: f64) -> (i64, DoubleDouble) {
     payne_hanek(x)
 }
 
-/// `(sin(r), cos(r))` for `r ∈ [-π/4, π/4]`, both as double-doubles.
-///
-/// The accurate kernel: full double-double Horner of [`SIN_KERNEL`]/[`COS_KERNEL`]
-/// (≈2⁻¹²²), the correctly-rounded fallback behind [`sin_cos_kernel_fast`].
+/// `sin(r)` for `r ∈ [-π/4, π/4]` as a double-double, by full double-double
+/// Horner of [`SIN_KERNEL`] (≈2⁻¹²⁷) — the accurate `sin` half.
+#[inline]
+fn sin_kernel(r: DoubleDouble) -> DoubleDouble {
+    r * poly_dd(r * r, &SIN_KERNEL)
+}
+
+/// `cos(r)` for `r ∈ [-π/4, π/4]` as a double-double, by full double-double
+/// Horner of [`COS_KERNEL`] (≈2⁻¹²²) — the accurate `cos` half.
+#[inline]
+fn cos_kernel(r: DoubleDouble) -> DoubleDouble {
+    poly_dd(r * r, &COS_KERNEL)
+}
+
+/// `(sin(r), cos(r))` for `r ∈ [-π/4, π/4]`, both as double-doubles — the
+/// accurate kernel behind [`sin_cos_kernel_fast`], used by `sin_cos`/`tan`.
 #[inline]
 fn sin_cos_kernel(r: DoubleDouble) -> (DoubleDouble, DoubleDouble) {
     let u = r * r;
-    let s = r * poly_dd(u, &SIN_KERNEL);
-    let c = poly_dd(u, &COS_KERNEL);
-    (s, c)
+    (r * poly_dd(u, &SIN_KERNEL), poly_dd(u, &COS_KERNEL))
 }
 
-/// Lean counterpart of [`sin_cos_kernel`], the trig functions' fast path.
-///
-/// Peels the three exact leading terms of each series into double-double and
-/// evaluates only the tiny `u³` tail ([`SIN_TAIL`]/[`COS_TAIL`]) in plain `f64`,
-/// so `sin(r)` and `cos(r)` come out to ≈2⁻⁶⁰ for a fraction of the accurate
-/// kernel's cost.  A Ziv test ([`ziv`]) accepts the result or defers.
+/// The squares shared by the fast sin/cos parts: `uu = r²`, `u2 = uu²`, and
+/// `u3 = uu.high³`.
 #[inline]
-fn sin_cos_kernel_fast(r: DoubleDouble) -> (DoubleDouble, DoubleDouble) {
+fn fast_squares(r: DoubleDouble) -> (DoubleDouble, DoubleDouble, f64) {
     let uu = r * r;
     let u = uu.high;
-    let u2 = uu * uu;
-    let u3 = u * u * u;
+    (uu, uu * uu, u * u * u)
+}
 
+/// `sin(r)` from the precomputed squares — the `sin` half of the fast path.
+///
+/// Peels the three exact leading terms of `sin(r)/r` into double-double and
+/// evaluates only the tiny `u³` tail ([`SIN_TAIL`]) in plain `f64`, so the result
+/// comes out to ≈2⁻⁶⁰ for a fraction of [`sin_kernel`]'s cost.
+#[inline]
+fn sin_part_fast(r: DoubleDouble, uu: DoubleDouble, u2: DoubleDouble, u3: f64) -> DoubleDouble {
     // sin(r)/r = 1 − u/6 + u²/120 + u³·SIN_TAIL(u)
     let sin_lead = ONE + uu / -6.0 + u2 * FRAC_1_120;
     let sin_over_r = sin_lead
         + DoubleDouble {
-            high: u3 * crate::poly(u, &SIN_TAIL),
+            high: u3 * crate::poly(uu.high, &SIN_TAIL),
             low: 0.0,
         };
-    let s = r * sin_over_r;
+    r * sin_over_r
+}
 
+/// `cos(r)` from the precomputed squares — the `cos` half of the fast path.  See
+/// [`sin_part_fast`]; the `u³` tail is [`COS_TAIL`].
+#[inline]
+fn cos_part_fast(uu: DoubleDouble, u2: DoubleDouble, u3: f64) -> DoubleDouble {
     // cos(r) = 1 − u/2 + u²/24 + u³·COS_TAIL(u)
     let cos_lead = ONE + uu * -0.5 + u2 * FRAC_1_24;
-    let c = cos_lead
+    cos_lead
         + DoubleDouble {
-            high: u3 * crate::poly(u, &COS_TAIL),
+            high: u3 * crate::poly(uu.high, &COS_TAIL),
             low: 0.0,
-        };
+        }
+}
 
-    (s, c)
+/// `sin(r)` for `r ∈ [-π/4, π/4]`, the fast path — only the `sin` half.
+#[inline]
+fn sin_kernel_fast(r: DoubleDouble) -> DoubleDouble {
+    let (uu, u2, u3) = fast_squares(r);
+    sin_part_fast(r, uu, u2, u3)
+}
+
+/// `cos(r)` for `r ∈ [-π/4, π/4]`, the fast path — only the `cos` half.
+#[inline]
+fn cos_kernel_fast(r: DoubleDouble) -> DoubleDouble {
+    let (uu, u2, u3) = fast_squares(r);
+    cos_part_fast(uu, u2, u3)
+}
+
+/// Lean counterpart of [`sin_cos_kernel`] computing both halves, for `sin_cos`.
+#[inline]
+fn sin_cos_kernel_fast(r: DoubleDouble) -> (DoubleDouble, DoubleDouble) {
+    let (uu, u2, u3) = fast_squares(r);
+    (sin_part_fast(r, uu, u2, u3), cos_part_fast(uu, u2, u3))
 }
 
 /// `tan(r)` for `r ∈ [−π/4, π/4]`, as a double-double, via the direct series
@@ -476,13 +520,30 @@ pub fn sin(x: f64) -> f64 {
         return f64::NAN;
     }
 
+    // |x| < 2⁻²⁷: sin(x) = x to within ½ ulp; preserves ±0.
+    if x.abs() < SMALL {
+        return x;
+    }
+
     let (q, r) = rem_pio2(x.abs());
 
-    // sin(|x|): quadrant picks sin(r)/cos(r) and its sign; sin is odd in x.
-    let (s, c) = sin_cos_kernel_fast(r);
-    let magnitude = ziv(select_sin(q, s, c)).unwrap_or_else(|| {
-        let (s, c) = sin_cos_kernel(r);
-        let v = select_sin(q, s, c);
+    // sin(|x|): even quadrants use sin(r), odd use cos(r); q&2 sets the sign.
+    // Only the selected half is computed (vs. both for `sin_cos`).
+    let need_cos = q & 1 != 0;
+    let negate = q & 2 != 0;
+    let signed = |v: DoubleDouble| if negate { neg(v) } else { v };
+
+    let fast = signed(if need_cos {
+        cos_kernel_fast(r)
+    } else {
+        sin_kernel_fast(r)
+    });
+    let magnitude = ziv(fast).unwrap_or_else(|| {
+        let v = signed(if need_cos {
+            cos_kernel(r)
+        } else {
+            sin_kernel(r)
+        });
         v.high + v.low
     });
 
@@ -501,12 +562,29 @@ pub fn cos(x: f64) -> f64 {
         return f64::NAN;
     }
 
+    // |x| < 2⁻²⁷: cos(x) = 1 to within ½ ulp.
+    if x.abs() < SMALL {
+        return 1.0;
+    }
+
     let (q, r) = rem_pio2(x.abs());
 
-    let (s, c) = sin_cos_kernel_fast(r);
-    ziv(select_cos(q, s, c)).unwrap_or_else(|| {
-        let (s, c) = sin_cos_kernel(r);
-        let v = select_cos(q, s, c);
+    // cos(|x|): even quadrants use cos(r), odd use sin(r); (q+1)&2 sets the sign.
+    let need_sin = q & 1 != 0;
+    let negate = q.wrapping_add(1) & 2 != 0;
+    let signed = |v: DoubleDouble| if negate { neg(v) } else { v };
+
+    let fast = signed(if need_sin {
+        sin_kernel_fast(r)
+    } else {
+        cos_kernel_fast(r)
+    });
+    ziv(fast).unwrap_or_else(|| {
+        let v = signed(if need_sin {
+            sin_kernel(r)
+        } else {
+            cos_kernel(r)
+        });
         v.high + v.low
     })
 }
@@ -517,6 +595,11 @@ pub fn cos(x: f64) -> f64 {
 pub fn sin_cos(x: f64) -> (f64, f64) {
     if !x.is_finite() {
         return (f64::NAN, f64::NAN);
+    }
+
+    // |x| < 2⁻²⁷: (sin, cos) = (x, 1) to within ½ ulp; preserves ±0 in sin.
+    if x.abs() < SMALL {
+        return (x, 1.0);
     }
 
     let (q, r) = rem_pio2(x.abs());
@@ -543,6 +626,11 @@ pub fn sin_cos(x: f64) -> (f64, f64) {
 pub fn tan(x: f64) -> f64 {
     if !x.is_finite() {
         return f64::NAN;
+    }
+
+    // |x| < 2⁻²⁷: tan(x) = x to within ½ ulp; preserves ±0.
+    if x.abs() < SMALL {
+        return x;
     }
 
     let (q, r) = rem_pio2(x.abs());
