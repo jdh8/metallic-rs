@@ -7,8 +7,8 @@ fn test_atan2() {
     // ∞/0/sign special cases.
     let grid = (0..2500u64).flat_map(|i| {
         (0..2500u64).map(move |j| {
-            let y = f64::from(i as u32).mul_add(10.0 / 2500.0, -5.0);
-            let x = f64::from(j as u32).mul_add(10.0 / 2500.0, -5.0);
+            let y = metallic::correct_mul_add(f64::from(i as u32), 10.0 / 2500.0, -5.0);
+            let x = metallic::correct_mul_add(f64::from(j as u32), 10.0 / 2500.0, -5.0);
             [y, x]
         })
     });
@@ -17,9 +17,5 @@ fn test_atan2() {
         let x = f64::from_bits(i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xDEAD);
         [y, x]
     });
-    common::test_bivariate_cases(
-        |y, x| metal::atan2(y, x),
-        |y, x| core_math::atan2(y, x),
-        grid.chain(wide),
-    );
+    common::test_bivariate_cases(metal::atan2, core_math::atan2, grid.chain(wide));
 }

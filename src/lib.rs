@@ -1,6 +1,9 @@
 #![doc = include_str!("../README.md")]
 #![warn(clippy::pedantic, clippy::nursery)]
 #![warn(missing_docs)]
+// `!(x <= bound)` / `!(x >= bound)` are deliberate NaN-propagating domain
+// guards — unlike `x > bound`, they route NaN down the reject branch.
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
 use fast_polynomial::poly_array as poly;
 
 /// Real functions for `f32`s
@@ -89,7 +92,7 @@ fn fast_mul_add(x: f64, y: f64, a: f64) -> f64 {
 
 /// Correctly-rounded multiply-add with runtime FMA dispatch
 ///
-/// Always computes `x * y + a` as a single fused operation.  On x86/x86_64
+/// Always computes `x * y + a` as a single fused operation.  On `x86`/`x86_64`
 /// without a compile-time `+fma` target feature the FMA instruction is
 /// selected at runtime; on targets where the FMA instruction is unavailable
 /// it falls back to the platform's software `fma` implementation.
@@ -97,16 +100,17 @@ fn fast_mul_add(x: f64, y: f64, a: f64) -> f64 {
 /// Use this instead of `x.mul_add(y, a)` for error-free transforms, residual
 /// tests, and double-double compensation, where the single rounding of a true
 /// FMA is required for correctness.  For polynomial hot paths where a lost low
-/// bit is acceptable, prefer [`fast_mul_add`], which avoids the software `fma`
+/// bit is acceptable, prefer `fast_mul_add`, which avoids the software `fma`
 /// fallback cost on old hardware.
 // Not `const`: the hardware path calls the non-const `f64::mul_add`.
+#[must_use]
 #[allow(
     unreachable_code,
     clippy::missing_const_for_fn,
     clippy::disallowed_methods
 )]
 #[inline]
-fn correct_mul_add(x: f64, y: f64, a: f64) -> f64 {
+pub fn correct_mul_add(x: f64, y: f64, a: f64) -> f64 {
     // x86/x86_64 without compile-time FMA: runtime dispatch to the hardware
     // FMA instruction; fall back to the software `fma` for old CPUs.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

@@ -16,7 +16,7 @@ wrote from scratch, so I decided to rewrite them in Rust.
 ## Enable [fused multiply-add][fma] for best performance
 
 This crate leans heavily on the fused multiply-add instruction.  Most modern
-targets &mdash; AArch64, RISC-V with `Zfa`, WebAssembly with `relaxed-simd`
+targets &mdash; `AArch64`, RISC-V with `Zfa`, WebAssembly with `relaxed-simd`
 &mdash; enable it by default.  On x86-64, however, Rust's default `generic`
 target does not, so the crate silently falls back to a slower path with
 [double rounding][double-rounding] and emits a `cargo:warning` from `build.rs`

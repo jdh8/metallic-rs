@@ -393,7 +393,7 @@ fn log_reduce(x: f64) -> (i64, usize, DoubleDouble) {
 
 /// The natural logarithm of a finite positive `x ≠ 1`, as a double-double.
 #[inline]
-pub(crate) fn ln_dd(x: f64) -> DoubleDouble {
+pub fn ln_dd(x: f64) -> DoubleDouble {
     // ln(x) = e·ln2 + L_TABLE[i] + ln(1+r).
     let (e, i, r) = log_reduce(x);
     let e = e as f64;
@@ -413,7 +413,7 @@ pub(crate) fn ln_dd(x: f64) -> DoubleDouble {
 /// against an accurate fallback ([`dint::ln_accurate`] for `ln`, `ln_dd` for
 /// `log2`/`log10`) with a Ziv test.
 #[inline]
-pub(crate) fn ln_fast(x: f64) -> DoubleDouble {
+pub fn ln_fast(x: f64) -> DoubleDouble {
     let (e, i, r) = log_reduce(x);
     let e = e as f64;
 

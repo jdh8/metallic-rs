@@ -86,7 +86,7 @@ pub fn hypot(x: f64, y: f64) -> f64 {
     // Negligible smaller leg: when `small < big·2⁻²⁷` the correction
     // `small²/(2·big) < ½ ulp(big)`, so `√(big² + small²)` rounds to `big`.  This
     // skips the square root for the common case of disparate magnitudes.
-    const SMALL_RATIO: f64 = 7.450580596923828e-9; // 2⁻²⁷
+    const SMALL_RATIO: f64 = 7.450_580_596_923_828e-9; // 2⁻²⁷
     if small < big * SMALL_RATIO {
         return big;
     }

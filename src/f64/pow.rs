@@ -3,7 +3,7 @@
 //! The double-double `log₂`/`exp2` kernels here are shared with the f32
 //! [`powf`](crate::f32::powf): they already run in f64 double-double, since even
 //! for an f32 result the error in `log₂x` is amplified by `y`.  This module hosts
-//! them (`pub(crate)`) and adds the f64-output `exp2_dd`/`powf_core`.
+//! them (crate-visible) and adds the f64-output `exp2_dd`/`powf_core`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::double::{fast_ldexp, round_general64, DoubleDouble};
@@ -17,7 +17,7 @@ use core::num::FpCategory;
 /// Degree 12, max error `2⁻⁹⁴` on `u ∈ [0, 0.0295]` (i.e. `|t| ≤ (√2−1)/(√2+1)`),
 /// from `mpmath.chebyfit(lambda u: 2*log2(e)*atanh(√u)/√u, [0, 0.0295], 13)`.
 /// With `t = (m−1)/(m+1)`, `t·poly(t²) = 2·log₂e·atanh(t) = log₂ m`.
-pub(crate) const LOG2_CH: [DoubleDouble; 13] = [
+pub const LOG2_CH: [DoubleDouble; 13] = [
     DoubleDouble {
         high: 2.885_390_081_777_926_8,
         low: 4.071_054_748_190_96e-17,
@@ -77,7 +77,7 @@ pub(crate) const LOG2_CH: [DoubleDouble; 13] = [
 /// Degree 17, max error `2⁻⁹⁷`, from
 /// `mpmath.chebyfit(lambda h: 2**h, [-0.5, 0.5], 18)`.  Reconstructs `2^(E−n)`
 /// for [`exp2_dd`]'s fractional part.
-pub(crate) const EXP2_CE: [DoubleDouble; 18] = [
+pub const EXP2_CE: [DoubleDouble; 18] = [
     DoubleDouble {
         high: 1.0,
         low: 6.209_907_774_086_482e-30,
@@ -157,7 +157,7 @@ pub(crate) const EXP2_CE: [DoubleDouble; 18] = [
 /// Degree 10; the `f64` evaluation lands near `2⁻⁵²` relative, ample for the
 /// fast path since the Ziv gate catches whatever the single rounding leaves
 /// ambiguous.  Same shape as [`LOG2_CH`] without the double-double tail.
-pub(crate) const LOG2_FAST: [f64; 11] = [
+pub const LOG2_FAST: [f64; 11] = [
     2.885_390_081_777_926_8,
     0.961_796_693_925_975_6,
     0.577_078_016_355_585_4,
@@ -174,7 +174,7 @@ pub(crate) const LOG2_FAST: [f64; 11] = [
 /// `f64` minimax of `2ʰ` on `h ∈ [−½, ½]` — the fast path's exp
 ///
 /// Degree 10, error `2⁻⁵²`; counterpart to [`EXP2_CE`] without the low words.
-pub(crate) const EXP2_FAST: [f64; 11] = [
+pub const EXP2_FAST: [f64; 11] = [
     1.0,
     0.693_147_180_559_95,
     0.240_226_506_959_100_97,
@@ -195,7 +195,7 @@ pub(crate) const EXP2_FAST: [f64; 11] = [
 /// `xʸ = 2^(y·log₂x)` the error in `log₂x` is amplified by `y`, so the whole
 /// `log₂ → ×y → exp2` chain runs in double-double.
 #[inline]
-pub(crate) fn poly_dd(u: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
+pub fn poly_dd(u: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
     let (last, rest) = coeffs.split_last().unwrap();
     let mut acc = *last;
     for c in rest.iter().rev() {
@@ -210,7 +210,7 @@ pub(crate) fn poly_dd(u: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble 
 /// `t = (m−1)/(m+1)` stays in `[−0.172, 0.172]`; then `log₂ m = t·poly(t²)` via
 /// [`LOG2_CH`] and `log₂ x = e + log₂ m`, all in double-double.
 #[inline]
-pub(crate) fn log2_dd(x: f64) -> DoubleDouble {
+pub fn log2_dd(x: f64) -> DoubleDouble {
     // Normalize a subnormal `x` (×2⁵⁴, exact) so the bit-level exponent extraction
     // is valid, compensating with `extra` in the final exponent.  The f32 `powf`
     // only ever passes normal f64, so `extra` stays 0 there.
@@ -244,7 +244,7 @@ pub(crate) fn log2_dd(x: f64) -> DoubleDouble {
 
 /// `log₂(x)` as a plain `f64` for the fast path
 #[inline]
-pub(crate) fn log2_fast_path(x: f64) -> f64 {
+pub fn log2_fast_path(x: f64) -> f64 {
     #[allow(clippy::cast_possible_wrap)]
     let i = x.to_bits() as i64;
     let exponent = (i - FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
@@ -389,10 +389,8 @@ pub fn powf(x: f64, y: f64) -> f64 {
             _ => {
                 if x == 1.0 {
                     1.0 // 1ʸ = 1 for every y, including NaN
-                } else if x.is_sign_negative() {
-                    f64::NAN
-                } else if y.is_nan() {
-                    f64::NAN // xⁿᵃⁿ = NaN for x ≠ 1
+                } else if x.is_sign_negative() || y.is_nan() {
+                    f64::NAN // negative base (complex result) or NaN exponent, x ≠ 1
                 } else {
                     // xʸ = 2^(y·log₂x), entirely in double-double.
                     powf_core(x, y)

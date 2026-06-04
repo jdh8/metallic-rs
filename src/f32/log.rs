@@ -213,7 +213,7 @@ fn round_to_f32(value: DoubleDouble) -> f32 {
 /// result is always a normal `f32` (its magnitude is in `±[2⁻³², 2³²]`), so the
 /// 29-bit cut never shifts.
 #[inline]
-fn near_f32_midpoint(q: f64) -> bool {
+const fn near_f32_midpoint(q: f64) -> bool {
     // The fast quotient's measured error is ≤ 2⁻²⁵·⁷ of a half-ulp, i.e. ≲ 8 of
     // these residual units (half-ulp = 2²⁸ units); `BAND = 2⁸` keeps a ~32× margin.
     const BAND: i64 = 1 << 8;

@@ -18,28 +18,28 @@ const TGAMMA_CENTER: f64 = 2.875;
 /// f64 rounding contributes `2⁻⁵³·|c_k|·½ᵏ`, which drops below `2⁻⁶²` from `c₆`.
 const TGAMMA_DD: [DoubleDouble; 6] = [
     DoubleDouble {
-        high: 1.7877108988969403,
-        low: -3.737560105011311e-17,
+        high: 1.787_710_898_896_940_3,
+        low: -3.737_560_105_011_311e-17,
     },
     DoubleDouble {
-        high: 1.5591939012079505,
-        low: -6.845438926265673e-18,
+        high: 1.559_193_901_207_950_5,
+        low: -6.845_438_926_265_673e-18,
     },
     DoubleDouble {
-        high: 1.051049326681183,
-        low: -8.10863306869118e-17,
+        high: 1.051_049_326_681_183,
+        low: -8.108_633_068_691_18e-17,
     },
     DoubleDouble {
-        high: 0.47065801829339715,
-        low: 1.1343489177185007e-18,
+        high: 0.470_658_018_293_397_15,
+        low: 1.134_348_917_718_500_7e-18,
     },
     DoubleDouble {
-        high: 0.18881863832011508,
-        low: -3.2013513690009033e-18,
+        high: 0.188_818_638_320_115_08,
+        low: -3.201_351_369_000_903_3e-18,
     },
     DoubleDouble {
-        high: 0.05883154841060908,
-        low: -4.38554794255165e-20,
+        high: 0.058_831_548_410_609_08,
+        low: -4.385_547_942_551_65e-20,
     },
 ];
 
@@ -99,7 +99,7 @@ const TGAMMA_POLY_F64: [f64; 12] = [
 
 /// `½·ln(2π)`, the additive Stirling constant for `lgamma_pos_dd`
 const HALF_LN_2PI: DoubleDouble = DoubleDouble {
-    high: 0.9189385332046728,
+    high: 0.918_938_533_204_672_8,
     low: -3.878_294_158_067_241_4e-17,
 };
 
@@ -398,7 +398,7 @@ pub fn tgamma(z: f32) -> f32 {
     // Near the pole at 0, Γ(z) ≈ 1/z.  The Maclaurin series Γ(z) = 1/z − γ + c₂z +
     // c₃z² + c₄z³ keeps the dynamic range inside the double-double 1/z while the
     // O(1) correction stays ample in f64; this also yields Γ(±0) = ±∞.
-    if z.abs() < 0.000_244_140_625 {
+    if z.abs() < 0.000_244_140_63 {
         let correction = crate::poly(
             x,
             &[
@@ -418,7 +418,7 @@ pub fn tgamma(z: f32) -> f32 {
 
     // Γ exceeds f32::MAX at z ≈ 35.0401; bail before the recurrence loop, which
     // would otherwise run unboundedly for huge z.
-    if z >= 35.040_100_097_656_25 {
+    if z >= 35.040_1 {
         return f32::INFINITY;
     }
 
@@ -457,6 +457,9 @@ pub fn tgamma(z: f32) -> f32 {
 /// double-double; the asymptotic tail is negligible in f64.  Relative error
 /// near `2⁻⁶⁴`.
 #[inline]
+// The Stirling-reduction loop increments `t` by exactly 1.0 each pass, which is
+// exact in f64, so the float-condition `while t < LGAMMA_STIRLING` terminates cleanly.
+#[allow(clippy::while_float)]
 fn lgamma_pos_dd(y: f64) -> DoubleDouble {
     let mut product = DoubleDouble {
         high: 1.0,

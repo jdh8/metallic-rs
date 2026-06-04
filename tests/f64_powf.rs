@@ -3,7 +3,7 @@ use metallic::f64 as metal;
 
 /// Map a 64-bit hash to a value-uniform `f64` in `[-half, half]`.
 fn signed(hash: u64, half: f64) -> f64 {
-    ((hash >> 11) as f64 / (1u64 << 53) as f64).mul_add(2.0 * half, -half)
+    metallic::correct_mul_add((hash >> 11) as f64 / (1u64 << 53) as f64, 2.0 * half, -half)
 }
 
 fn cases() -> impl Iterator<Item = [f64; 2]> {

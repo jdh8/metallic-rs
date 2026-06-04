@@ -5,8 +5,8 @@ use core::cmp::Ordering;
 
 /// `ln(2)` as a double-double (CORE-MATH's split, matching `log.rs`).
 const LN2: DoubleDouble = DoubleDouble {
-    high: 0.6931471805598903,
-    low: 5.497923018708371e-14,
+    high: 0.693_147_180_559_890_3,
+    low: 5.497_923_018_708_371e-14,
 };
 
 /// `1` as a double-double.
@@ -49,7 +49,7 @@ fn ln_sum_fast(s: DoubleDouble) -> DoubleDouble {
 /// (atanh) only halves it.  `2⁻⁶³` keeps a ~30× margin.  Being absolute, the gate
 /// forces the accurate fallback only when `|result| ≲ 2⁻¹⁰`, where the lean kernel
 /// cannot round correctly anyway.
-const IHYP_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63
+const IHYP_ZIV_EPS: f64 = 1.084_202_172_485_504_4e-19; // 2^-63
 
 /// Round `scale · ln(u)` for a positive double-double `u` via a two-step Ziv
 /// test: the lean [`ln_sum_fast`] is accepted unless it straddles a rounding

@@ -390,7 +390,7 @@ fn asin_reflect_node(a: f64) -> DoubleDouble {
 /// `asin(|x|)` for `a = |x| ∈ [0, 1]`, the inverse-trig fast path: the direct
 /// [`asin_kernel_fast`] for `a < ½`, else the reflection `asin(a) = π/2 − 2·asin(s)`
 /// with `s = √((1−a)/2) ∈ [0, ½]`.  A [`ziv`] gate accepts it or defers to the
-/// accurate [`asin_pos`]`(a, atan_dd)`.
+/// accurate [`asin_pos(a, atan_dd)`](asin_pos).
 #[inline]
 fn asin_fast(a: f64) -> DoubleDouble {
     if a < 0.5 {
