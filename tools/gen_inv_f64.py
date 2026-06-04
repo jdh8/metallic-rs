@@ -18,7 +18,7 @@ rounding (~2^-53 relative) is ~2^-68 absolute on B -- a ~30x margin under the
 2^-63 Ziv gate (ATAN_ZIV_EPS).
 
 Outputs (paste into src/f64/atan.rs):
-  - ASIN_LEADS: double-double [Sum; 5] = exact a_0..a_4
+  - ASIN_LEADS: double-double [DoubleDouble; 5] = exact a_0..a_4
   - ASIN_TAIL:  plain-f64 minimax of the u^5 remainder
 """
 from mpmath import mp, mpf, asin, sqrt, binomial, chebyfit
@@ -40,10 +40,10 @@ def dd(x):
 
 
 def emit_dd_array(name, coeffs):
-    print(f"const {name}: [Sum; {len(coeffs)}] = [")
+    print(f"const {name}: [DoubleDouble; {len(coeffs)}] = [")
     for c in coeffs:
         hi, lo = dd(c)
-        print(f"    Sum {{ high: {hi!r}, low: {lo!r} }},")
+        print(f"    DoubleDouble {{ high: {hi!r}, low: {lo!r} }},")
     print("];\n")
 
 

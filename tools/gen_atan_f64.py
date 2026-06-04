@@ -30,14 +30,14 @@ def dd(x):
     return hi, lo
 
 
-print("const ATAN_COEFFS: [Sum; 16] = [")
+print("const ATAN_COEFFS: [DoubleDouble; 16] = [")
 for k in range(16):
     hi, lo = dd(mpf((-1) ** k) / (2 * k + 1))
-    print(f"    Sum {{ high: {hi!r}, low: {lo!r} }},")
+    print(f"    DoubleDouble {{ high: {hi!r}, low: {lo!r} }},")
 print("];\n")
 
-print("const ATAN_TABLE: [Sum; 9] = [")
+print("const ATAN_TABLE: [DoubleDouble; 9] = [")
 for k in range(9):
     hi, lo = dd(atan(mpf(k) / 8))
-    print(f"    Sum {{ high: {hi!r}, low: {lo!r} }},")
+    print(f"    DoubleDouble {{ high: {hi!r}, low: {lo!r} }},")
 print("];")

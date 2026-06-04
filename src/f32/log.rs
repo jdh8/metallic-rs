@@ -1,4 +1,4 @@
-use crate::f64::double::{fast_sum, Sum};
+use crate::f64::double::{fast_sum, DoubleDouble};
 use crate::f64::EXP_SHIFT as F64_EXP_SHIFT;
 use core::num::FpCategory;
 
@@ -186,10 +186,10 @@ pub fn log10(x: f32) -> f32 {
 /// the hardware `as f32` (round-to-nearest-even) finish: an odd `f64` mantissa is
 /// never an `f32` grid point or midpoint, so the second rounding is unambiguous.
 #[inline]
-fn round_to_f32(value: Sum) -> f32 {
+fn round_to_f32(value: DoubleDouble) -> f32 {
     // Renormalize so `|low| ≤ ½ ulp(high)`; the product/reciprocal above may leave
     // the pair slightly denormalized.
-    let Sum { high, low } = fast_sum(value.high, value.low);
+    let DoubleDouble { high, low } = fast_sum(value.high, value.low);
     if low == 0.0 {
         return high as f32;
     }

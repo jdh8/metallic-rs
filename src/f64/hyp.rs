@@ -1,16 +1,16 @@
-use super::double::{fast_ldexp, sqrt_dd, Sum};
+use super::double::{fast_ldexp, sqrt_dd, DoubleDouble};
 use super::exp::{exp_dd, exp_dd_fast};
 use super::{ln_dd, ln_fast};
 use core::cmp::Ordering;
 
 /// `ln(2)` as a double-double (CORE-MATH's split, matching `log.rs`).
-const LN2: Sum = Sum {
+const LN2: DoubleDouble = DoubleDouble {
     high: 0.6931471805598903,
     low: 5.497923018708371e-14,
 };
 
 /// `1` as a double-double.
-const ONE: Sum = Sum {
+const ONE: DoubleDouble = DoubleDouble {
     high: 1.0,
     low: 0.0,
 };
@@ -20,9 +20,9 @@ const ONE: Sum = Sum {
 /// `ln(s) = ln(s.high) + ln(1 + s.low/s.high) ≈ ln_dd(s.high) + s.low/s.high`,
 /// the linear term being all that survives since `s.low/s.high ≈ 2⁻⁵²`.
 #[inline]
-fn ln_sum(s: Sum) -> Sum {
+fn ln_sum(s: DoubleDouble) -> DoubleDouble {
     ln_dd(s.high)
-        + Sum {
+        + DoubleDouble {
             high: s.low / s.high,
             low: 0.0,
         }
@@ -32,9 +32,9 @@ fn ln_sum(s: Sum) -> Sum {
 /// instead of ≈2⁻⁸⁷).  Only the leading `ln(s.high)` is leaner; the linear
 /// correction `s.low/s.high` is identical, so it cancels in the Ziv comparison.
 #[inline]
-fn ln_sum_fast(s: Sum) -> Sum {
+fn ln_sum_fast(s: DoubleDouble) -> DoubleDouble {
     ln_fast(s.high)
-        + Sum {
+        + DoubleDouble {
             high: s.low / s.high,
             low: 0.0,
         }
@@ -55,8 +55,8 @@ const IHYP_ZIV_EPS: f64 = 1.0842021724855044e-19; // 2^-63
 /// test: the lean [`ln_sum_fast`] is accepted unless it straddles a rounding
 /// boundary, in which case the accurate [`ln_sum`] resolves it.
 #[inline]
-fn ln_sum_rounded(u: Sum, scale: f64) -> f64 {
-    let Sum { high, low } = ln_sum_fast(u) * scale;
+fn ln_sum_rounded(u: DoubleDouble, scale: f64) -> f64 {
+    let DoubleDouble { high, low } = ln_sum_fast(u) * scale;
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
     if lo == hi {
@@ -84,11 +84,11 @@ const LARGE_IHYP: f64 = 134_217_728.0;
 /// the correct negligible value, subsuming the old `ln(2x)`-only branch.
 #[inline]
 fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
-    let corr = Sum {
+    let corr = DoubleDouble {
         high: correction,
         low: 0.0,
     };
-    let Sum { high, low } = ln_fast(s) + LN2 + corr;
+    let DoubleDouble { high, low } = ln_fast(s) + LN2 + corr;
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
     if lo == hi {
@@ -105,12 +105,12 @@ fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
 /// `t = 2⁻²q/m ≈ e⁻ˣ` relative to `eˣ`; `exp2i(-2q)` underflows to 0 once the term
 /// is negligible, so no explicit cutoff is needed.
 #[inline]
-fn combine(m: Sum, q: i64, add: bool) -> Sum {
+fn combine(m: DoubleDouble, q: i64, add: bool) -> DoubleDouble {
     let t = m.recip() * crate::exp2i(-2 * q);
     if add {
         m + t
     } else {
-        m + Sum {
+        m + DoubleDouble {
             high: -t.high,
             low: -t.low,
         }
@@ -217,12 +217,12 @@ pub fn tanh(x: f64) -> f64 {
     // double-double, then the quotient in double-double.
     let (m, q) = exp_dd(2.0 * s);
     let t = m * crate::exp2i(q)
-        + Sum {
+        + DoubleDouble {
             high: -1.0,
             low: 0.0,
         };
     let result = t
-        * (t + Sum {
+        * (t + DoubleDouble {
             high: 2.0,
             low: 0.0,
         })
@@ -255,8 +255,8 @@ pub fn asinh(x: f64) -> f64 {
         // asinh(x) = ln(2|x|) + 1/(4x²) − …, no square root.
         ln_2x_corrected(s, 0.25 / (s * s))
     } else {
-        let c = sqrt_dd(Sum::from_product(s, s) + ONE);
-        ln_sum_rounded(c + Sum { high: s, low: 0.0 }, 1.0)
+        let c = sqrt_dd(DoubleDouble::from_product(s, s) + ONE);
+        ln_sum_rounded(c + DoubleDouble { high: s, low: 0.0 }, 1.0)
     };
 
     magnitude.copysign(x)
@@ -290,13 +290,13 @@ pub fn acosh(x: f64) -> f64 {
     }
 
     let c = sqrt_dd(
-        Sum::from_product(x, x)
-            + Sum {
+        DoubleDouble::from_product(x, x)
+            + DoubleDouble {
                 high: -1.0,
                 low: 0.0,
             },
     );
-    ln_sum_rounded(c + Sum { high: x, low: 0.0 }, 1.0)
+    ln_sum_rounded(c + DoubleDouble { high: x, low: 0.0 }, 1.0)
 }
 
 /// Inverse hyperbolic tangent
@@ -317,7 +317,7 @@ pub fn atanh(x: f64) -> f64 {
             }
 
             // (1 + |x|)/(1 − |x|) in double-double, then ½·ln of it.
-            let u = Sum::from_sum(1.0, s) * Sum::from_sum(1.0, -s).recip();
+            let u = DoubleDouble::from_sum(1.0, s) * DoubleDouble::from_sum(1.0, -s).recip();
             ln_sum_rounded(u, 0.5).copysign(x)
         }
         Some(Ordering::Equal) => f64::INFINITY.copysign(x),

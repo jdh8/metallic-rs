@@ -1,5 +1,5 @@
 use super::exp::finite_exp;
-use crate::f64::double::{round, round_general, Sum};
+use crate::f64::double::{round, round_general, DoubleDouble};
 
 /// `erf(x)` for `|x| < 0.4375` as `x·P(x²)`
 ///
@@ -38,7 +38,7 @@ fn erf_small(x: f64) -> f64 {
 /// `Q(t)` was generated with
 /// `ratapprox --function="(2/x-2)^2 + log(erfc(2/x-2)) - log(x)"
 ///  --dom="[0.16,0.8205]" --num="[1,x,...,x^22]" --den="[1]" --weight=1`.
-fn erfc_dd(x: f64) -> Sum {
+fn erfc_dd(x: f64) -> DoubleDouble {
     const Q: [f64; 23] = [
         -1.265_512_122_089_828_2,
         0.999_999_909_841_198_7,
@@ -65,13 +65,13 @@ fn erfc_dd(x: f64) -> Sum {
         0.205_553_868_706_903_5,
     ];
 
-    let t = Sum::from_quotient(2.0, 2.0 + x);
+    let t = DoubleDouble::from_quotient(2.0, 2.0 + x);
     let q = crate::poly(t.high, &Q);
 
     // exponent W = Q(t) - x², with x² exact and the difference in double-double
-    let x2 = Sum::from_product(x, x);
-    let w = Sum { high: q, low: 0.0 }
-        + Sum {
+    let x2 = DoubleDouble::from_product(x, x);
+    let w = DoubleDouble { high: q, low: 0.0 }
+        + DoubleDouble {
             high: -x2.high,
             low: -x2.low,
         };
@@ -100,10 +100,10 @@ pub fn erf(x: f32) -> f32 {
     } else {
         let e = erfc_dd(ax.into());
         round(
-            Sum {
+            DoubleDouble {
                 high: 1.0,
                 low: 0.0,
-            } + Sum {
+            } + DoubleDouble {
                 high: -e.high,
                 low: -e.low,
             },
@@ -143,10 +143,10 @@ pub fn erfc(x: f32) -> f32 {
         round_general(e)
     } else {
         round_general(
-            Sum {
+            DoubleDouble {
                 high: 2.0,
                 low: 0.0,
-            } + Sum {
+            } + DoubleDouble {
                 high: -e.high,
                 low: -e.low,
             },

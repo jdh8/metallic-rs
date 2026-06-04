@@ -1,4 +1,4 @@
-use super::double::{fast_sum, round_general64, Sum};
+use super::double::{fast_sum, round_general64, DoubleDouble};
 use super::{normalize, Magnitude, EXP_SHIFT};
 
 /// Rounds half-way cases away from zero
@@ -44,9 +44,9 @@ pub fn cbrt(x: f64) -> f64 {
     let y = crate::mul_add(1.0 / 3.0, x / (y * y) - y, y);
     let y = y * (0.5 + 1.5 * x / crate::mul_add(2.0 * y, y * y, x));
 
-    let quotient = Sum::from_quotient(x, y) / y;
+    let quotient = DoubleDouble::from_quotient(x, y) / y;
     let sum = fast_sum(2.0 * y, quotient.high);
-    let sum = Sum {
+    let sum = DoubleDouble {
         high: sum.high,
         low: quotient.low + sum.low,
     } / 3.0;
@@ -120,9 +120,10 @@ pub fn hypot(x: f64, y: f64) -> f64 {
 
     // big_s² + small_s² in double-double (each square exact via the FMA in
     // `from_product`), then one Newton step `h + (s2 − h²)/(2h)` on `h = √s2.high`.
-    let s2 = Sum::from_product(big_s, big_s) + Sum::from_product(small_s, small_s);
+    let s2 =
+        DoubleDouble::from_product(big_s, big_s) + DoubleDouble::from_product(small_s, small_s);
     let h = s2.high.sqrt();
-    let h2 = Sum::from_product(h, h);
+    let h2 = DoubleDouble::from_product(h, h);
     let residual = (s2.high - h2.high) + (s2.low - h2.low);
     let corrected = fast_sum(h, residual * (0.5 / h));
 

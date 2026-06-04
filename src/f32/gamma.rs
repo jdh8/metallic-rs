@@ -1,7 +1,7 @@
-use crate::f64::double::{fast_ldexp, round_general, round_signed, Sum};
+use crate::f64::double::{fast_ldexp, round_general, round_signed, DoubleDouble};
 
 /// π as a double-double (needed for lgamma reflection)
-const PI: Sum = Sum {
+const PI: DoubleDouble = DoubleDouble {
     high: 3.141_592_653_589_793,
     low: 1.224_646_799_147_353_2e-16,
 };
@@ -16,28 +16,28 @@ const TGAMMA_CENTER: f64 = 2.875;
 /// `mpmath.chebyfit(lambda d: gamma(mpf("2.875")+d), [-0.5,0.5], 19)` at
 /// `prec=260`.  Only the leading six coefficients need double-double — `c_k`'s
 /// f64 rounding contributes `2⁻⁵³·|c_k|·½ᵏ`, which drops below `2⁻⁶²` from `c₆`.
-const TGAMMA_DD: [Sum; 6] = [
-    Sum {
+const TGAMMA_DD: [DoubleDouble; 6] = [
+    DoubleDouble {
         high: 1.7877108988969403,
         low: -3.737560105011311e-17,
     },
-    Sum {
+    DoubleDouble {
         high: 1.5591939012079505,
         low: -6.845438926265673e-18,
     },
-    Sum {
+    DoubleDouble {
         high: 1.051049326681183,
         low: -8.10863306869118e-17,
     },
-    Sum {
+    DoubleDouble {
         high: 0.47065801829339715,
         low: 1.1343489177185007e-18,
     },
-    Sum {
+    DoubleDouble {
         high: 0.18881863832011508,
         low: -3.2013513690009033e-18,
     },
-    Sum {
+    DoubleDouble {
         high: 0.05883154841060908,
         low: -4.38554794255165e-20,
     },
@@ -67,10 +67,10 @@ const TGAMMA_TAIL: [f64; 13] = [
 /// six leading coefficients, giving a relative error near `2⁻⁶⁴` — ample for a
 /// correctly-rounded `f32` after the recurrence and round-to-odd.
 #[inline]
-fn tgamma_poly(d: f64) -> Sum {
+fn tgamma_poly(d: f64) -> DoubleDouble {
     let tail = crate::poly(d, &TGAMMA_TAIL);
 
-    let mut acc = TGAMMA_DD[5] + Sum::from_product(d, tail);
+    let mut acc = TGAMMA_DD[5] + DoubleDouble::from_product(d, tail);
     for coefficient in TGAMMA_DD[..5].iter().rev() {
         acc = acc * d + *coefficient;
     }
@@ -98,7 +98,7 @@ const TGAMMA_POLY_F64: [f64; 12] = [
 ];
 
 /// `½·ln(2π)`, the additive Stirling constant for `lgamma_pos_dd`
-const HALF_LN_2PI: Sum = Sum {
+const HALF_LN_2PI: DoubleDouble = DoubleDouble {
     high: 0.9189385332046728,
     low: -3.878_294_158_067_241_4e-17,
 };
@@ -231,9 +231,9 @@ fn sinpi(x: f32) -> f64 {
 /// `ln(hi + lo) = ln(hi) + ln(1 + lo/hi) ≈ ln(hi) + lo/hi`, the last term being
 /// a tiny correction folded into the double-double `ln`.
 #[inline]
-fn ln_sum(x: Sum) -> Sum {
+fn ln_sum(x: DoubleDouble) -> DoubleDouble {
     crate::f64::ln_dd(x.high)
-        + Sum {
+        + DoubleDouble {
             high: x.low / x.high,
             low: 0.0,
         }
@@ -241,8 +241,8 @@ fn ln_sum(x: Sum) -> Sum {
 
 /// Negate a double-double
 #[inline]
-fn neg(a: Sum) -> Sum {
-    Sum {
+fn neg(a: DoubleDouble) -> DoubleDouble {
+    DoubleDouble {
         high: -a.high,
         low: -a.low,
     }
@@ -254,17 +254,17 @@ fn neg(a: Sum) -> Sum {
 /// underflow to `±0` for very negative `q`, and [`round_general`] for the
 /// normal and subnormal grids in between.
 #[inline]
-fn finish(value: Sum, q: i64, negative: bool) -> f32 {
+fn finish(value: DoubleDouble, q: i64, negative: bool) -> f32 {
     let magnitude = if q >= 1022 {
         f32::INFINITY
     } else if q <= -203 {
         // `value.high · 2^q` underflows even f64 (minimum f64 ≈ 2^-1074); flush to 0.
         0.0
     } else {
-        // Renormalize so `high` is the nearest `f64`: the upstream `Sum / z` and
-        // `Sum * Sum` can leave the pair denormal by up to an ulp, which would
+        // Renormalize so `high` is the nearest `f64`: the upstream `DoubleDouble / z` and
+        // `DoubleDouble * DoubleDouble` can leave the pair denormal by up to an ulp, which would
         // defeat `round`'s round-to-odd at the hardest f32 boundaries.
-        round_general(Sum::from_sum(
+        round_general(DoubleDouble::from_sum(
             fast_ldexp(value.high, q),
             fast_ldexp(value.low, q),
         ))
@@ -359,7 +359,7 @@ fn tgamma_dd(x: f64) -> f32 {
             value = value * factor;
         }
     } else if i < 0.0 {
-        let mut product = Sum { high: x, low: 0.0 };
+        let mut product = DoubleDouble { high: x, low: 0.0 };
         let mut factor = x;
         for _ in 1..steps {
             factor += 1.0;
@@ -403,8 +403,8 @@ pub fn tgamma(z: f32) -> f32 {
                 0.981_728_086_834_400_2,
             ],
         );
-        let value = Sum::from_quotient(1.0, x)
-            + Sum {
+        let value = DoubleDouble::from_quotient(1.0, x)
+            + DoubleDouble {
                 high: correction,
                 low: 0.0,
             };
@@ -452,8 +452,8 @@ pub fn tgamma(z: f32) -> f32 {
 /// double-double; the asymptotic tail is negligible in f64.  Relative error
 /// near `2⁻⁶⁴`.
 #[inline]
-fn lgamma_pos_dd(y: f64) -> Sum {
-    let mut product = Sum {
+fn lgamma_pos_dd(y: f64) -> DoubleDouble {
+    let mut product = DoubleDouble {
         high: 1.0,
         low: 0.0,
     };
@@ -470,10 +470,10 @@ fn lgamma_pos_dd(y: f64) -> Sum {
     let rest = crate::poly(u, &LGAMMA_TAIL) * (u / t);
 
     let stirling = crate::f64::ln_dd(t) * (t - 0.5)
-        + Sum { high: -t, low: 0.0 }
+        + DoubleDouble { high: -t, low: 0.0 }
         + HALF_LN_2PI
-        + Sum::from_quotient(1.0, 12.0 * t)
-        + Sum {
+        + DoubleDouble::from_quotient(1.0, 12.0 * t)
+        + DoubleDouble {
             high: rest,
             low: 0.0,
         };

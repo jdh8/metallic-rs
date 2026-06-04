@@ -8,7 +8,7 @@
     clippy::approx_constant
 )]
 
-use super::double::{fast_ldexp, fast_sum, Sum};
+use super::double::{fast_ldexp, fast_sum, DoubleDouble};
 
 const LN2_OVER_N_HI: f64 = 0.005415212348111709;
 const LN2_OVER_N_LO: f64 = 1.2864023111638346e-14;
@@ -204,18 +204,18 @@ const EXP_N: i64 = 128;
 /// `r` is the reduced argument, `|r| ≤ ln2/2N`.  The full value is `2`<sup>`q`</sup>
 /// times the returned mantissa.
 #[inline]
-pub(super) fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
+pub(super) fn exp_mantissa(j: usize, q: i64, r: DoubleDouble) -> (DoubleDouble, i64) {
     // exp(r) by double-double Horner over the degree-8 minimax polynomial.
     let (high, low) = EXP_R_COEFFS[EXP_R_COEFFS.len() - 1];
-    let mut acc = Sum { high, low };
+    let mut acc = DoubleDouble { high, low };
 
     for &(high, low) in EXP_R_COEFFS[..EXP_R_COEFFS.len() - 1].iter().rev() {
-        acc = acc * r + Sum { high, low };
+        acc = acc * r + DoubleDouble { high, low };
     }
 
     // Fold the table entry in and normalize the mantissa.
     let (high, low) = EXP2_TABLE[j];
-    let scaled = Sum { high, low } * acc;
+    let scaled = DoubleDouble { high, low } * acc;
     let product = fast_sum(scaled.high, scaled.low);
 
     // `2^(j/N) · exp(r)` lies in [0.997, 2.005); fold its exponent into `q` so the
@@ -237,7 +237,7 @@ pub(super) fn exp_mantissa(j: usize, q: i64, r: Sum) -> (Sum, i64) {
 /// the accurate path's ≈2⁻¹⁰⁰ for ≈2⁻⁶⁸ relative error at a fraction of the cost;
 /// [`exp_reconstruct`] resolves the rare hard-to-round cases with a Ziv test.
 #[inline]
-pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
+pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: DoubleDouble) -> (DoubleDouble, i64) {
     // The full reduced argument as one `f64`, for the small tail term.  `exp2`
     // and `exp10` hand in an *un-normalized* `r` (the `ln2/N` low word lands in
     // `r.low ≈ 2⁻⁴⁷`), so dropping `r.low` here would lose the `2·r.high·r.low`
@@ -252,7 +252,7 @@ pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     // exact (Fast2Sum, `|r.high| ≤ ln2/2N`); the low word then gathers the
     // reduction tail `r.low` in full and the polynomial tail.
     let head = fast_sum(1.0, r.high);
-    let er = Sum {
+    let er = DoubleDouble {
         high: head.high,
         low: head.low + (r.low + tail),
     };
@@ -260,7 +260,7 @@ pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
     // Fold in the table entry and normalize the mantissa into [1, 2), exactly as
     // the accurate path does.
     let (high, low) = EXP2_TABLE[j];
-    let scaled = Sum { high, low } * er;
+    let scaled = DoubleDouble { high, low } * er;
     let product = fast_sum(scaled.high, scaled.low);
 
     if product.high < 1.0 {
@@ -280,7 +280,7 @@ pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: Sum) -> (Sum, i64) {
 /// caller must keep `|e.high|` inside the finite `2`<sup>`e`</sup> range
 /// (`< ~1075`) so `round(N·e)` fits an `i64`.
 #[inline]
-pub(super) fn exp2_reduce_dd(e: Sum) -> (usize, i64, Sum) {
+pub(super) fn exp2_reduce_dd(e: DoubleDouble) -> (usize, i64, DoubleDouble) {
     let scaled = (e.high * EXP_N as f64).round_ties_even();
 
     // SAFETY: the caller keeps `e.high` within the finite 2^e range, so
@@ -292,11 +292,11 @@ pub(super) fn exp2_reduce_dd(e: Sum) -> (usize, i64, Sum) {
     // sigma = N·e − m.  `e.high·N` is exact (N is a power of two) and within ½ of
     // the integer `scaled`, so the high word is exact (Sterbenz); `e.low·N` is also
     // exact, and 2Sum normalizes the pair regardless of their relative size.
-    let sigma = Sum::from_sum(e.high.mul_add(EXP_N as f64, -scaled), e.low * EXP_N as f64);
+    let sigma = DoubleDouble::from_sum(e.high.mul_add(EXP_N as f64, -scaled), e.low * EXP_N as f64);
 
     // r = sigma · ln2/N as a double-double, `|r| ≤ ln2/2N`.
     let r = sigma
-        * Sum {
+        * DoubleDouble {
             high: LN2_OVER_N_HI,
             low: LN2_OVER_N_LO,
         };
@@ -308,7 +308,7 @@ pub(super) fn exp2_reduce_dd(e: Sum) -> (usize, i64, Sum) {
 /// `r` is the reduced argument as a double-double, `|r| ≤ ln2/2N`.  The result is
 /// correctly rounded, including gradual underflow into the subnormal range.
 #[inline]
-fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
+fn exp_reconstruct(j: usize, q: i64, r: DoubleDouble) -> f64 {
     // Fast path: a lean mantissa good to ≈2⁻⁶⁸ relative, accepted when both ends
     // of its `±EXP_ZIV_EPS` error interval round to the same `f64`.  Restricting
     // it to comfortably-normal results (`qf ≥ −1021`) keeps the normal/subnormal
@@ -335,7 +335,7 @@ fn exp_reconstruct(j: usize, q: i64, r: Sum) -> f64 {
 /// caller must keep `|x|` small enough that `round(N·x/ln2)` fits an `i64`
 /// (`|x| < ~746`, the finite exp range).
 #[inline]
-fn exp_reduce(x: f64) -> (usize, i64, Sum) {
+fn exp_reduce(x: f64) -> (usize, i64, DoubleDouble) {
     /// `N / ln(2)`, the scale that maps `x` to the reduction index
     const N_OVER_LN2: f64 = 184.664_965_233_787_3;
 
@@ -349,7 +349,7 @@ fn exp_reduce(x: f64) -> (usize, i64, Sum) {
     // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
     // word has 17 trailing zero bits, and the low word recovers the tail.
     let a = scaled.mul_add(-LN2_OVER_N_HI, x);
-    (j, q, Sum::from_sum(a, scaled * -LN2_OVER_N_LO))
+    (j, q, DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO))
 }
 
 /// `eˣ` as `2`<sup>`q`</sup>` · mantissa` with the mantissa a double-double in [1, 2).
@@ -357,7 +357,7 @@ fn exp_reduce(x: f64) -> (usize, i64, Sum) {
 /// The caller must ensure `x` is finite and within the non-overflow range
 /// (`|x| < ~710`); used by the hyperbolic functions, which need the extra words.
 #[inline]
-pub(super) fn exp_dd(x: f64) -> (Sum, i64) {
+pub(super) fn exp_dd(x: f64) -> (DoubleDouble, i64) {
     let (j, q, r) = exp_reduce(x);
     exp_mantissa(j, q, r)
 }
@@ -367,7 +367,7 @@ pub(super) fn exp_dd(x: f64) -> (Sum, i64) {
 /// The hyperbolic functions take this as their fast path and Ziv-gate the result
 /// against [`exp_dd`].
 #[inline]
-pub(super) fn exp_dd_fast(x: f64) -> (Sum, i64) {
+pub(super) fn exp_dd_fast(x: f64) -> (DoubleDouble, i64) {
     let (j, q, r) = exp_reduce(x);
     exp_mantissa_fast(j, q, r)
 }
@@ -419,8 +419,8 @@ pub fn exp2(x: f64) -> f64 {
     let q = m >> 7;
 
     let sigma = x.mul_add(EXP_N as f64, -scaled);
-    let product = Sum::from_product(sigma, LN2_OVER_N_HI);
-    let r = Sum {
+    let product = DoubleDouble::from_product(sigma, LN2_OVER_N_HI);
+    let r = DoubleDouble {
         high: product.high,
         low: sigma.mul_add(LN2_OVER_N_LO, product.low),
     };
@@ -453,13 +453,13 @@ pub fn exp10(x: f64) -> f64 {
     let j = (m & (EXP_N - 1)) as usize;
     let q = m >> 7;
 
-    let x_ln10 = Sum::from_product(x, LN10_HI);
-    let x_ln10 = Sum {
+    let x_ln10 = DoubleDouble::from_product(x, LN10_HI);
+    let x_ln10 = DoubleDouble {
         high: x_ln10.high,
         low: x.mul_add(LN10_LO, x_ln10.low),
     };
-    let n_ln2 = Sum::from_product(scaled, LN2_OVER_N_HI);
-    let n_ln2 = Sum {
+    let n_ln2 = DoubleDouble::from_product(scaled, LN2_OVER_N_HI);
+    let n_ln2 = DoubleDouble {
         high: -n_ln2.high,
         low: scaled.mul_add(-LN2_OVER_N_LO, -n_ln2.low),
     };
@@ -501,10 +501,10 @@ pub fn exp_m1(x: f64) -> f64 {
         // expm1(x) = x · S(x) with S(x) = (exp(x) − 1)/x = ∑ xᵏ/(k+1)!.  S is built
         // by double-double Horner so the result keeps full *relative* accuracy.
         let (high, low) = EXPM1_S_COEFFS[EXPM1_S_COEFFS.len() - 1];
-        let mut s = Sum { high, low };
+        let mut s = DoubleDouble { high, low };
 
         for &(high, low) in EXPM1_S_COEFFS[..EXPM1_S_COEFFS.len() - 1].iter().rev() {
-            s = s * x + Sum { high, low };
+            s = s * x + DoubleDouble { high, low };
         }
 
         let result = s * x;
@@ -515,7 +515,7 @@ pub fn exp_m1(x: f64) -> f64 {
     let q0 = n >> 7;
 
     let a = scaled.mul_add(-LN2_OVER_N_HI, x);
-    let r = Sum::from_sum(a, scaled * -LN2_OVER_N_LO);
+    let r = DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO);
 
     // exp(x) = 2^q · mantissa; form `2^q · mantissa − 1` as a double-double.  The
     // scaling stays normal (`q ∈ [−1022, 1023]`), and the double-double subtraction
@@ -524,7 +524,7 @@ pub fn exp_m1(x: f64) -> f64 {
     // Fast path: the lean mantissa, accepted by a Ziv test.  Its absolute error is
     // bounded by `EXP_ZIV_EPS` (on the [1, 2) mantissa), so on the result it is
     // bounded by `2^q · EXP_ZIV_EPS`.
-    let neg_one = Sum {
+    let neg_one = DoubleDouble {
         high: -1.0,
         low: 0.0,
     };

@@ -8,7 +8,7 @@
     clippy::approx_constant
 )]
 
-use super::double::{fast_sum, Sum};
+use super::double::{fast_sum, DoubleDouble};
 use super::{normalize, Magnitude, EXP_SHIFT};
 
 // CORE-MATH's split of ln2: `LN2_HI = 0x1.62e42fefa38p-1` is an integer multiple
@@ -335,12 +335,12 @@ const LOG10_E_LO: f64 = 1.098319650216765e-17;
 
 /// `ln(1 + r)` as a double-double for `|r| ≤ 1/256`, via `ln(1+r) = r · P(r)`.
 #[inline]
-fn ln_1p_kernel(r: Sum) -> Sum {
+fn ln_1p_kernel(r: DoubleDouble) -> DoubleDouble {
     let (high, low) = LN1P_P_COEFFS[LN1P_P_COEFFS.len() - 1];
-    let mut p = Sum { high, low };
+    let mut p = DoubleDouble { high, low };
 
     for &(high, low) in LN1P_P_COEFFS[..LN1P_P_COEFFS.len() - 1].iter().rev() {
-        p = p * r + Sum { high, low };
+        p = p * r + DoubleDouble { high, low };
     }
 
     p * r
@@ -350,7 +350,7 @@ fn ln_1p_kernel(r: Sum) -> Sum {
 /// plain `f64`.  Good to ≈2⁻⁶⁸ absolute: the `r²·Q` term is only ≲2⁻¹⁶, so its
 /// `f64` rounding is negligible, while the linear `r` stays double-double.
 #[inline]
-fn ln_1p_kernel_fast(r: Sum) -> Sum {
+fn ln_1p_kernel_fast(r: DoubleDouble) -> DoubleDouble {
     let s = r.high;
 
     // r² with the `2·r.high·r.low` cross term folded in by one FMA, then the small
@@ -362,7 +362,7 @@ fn ln_1p_kernel_fast(r: Sum) -> Sum {
     // `tail` is ~9 binades below `r.high`); the linear tail `r.low` joins the low
     // word.
     let head = fast_sum(s, tail);
-    Sum {
+    DoubleDouble {
         high: head.high,
         low: head.low + r.low,
     }
@@ -373,7 +373,7 @@ fn ln_1p_kernel_fast(r: Sum) -> Sum {
 /// `x = 2^e · m` with `m ∈ [1, 2)`; `i` is the 7-bit table index and the returned
 /// double-double is `r = m · INV_TABLE[i] − 1 ∈ [−1/256, 1/256]`.
 #[inline]
-fn log_reduce(x: f64) -> (i64, usize, Sum) {
+fn log_reduce(x: f64) -> (i64, usize, DoubleDouble) {
     let (_, Magnitude::Normalized(magnitude)) = normalize(x) else {
         // Callers guarantee a finite positive x.
         unreachable!()
@@ -385,7 +385,7 @@ fn log_reduce(x: f64) -> (i64, usize, Sum) {
 
     // r = m·inv − 1 as a double-double.  `m·inv ∈ [≈0.996, 1.004]`, so the high
     // word minus one is exact (Sterbenz).
-    let mi = Sum::from_product(m, INV_TABLE[i]);
+    let mi = DoubleDouble::from_product(m, INV_TABLE[i]);
     let r = fast_sum(mi.high - 1.0, mi.low);
 
     (e, i, r)
@@ -393,17 +393,17 @@ fn log_reduce(x: f64) -> (i64, usize, Sum) {
 
 /// The natural logarithm of a finite positive `x ≠ 1`, as a double-double.
 #[inline]
-pub(crate) fn ln_dd(x: f64) -> Sum {
+pub(crate) fn ln_dd(x: f64) -> DoubleDouble {
     // ln(x) = e·ln2 + L_TABLE[i] + ln(1+r).
     let (e, i, r) = log_reduce(x);
     let e = e as f64;
 
-    let e_ln2 = Sum {
+    let e_ln2 = DoubleDouble {
         high: e * LN2_HI,
         low: e * LN2_LO,
     };
     let (high, low) = L_TABLE[i];
-    e_ln2 + Sum { high, low } + ln_1p_kernel(r)
+    e_ln2 + DoubleDouble { high, low } + ln_1p_kernel(r)
 }
 
 /// Lean natural logarithm of a finite positive `x ≠ 1`, as a double-double.
@@ -413,16 +413,16 @@ pub(crate) fn ln_dd(x: f64) -> Sum {
 /// against an accurate fallback ([`dint::ln_accurate`] for `ln`, `ln_dd` for
 /// `log2`/`log10`) with a Ziv test.
 #[inline]
-pub(crate) fn ln_fast(x: f64) -> Sum {
+pub(crate) fn ln_fast(x: f64) -> DoubleDouble {
     let (e, i, r) = log_reduce(x);
     let e = e as f64;
 
-    let e_ln2 = Sum {
+    let e_ln2 = DoubleDouble {
         high: e * LN2_HI,
         low: e * LN2_LO,
     };
     let (high, low) = L_TABLE[i];
-    e_ln2 + Sum { high, low } + ln_1p_kernel_fast(r)
+    e_ln2 + DoubleDouble { high, low } + ln_1p_kernel_fast(r)
 }
 
 /// The natural logarithm
@@ -445,7 +445,7 @@ pub fn ln(x: f64) -> f64 {
     // Two-step Ziv method.  The lean fast path is correctly rounded unless the
     // true value lies within `LN_ZIV_EPS` of a rounding boundary, in which case
     // the always-correct 128-bit accurate path resolves it.
-    let Sum { high, low } = ln_fast(x);
+    let DoubleDouble { high, low } = ln_fast(x);
     let left = high + (low - LN_ZIV_EPS);
     let right = high + (low + LN_ZIV_EPS);
     if left == right {
@@ -475,11 +475,11 @@ pub fn log2(x: f64) -> f64 {
     // log2(x) = ln(x) · log2(e).  Fast path: lean ln × log2(e), accepted when the
     // Ziv interval does not straddle a rounding boundary; otherwise the
     // double-double ln resolves it.
-    let log2e = Sum {
+    let log2e = DoubleDouble {
         high: LOG2_E_HI,
         low: LOG2_E_LO,
     };
-    let Sum { high, low } = ln_fast(x) * log2e;
+    let DoubleDouble { high, low } = ln_fast(x) * log2e;
     let left = high + (low - LOG2_ZIV_EPS);
     let right = high + (low + LOG2_ZIV_EPS);
     if left == right {
@@ -508,11 +508,11 @@ pub fn log10(x: f64) -> f64 {
     }
 
     // log10(x) = ln(x) · log10(e).  Fast path with a Ziv test, as in `log2`.
-    let log10e = Sum {
+    let log10e = DoubleDouble {
         high: LOG10_E_HI,
         low: LOG10_E_LO,
     };
-    let Sum { high, low } = ln_fast(x) * log10e;
+    let DoubleDouble { high, low } = ln_fast(x) * log10e;
     let left = high + (low - LOG10_ZIV_EPS);
     let right = high + (low + LOG10_ZIV_EPS);
     if left == right {
@@ -545,13 +545,13 @@ pub fn ln_1p(x: f64) -> f64 {
     // `L[i] + ln(1+r)` cancellation, which would cap accuracy when the result is
     // tiny, and `x` is already an exact reduced argument in the kernel's range.
     if x.abs() < 1.0 / 256.0 {
-        let xr = Sum { high: x, low: 0.0 };
+        let xr = DoubleDouble { high: x, low: 0.0 };
 
         // Fast path: the lean kernel is correct to ≈2⁻⁶⁰ *relative* here (its tail
         // error ≈2⁻⁵³·x² is tiny against the result ≈ x).  A relative Ziv gate keeps
         // the fast path even for arbitrarily small `x`; the accurate kernel handles
         // the rare straddling case.
-        let Sum { high, low } = ln_1p_kernel_fast(xr);
+        let DoubleDouble { high, low } = ln_1p_kernel_fast(xr);
         let err = LN1P_SMALL_ZIV_REL * high.abs();
         let lo = high + (low - err);
         let hi = high + (low + err);
@@ -579,10 +579,10 @@ pub fn ln_1p(x: f64) -> f64 {
     let (e, i, r) = log_reduce(s);
     let inv = INV_TABLE[i];
     let delta = if e > -1000 { c * crate::exp2i(-e) } else { 0.0 };
-    let r = r + Sum::from_product(delta, inv);
+    let r = r + DoubleDouble::from_product(delta, inv);
 
     let e = e as f64;
-    let e_ln2 = Sum {
+    let e_ln2 = DoubleDouble {
         high: e * LN2_HI,
         low: e * LN2_LO,
     };
@@ -591,14 +591,15 @@ pub fn ln_1p(x: f64) -> f64 {
     // `|x| ≥ 1/256` keeps `|ln(1+x)| ≥ ln(255/256) ≈ 2⁻⁸` away from zero, so the
     // same absolute gate as `ln` applies; fall back to the accurate kernel on a
     // straddle.
-    let Sum { high: rh, low: rl } = e_ln2 + Sum { high, low } + ln_1p_kernel_fast(r);
+    let DoubleDouble { high: rh, low: rl } =
+        e_ln2 + DoubleDouble { high, low } + ln_1p_kernel_fast(r);
     let lo = rh + (rl - LN_ZIV_EPS);
     let hi = rh + (rl + LN_ZIV_EPS);
     if lo == hi {
         return lo;
     }
 
-    let result = e_ln2 + Sum { high, low } + ln_1p_kernel(r);
+    let result = e_ln2 + DoubleDouble { high, low } + ln_1p_kernel(r);
     result.high + result.low
 }
 

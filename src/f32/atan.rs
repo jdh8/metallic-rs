@@ -1,4 +1,4 @@
-use crate::f64::double::{round, Sum};
+use crate::f64::double::{round, DoubleDouble};
 
 /// Minimax coefficients of `P` in `asin(t) = t + t³·P(t²)` on `t² ∈ [0, ¼]`.
 ///
@@ -44,13 +44,13 @@ const ATAN_TABLE: [(f64, f64); 9] = [
 ];
 
 /// π/2 as a double-double
-const FRAC_PI_2: Sum = Sum {
+const FRAC_PI_2: DoubleDouble = DoubleDouble {
     high: 1.570_796_326_794_896_6,
     low: 6.123_233_995_736_766e-17,
 };
 
 /// π as a double-double
-const PI: Sum = Sum {
+const PI: DoubleDouble = DoubleDouble {
     high: 3.141_592_653_589_793,
     low: 1.224_646_799_147_353_2e-16,
 };
@@ -62,7 +62,7 @@ const PI: Sum = Sum {
 /// with `u = (q - c) / (1 + q·c)` and `|u| ≤ 1/16`, so the Taylor series of the
 /// odd part `atan(u) - u` converges in a handful of terms evaluated in `f64`.
 #[inline]
-fn atan_dd(q: Sum) -> Sum {
+fn atan_dd(q: DoubleDouble) -> DoubleDouble {
     let k = (q.high * 8.0).round_ties_even();
     let c = k * 0.125;
 
@@ -70,9 +70,9 @@ fn atan_dd(q: Sum) -> Sum {
     let (high, low) = ATAN_TABLE[k as usize];
 
     // u = (q - c) / (1 + q·c), exact in double-double (c is a power-of-two multiple)
-    let u = (q + Sum { high: -c, low: 0.0 })
+    let u = (q + DoubleDouble { high: -c, low: 0.0 })
         * (q * c
-            + Sum {
+            + DoubleDouble {
                 high: 1.0,
                 low: 0.0,
             })
@@ -101,13 +101,13 @@ fn atan_dd(q: Sum) -> Sum {
             ],
         );
 
-    Sum { high, low }
+    DoubleDouble { high, low }
         + u
-        + Sum {
+        + DoubleDouble {
             high: -cubic.high,
             low: -cubic.low,
         }
-        + Sum {
+        + DoubleDouble {
             high: tail,
             low: 0.0,
         }
@@ -120,12 +120,12 @@ fn atan_dd(q: Sum) -> Sum {
 #[inline]
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f32 {
     let phi = if a >= b {
-        atan_dd(Sum::from_quotient(b, a))
+        atan_dd(DoubleDouble::from_quotient(b, a))
     } else {
         // π/2 - atan(a/b)
-        let t = atan_dd(Sum::from_quotient(a, b));
+        let t = atan_dd(DoubleDouble::from_quotient(a, b));
         FRAC_PI_2
-            + Sum {
+            + DoubleDouble {
                 high: -t.high,
                 low: -t.low,
             }
@@ -133,7 +133,7 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f32 {
 
     let theta = if x_negative {
         // π - φ
-        PI + Sum {
+        PI + DoubleDouble {
             high: -phi.high,
             low: -phi.low,
         }

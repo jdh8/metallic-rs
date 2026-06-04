@@ -23,7 +23,7 @@ pub const fn fast_ldexp(x: f64, n: i64) -> f64 {
 /// an intermediate format.  Performance cost outweighs the precision gain from
 /// renormalization.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Sum {
+pub struct DoubleDouble {
     /// The part with the larger absolute value
     pub high: f64,
 
@@ -31,18 +31,18 @@ pub struct Sum {
     pub low: f64,
 }
 
-/// Create a new `Sum` with the Fast2Sum algorithm
+/// Create a new `DoubleDouble` with the Fast2Sum algorithm
 ///
 /// This algorithm produces normalized results when exponent(`a`) ≥
 /// exponent(`b`).  It is sufficient when |`a`| ≥ |`b`|.
 #[inline]
-pub const fn fast_sum(a: f64, b: f64) -> Sum {
+pub const fn fast_sum(a: f64, b: f64) -> DoubleDouble {
     let high = a + b;
     let low = a - high + b;
-    Sum { high, low }
+    DoubleDouble { high, low }
 }
 
-impl Sum {
+impl DoubleDouble {
     /// Create a normalized pair from an unordered sum
     #[inline]
     pub const fn from_sum(x: f64, y: f64) -> Self {
@@ -85,7 +85,7 @@ impl Sum {
 }
 
 /// Fast multiplication that breaks normality
-impl Mul for Sum {
+impl Mul for DoubleDouble {
     type Output = Self;
 
     #[inline]
@@ -104,7 +104,7 @@ impl Mul for Sum {
 }
 
 /// Fast multiplication that breaks normality
-impl Mul<f64> for Sum {
+impl Mul<f64> for DoubleDouble {
     type Output = Self;
 
     #[inline]
@@ -120,7 +120,7 @@ impl Mul<f64> for Sum {
 }
 
 /// Fast division that breaks normality
-impl Div<f64> for Sum {
+impl Div<f64> for DoubleDouble {
     type Output = Self;
 
     #[inline]
@@ -132,7 +132,7 @@ impl Div<f64> for Sum {
 }
 
 /// Double-double addition that breaks normality
-impl Add for Sum {
+impl Add for DoubleDouble {
     type Output = Self;
 
     #[inline]
@@ -152,7 +152,7 @@ impl Add for Sum {
 /// `f64`, hence is even, so the odd nudge lands on the correct side before the
 /// final round to nearest.
 #[inline]
-pub fn round(value: Sum) -> f32 {
+pub fn round(value: DoubleDouble) -> f32 {
     let bits = value.high.to_bits();
 
     let odd = if value.low == 0.0 || bits & 1 == 1 {
@@ -174,7 +174,7 @@ pub fn round(value: Sum) -> f32 {
 /// so the value is quantized once on the `2⁻¹⁴⁹` subnormal grid, exactly like
 /// the subnormal branch of the `f64` exponential.
 #[inline]
-pub fn round_general(value: Sum) -> f32 {
+pub fn round_general(value: DoubleDouble) -> f32 {
     if value.high >= f64::from(f32::MIN_POSITIVE) {
         return round(value);
     }
@@ -192,9 +192,9 @@ pub fn round_general(value: Sum) -> f32 {
 ///
 /// `s.high` must be strictly positive.
 #[inline]
-pub fn sqrt_dd(s: Sum) -> Sum {
+pub fn sqrt_dd(s: DoubleDouble) -> DoubleDouble {
     let h = s.high.sqrt();
-    let h2 = Sum::from_product(h, h);
+    let h2 = DoubleDouble::from_product(h, h);
     let residual = (s.high - h2.high) + (s.low - h2.low);
     fast_sum(h, residual * (0.5 / h))
 }
@@ -209,7 +209,7 @@ pub fn sqrt_dd(s: Sum) -> Sum {
 /// here.  This is the `f64`-output analogue of [`round_general`] and the shared
 /// reconstruction tail of the `f64` exponential family.
 #[inline]
-pub fn round_general64(value: Sum, n: i64) -> f64 {
+pub fn round_general64(value: DoubleDouble, n: i64) -> f64 {
     if n >= -1022 {
         // Normal result: scaling by 2ⁿ is exact, so one rounding of the pair.
         return fast_ldexp(value.high + value.low, n);
@@ -238,8 +238,8 @@ pub fn round_general64(value: Sum, n: i64) -> f64 {
 /// Rounds the magnitude to odd then restores the sign, so [`round`]'s
 /// positive-only round-to-odd applies on either side of zero.
 #[inline]
-pub fn round_signed(value: Sum) -> f32 {
-    let magnitude = round(Sum {
+pub fn round_signed(value: DoubleDouble) -> f32 {
+    let magnitude = round(DoubleDouble {
         high: value.high.abs(),
         low: if value.high < 0.0 {
             -value.low

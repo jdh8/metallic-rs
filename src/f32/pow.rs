@@ -1,4 +1,4 @@
-use crate::f64::double::{fast_ldexp, round_general, Sum};
+use crate::f64::double::{fast_ldexp, round_general, DoubleDouble};
 use crate::f64::pow::{log2_dd, log2_fast_path, poly_dd, EXP2_CE, EXP2_FAST};
 use core::cmp::Ordering;
 use core::num::FpCategory;
@@ -10,7 +10,7 @@ use core::num::FpCategory;
 /// the double-double with [`round_general`] (round-to-odd, subnormal-safe).  The
 /// argument carries enough precision that the round is correct for [`powf`].
 #[inline]
-fn exp2_dd(e: Sum) -> f32 {
+fn exp2_dd(e: DoubleDouble) -> f32 {
     if e.high > 130.0 {
         return f32::INFINITY;
     }
@@ -19,13 +19,13 @@ fn exp2_dd(e: Sum) -> f32 {
     }
 
     let n = e.high.round_ties_even();
-    let h = Sum::from_sum(e.high - n, e.low);
+    let h = DoubleDouble::from_sum(e.high - n, e.low);
     let m = poly_dd(h, &EXP2_CE);
 
     // SAFETY: `-160 ≤ e.high ≤ 130` bounds `n`, so the scaling stays in range.
     let n = unsafe { n.to_int_unchecked() };
 
-    round_general(Sum {
+    round_general(DoubleDouble {
         high: fast_ldexp(m.high, n),
         low: fast_ldexp(m.low, n),
     })

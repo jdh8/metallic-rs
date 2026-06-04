@@ -32,10 +32,10 @@ def dd(x):
 
 
 def emit_dd_array(name, coeffs):
-    print(f"const {name}: [Sum; {len(coeffs)}] = [")
+    print(f"const {name}: [DoubleDouble; {len(coeffs)}] = [")
     for c in coeffs:
         hi, lo = dd(c)
-        print(f"    Sum {{ high: {hi!r}, low: {lo!r} }},")
+        print(f"    DoubleDouble {{ high: {hi!r}, low: {lo!r} }},")
     print("];\n")
 
 
@@ -89,7 +89,7 @@ emit_f64_array("COS_TAIL", cos_tail[::-1])
 print()
 for name, value in [("FRAC_1_120", mpf(1) / 120), ("FRAC_1_24", mpf(1) / 24)]:
     hi, lo = dd(value)
-    print(f"const {name}: Sum = Sum {{ high: {hi!r}, low: {lo!r} }};")
+    print(f"const {name}: DoubleDouble = DoubleDouble {{ high: {hi!r}, low: {lo!r} }};")
 print()
 
 # --- pi/2 in three words, each with low 21 mantissa bits cleared so that
