@@ -1,12 +1,12 @@
 //! Gamma functions: `tgamma`, `lgamma`.
 //!
-//! `tgamma` reduces `z` into `[2.375, 3.375]` (centre 2.875), evaluates a
-//! double-double minimax `Γ(2.875 + d)`, then walks the recurrence
-//! `Γ(z) = Γ(z−i)·∏(z−k)` upward or `Γ(z) = Γ(z−i)/∏(z+k)` downward.  Every factor
-//! is formed exactly (`from_sum(z, k)`) and the products run on four parallel
-//! lanes; a deep downward divisor carries a binary exponent so it never overflows
-//! even for very negative `z`.  A lean lower-degree fast leg is Ziv-gated against
-//! the ≈2⁻¹¹⁰ accurate path.
+//! `tgamma` reduces `z` into `[2.375, 3.375]` (centre 2.875), evaluates
+//! `Γ(2.875 + d)`, then walks the recurrence `Γ(z) = Γ(z−i)·∏(z−k)` upward or
+//! `Γ(z) = Γ(z−i)/∏(z+k)` downward.  Every factor is formed exactly
+//! (`from_sum(z, k)`) and the products run on four parallel lanes; a deep downward
+//! divisor carries a binary exponent so it never overflows even for very negative
+//! `z`.  A table-driven fast leg (per-cell minimax of `Γ(2.875 + d)`) is Ziv-gated
+//! against the degree-31 ≈2⁻¹¹⁰ accurate path.
 //!
 //! `lgamma = ln|Γ|` reduces `y ≥ ½` upward to the Stirling region (the recurrence
 //! product on four parallel lanes) and applies the asymptotic series; for `z < ½`
@@ -178,91 +178,274 @@ const TGAMMA_DD: [DoubleDouble; 32] = [
     },
 ];
 
-/// Fast lower-degree `Γ(2.875 + d)` minimax (degree 20, ≈2⁻⁷²)
-const TGAMMA_FAST: [DoubleDouble; 21] = [
-    DoubleDouble {
-        high: 1.7877108988969403,
-        low: -3.737560105011311e-17,
+/// One cell of [`TGAMMA_TABLE`]: the degree-11 minimax of `Γ(2.875 + i/8 + h)`
+/// in `h`, with `c0..c3` carried in double-double and `c4..c11` as a plain-`f64`
+/// tail (`tail[k]` is the coefficient of `h`<sup>`k+4`</sup>).
+struct GammaCell {
+    c0: DoubleDouble,
+    c1: DoubleDouble,
+    c2: DoubleDouble,
+    c3: DoubleDouble,
+    tail: [f64; 8],
+}
+
+/// Fast-path table for `Γ(2.875 + d)`, `d ∈ [−½, ½]`: per-cell minimax of
+/// `Γ(2.875 + i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8,
+/// `i ∈ [-4, 4]`.  Degree 11 (`c0..c3` double-double, `c4..c11` plain
+/// `f64`); worst-cell minimax error 2^-75, f64 tail ≤ 2^-19 of Γ.
+/// From `tools/gen_gamma_f64.py`.
+const TGAMMA_TABLE: [GammaCell; 9] = [
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.2222561575898099,
+            low: -3.382990264611721e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.7821710269149235,
+            low: -5.2984804017516135e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.5691219132813473,
+            low: 4.099724681024473e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.2030724918914826,
+            low: -1.0999517986286323e-17,
+        },
+        tail: [
+            0.09428651485254415,
+            0.021011009789111607,
+            0.009318716460567214,
+            0.0008395439783586659,
+            0.0007982781324361107,
+            -8.736093172721913e-05,
+            8.830984726272745e-05,
+            -2.7803665599827243e-05,
+        ],
     },
-    DoubleDouble {
-        high: 1.5591939012079505,
-        low: -6.629747801540599e-18,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.329340388179137,
+            low: -1.98826012295089e-18,
+        },
+        c1: DoubleDouble {
+            high: 0.9347345216260855,
+            low: 3.274803873717636e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.6545585779813368,
+            low: 2.0109322814456288e-18,
+        },
+        c3: DoubleDouble {
+            high: 0.2538712468411429,
+            low: -2.1813493496084974e-17,
+        },
+        tail: [
+            0.1096732340021594,
+            0.028360780594840485,
+            0.010392403426668091,
+            0.00160740048461106,
+            0.0007544737546646607,
+            3.941917620328264e-06,
+            6.14150746100836e-05,
+            -1.2831693366222281e-05,
+        ],
     },
-    DoubleDouble {
-        high: 1.051049326681183,
-        low: -8.116159356322236e-17,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.4569332050919717,
+            low: 6.379523209840642e-17,
+        },
+        c1: DoubleDouble {
+            high: 1.111167771764017,
+            low: 8.553447196707951e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.7606352517957172,
+            low: 1.6549112804716887e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.31356021822281754,
+            low: 2.1857667962057695e-17,
+        },
+        tail: [
+            0.1299572786389077,
+            0.03676560496276097,
+            0.01213259550062761,
+            0.0023775948853504538,
+            0.0007986928053788141,
+            7.233172299727557e-05,
+            5.00589481716406e-05,
+            -4.407721202775298e-06,
+        ],
     },
-    DoubleDouble {
-        high: 0.4706580182933971,
-        low: 4.808728039947916e-18,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.6083594219855457,
+            low: -5.268754888586482e-17,
+        },
+        c1: DoubleDouble {
+            high: 1.3170871791928576,
+            low: 9.380625614122025e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.8911679480263774,
+            low: 2.776297833799971e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.38477912014851195,
+            low: 1.4356076023664878e-17,
+        },
+        tail: [
+            0.1559558568722567,
+            0.04673516039370405,
+            0.014576802417204306,
+            0.0032284384692988694,
+            0.0009142921839364357,
+            0.00013274020735181725,
+            4.789457009015006e-05,
+            9.270935979616282e-07,
+        ],
     },
-    DoubleDouble {
-        high: 0.1888186383201151,
-        low: -1.2869159873613527e-17,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.7877108988969403,
+            low: -3.737560529384421e-17,
+        },
+        c1: DoubleDouble {
+            high: 1.5591939012079505,
+            low: -6.631567598882429e-18,
+        },
+        c2: DoubleDouble {
+            high: 1.051049326681183,
+            low: -8.108273994439438e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.4706580182933971,
+            low: 5.337588239574627e-18,
+        },
+        tail: [
+            0.18881863832011486,
+            0.0588315484106127,
+            0.01782594364143354,
+            0.004228758172251203,
+            0.0010979179050847557,
+            0.00019456544458832447,
+            5.199844973668096e-05,
+            4.913912572327067e-06,
+        ],
     },
-    DoubleDouble {
-        high: 0.058831548410612736,
-        low: -3.4366542150453603e-18,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 2.0,
+            low: -4.176375441236181e-24,
+        },
+        c1: DoubleDouble {
+            high: 1.8455686701969343,
+            low: 9.885830152496171e-18,
+        },
+        c2: DoubleDouble {
+            high: 1.2464649959513465,
+            low: 7.44057269792904e-18,
+        },
+        c3: DoubleDouble {
+            high: 0.5749941689206123,
+            low: -5.324377355401174e-17,
+        },
+        tail: [
+            0.23007494075411383,
+            0.07371504661602386,
+            0.02204110936776808,
+            0.005448754075829473,
+            0.0013552207362680785,
+            0.0002647856585205569,
+            6.123127001692335e-05,
+            8.506609303531655e-06,
+        ],
     },
-    DoubleDouble {
-        high: 0.017825943641178368,
-        low: -1.6508596133585962e-18,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 2.2513536418281928,
+            low: -1.3317923766900422e-16,
+        },
+        c1: DoubleDouble {
+            high: 2.186029402176873,
+            low: 2.5179108389309924e-17,
+        },
+        c2: DoubleDouble {
+            high: 1.4851814403544312,
+            low: 4.654387542460435e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.7024595598314305,
+            low: 3.573693109206157e-17,
+        },
+        tail: [
+            0.2817094324297171,
+            0.0921906102015942,
+            0.027448386055041803,
+            0.006968005518030971,
+            0.00169917455882216,
+            0.00034965494047064084,
+            7.54870915715514e-05,
+            1.2302095179961396e-05,
+        ],
     },
-    DoubleDouble {
-        high: 0.004228758172265047,
-        low: -3.77588885750947e-19,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 2.5492569667185294,
+            low: -1.3394559715810568e-16,
+        },
+        c1: DoubleDouble {
+            high: 2.59257116512998,
+            low: -2.1269471358165822e-16,
+        },
+        c2: DoubleDouble {
+            high: 1.7769198047098704,
+            low: -6.70772312838475e-18,
+        },
+        c3: DoubleDouble {
+            high: 0.8588538228809268,
+            low: -5.22652969612264e-17,
+        },
+        tail: [
+            0.3462685533808612,
+            0.11526048277544974,
+            0.034350196805293276,
+            0.008882604070571475,
+            0.002149892528888014,
+            0.00045575694323145787,
+            9.536388245905411e-05,
+            1.6751856151431064e-05,
+        ],
     },
-    DoubleDouble {
-        high: 0.0010979180310510166,
-        low: 6.13832822625229e-20,
-    },
-    DoubleDouble {
-        high: 0.00019456543689609485,
-        low: 9.17169769571553e-21,
-    },
-    DoubleDouble {
-        high: 5.1969790129348495e-05,
-        low: -1.0407568583626052e-22,
-    },
-    DoubleDouble {
-        high: 4.915670347451978e-06,
-        low: -4.1390661272505e-22,
-    },
-    DoubleDouble {
-        high: 2.4444096676699805e-06,
-        low: 1.568138555223727e-22,
-    },
-    DoubleDouble {
-        high: -1.4974006320377183e-07,
-        low: 3.3868675361923035e-24,
-    },
-    DoubleDouble {
-        high: 1.6499160667793613e-07,
-        low: 8.953739695499345e-24,
-    },
-    DoubleDouble {
-        high: -4.0483388907145893e-08,
-        low: -2.778753653906752e-24,
-    },
-    DoubleDouble {
-        high: 1.657881684381788e-08,
-        low: 1.3729920965318805e-24,
-    },
-    DoubleDouble {
-        high: -5.36541461289481e-09,
-        low: 2.3357240240447047e-25,
-    },
-    DoubleDouble {
-        high: 1.913301015811519e-09,
-        low: -9.050331529868828e-26,
-    },
-    DoubleDouble {
-        high: -7.854895095569414e-10,
-        low: -3.7890525397368146e-26,
-    },
-    DoubleDouble {
-        high: 2.740824763806299e-10,
-        low: -5.236552735300736e-27,
+    GammaCell {
+        c0: DoubleDouble {
+            high: 2.9028583742757985,
+            low: -1.3585712178411477e-16,
+        },
+        c1: DoubleDouble {
+            high: 3.079912346512753,
+            low: 2.0742429313869914e-17,
+        },
+        c2: DoubleDouble {
+            high: 2.1338355709581234,
+            low: 1.8612875654960142e-18,
+        },
+        c3: DoubleDouble {
+            high: 1.0514190815236184,
+            low: 1.085484592955623e-16,
+        },
+        tail: [
+            0.4270029646662776,
+            0.1441876631016842,
+            0.04314296138005859,
+            0.011312633409169047,
+            0.0027354559747390854,
+            0.0005907959195839654,
+            0.0001220491313155106,
+            2.2276141463137748e-05,
+        ],
     },
 ];
 
@@ -378,9 +561,11 @@ const PRODUCT_RESCALE: f64 = crate::exp2i(512);
 
 /// Ziv gate for the tgamma fast leg, relative to the result.
 ///
-/// The lean [`TGAMMA_FAST`] minimax is ≈2⁻⁷² (the recurrence's exact factors add
-/// only ≈2⁻⁹⁸); `2⁻⁶⁶` keeps a ~60× margin.
-const TGAMMA_ZIV_EPS: f64 = 1.3552527156068805e-20; // 2^-66
+/// The [`TGAMMA_TABLE`] leg is ≈2⁻⁶⁸: worst-cell minimax 2⁻⁷⁵, the `f64` tail
+/// (≤ 2⁻¹⁹ of Γ) lands near 2⁻⁷¹, and the dropped `h.low` in the innermost fold
+/// adds ≈2⁻⁶⁹; the recurrence's exact factors only ≈2⁻⁹⁸.  `2⁻⁶²` keeps a ~60×
+/// margin, deferring ≈0.1% of inputs to the accurate [`TGAMMA_DD`] path.
+const TGAMMA_ZIV_EPS: f64 = 2.168404344971009e-19; // 2^-62
 
 /// Max downward recurrence length for the rescale-free parallel divisor product
 ///
@@ -419,23 +604,56 @@ fn recurrence_product_z(z: f64, first: i64, step: i64, n: i64) -> DoubleDouble {
     (p[0] * p[1]) * (p[2] * p[3])
 }
 
-/// `Γ(z)` over the recurrence range as `(value, e2)` with `Γ(z) = value · 2`<sup>`e2`</sup>
+/// Reduce `z` for the recurrence: `(i, d)` with `d = z − (2.875 + i)`, `d ∈ [−½, ½]`
+#[inline]
+fn tgamma_reduce(z: f64) -> (f64, DoubleDouble) {
+    let i = (z - TGAMMA_CENTER).round_ties_even();
+    // The reduced argument `d = z − (2.875 + i)` must be exact: a plain-f64
+    // `z − 2.875 − i` loses `z`'s low bits when `z ≪ 2.875` (the small-`z` pole).
+    // `2.875 + i` is exact for any integer `i`, so `from_sum` captures `d` in full.
+    (i, DoubleDouble::from_sum(z, -(TGAMMA_CENTER + i)))
+}
+
+/// `Γ(2.875 + d)` for `d ∈ [−½, ½]` straight from [`TGAMMA_TABLE`] — the fast leg
 ///
-/// Reduce `z` into `[2.375, 3.375]`, evaluate `Γ(2.875 + d)` with `coeffs`, then
-/// walk the recurrence via the parallel-lane [`recurrence_product_z`].  Upward
+/// `fi = round(8·d)` picks the cell; the high-word subtraction `d.high − fi/8` is
+/// Sterbenz-exact and `d.low` rides along, so `h` is exact.  The `c4..c11` tail
+/// sums in `f64` (it is ≤ 2⁻¹⁹ of the result), then the `c3..c0` leads fold in
+/// double-double — a few double-double FMAs versus the degree-31 accurate
+/// polynomial.  `h` keeps its low word through the folds: `c1·d.low` alone can
+/// reach 2⁻⁵⁴ of Γ, far above the leg's 2⁻⁶⁸ budget.
+#[inline]
+fn tgamma_table_eval(d: DoubleDouble) -> DoubleDouble {
+    let fi = (d.high * 8.0).round_ties_even();
+    // SAFETY: d.high ∈ [−½, ½] ⇒ fi ∈ [−4, 4].
+    let cell = &TGAMMA_TABLE[(unsafe { fi.to_int_unchecked::<i64>() } + 4) as usize];
+    let h = DoubleDouble {
+        high: d.high - fi * 0.125,
+        low: d.low,
+    };
+
+    // P(h) = c0 + h·(c1 + h·(c2 + h·(c3 + h·tail))), tail = c4 + c5·h + … in f64.
+    let tail = crate::poly(h.high, &cell.tail);
+    let acc = cell.c3
+        + DoubleDouble {
+            high: h.high * tail,
+            low: 0.0,
+        };
+    let acc = cell.c2 + acc * h;
+    let acc = cell.c1 + acc * h;
+    cell.c0 + acc * h
+}
+
+/// Walk the recurrence from `value = Γ(z − i)` to `(value, e2)` with
+/// `Γ(z) = value · 2`<sup>`e2`</sup>
+///
+/// Both products run on the parallel-lane [`recurrence_product_z`].  Upward
 /// (`i > 0`) the partial products stay below the final `Γ(z)`, so no scaling is
 /// needed; downward (`i < 0`) a short divisor (≤ [`TGAMMA_DOWNWARD_DIRECT`]) also
 /// fits, while a deep one is accumulated serially and rescaled by `2⁵¹²` whenever
 /// it grows large, with the total folded into `e2`.
 #[inline]
-fn tgamma_kernel(z: f64, coeffs: &[DoubleDouble]) -> (DoubleDouble, i64) {
-    let i = (z - TGAMMA_CENTER).round_ties_even();
-    // The reduced argument `d = z − (2.875 + i)` must be exact: a plain-f64
-    // `z − 2.875 − i` loses `z`'s low bits when `z ≪ 2.875` (the small-`z` pole).
-    // `2.875 + i` is exact for any integer `i`, so `from_sum` captures `d` in full.
-    let d = DoubleDouble::from_sum(z, -(TGAMMA_CENTER + i));
-    let value = poly_dd(d, coeffs);
-
+fn tgamma_recurrence(z: f64, i: f64, value: DoubleDouble) -> (DoubleDouble, i64) {
     // SAFETY-free: `|i|` is a small integer (`z` is finite and bounded by the
     // overflow/underflow guards), so the casts below are exact.
     let steps = i.abs() as i64;
@@ -507,11 +725,14 @@ pub fn tgamma(z: f64) -> f64 {
         }
     }
 
-    // Ziv two-step: the lean leg is correctly rounded for a comfortably-normal
+    // Reduce once into `[2.375, 3.375]`; both legs share the recurrence.
+    let (i, d) = tgamma_reduce(z);
+
+    // Ziv two-step: the table leg is correctly rounded for a comfortably-normal
     // result unless it straddles a boundary, where the double-double path resolves
     // it.  Scaled (`e2 ≠ 0`) and near-subnormal results go straight to the accurate
     // path, whose `round_general_signed64` handles the subnormal grid.
-    let (value, e2) = tgamma_kernel(z, &TGAMMA_FAST);
+    let (value, e2) = tgamma_recurrence(z, i, tgamma_table_eval(d));
     if e2 == 0 {
         let err = value.high.abs() * TGAMMA_ZIV_EPS;
         let lo = value.high + (value.low - err);
@@ -521,7 +742,7 @@ pub fn tgamma(z: f64) -> f64 {
         }
     }
 
-    let (value, e2) = tgamma_kernel(z, &TGAMMA_DD);
+    let (value, e2) = tgamma_recurrence(z, i, poly_dd(d, &TGAMMA_DD));
     round_general_signed64(value, e2)
 }
 
