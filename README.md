@@ -93,11 +93,6 @@ library is the default [rounding half to even][round-even].
     functions are considered buggy until I make them correctly rounded.
 - The functions should be about as fast as the system library.
 - Try to make `f32` functions faster than the system library.
-- Avoid lookup tables to reduce memory usage, especially on WebAssembly.
-  - This goal is not as important as the others.  For example, a lookup
-    table for trigonometric functions is required to achieve faithful
-    rounding.  See [Payne&ndash;Hanek reduction](https://doi.org/10.1145/1057600.1057602)
-    for more details.
 
 ### Non-goals
 
