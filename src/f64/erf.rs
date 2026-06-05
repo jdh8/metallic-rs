@@ -2482,14 +2482,12 @@ pub fn erfc(x: f64) -> f64 {
         return r.high + r.low;
     }
 
-    let (anchor, accurate, fast) = erfc_segment(ax);
-
-    // Fast leg, Ziv-gated against the accurate path.
-    let (m, q) = erfc_eval(ax, anchor, fast, true);
-
     if x > 0.0 {
-        // erfc spans the full underflow range; gate the mantissa, keeping the
-        // normal/subnormal transition (`q < −1021`) on the accurate path.
+        // erfc(x) = t·exp(Q − x²) and spans the full underflow range; this leg
+        // genuinely needs the `exp`.  Fast leg, Ziv-gated against the accurate
+        // path, keeping the normal/subnormal transition (`q < −1021`) accurate.
+        let (anchor, accurate, fast) = erfc_segment(ax);
+        let (m, q) = erfc_eval(ax, anchor, fast, true);
         if q >= -1021 {
             let lo = m.high + (m.low - ERFC_ZIV_EPS);
             let hi = m.high + (m.low + ERFC_ZIV_EPS);
@@ -2500,13 +2498,17 @@ pub fn erfc(x: f64) -> f64 {
         let (m, q) = erfc_eval(ax, anchor, accurate, false);
         round_general64(m, q)
     } else {
-        // erfc(−|x|) = 2 − erfc(|x|); erfc(|x|) ∈ (0, 0.536], normal, so 2 − it ∈ [1.46, 2).
-        let r = TWO + neg(scale_dd(m, q));
-        let lo = r.high + (r.low - ERFC_ZIV_EPS);
-        let hi = r.high + (r.low + ERFC_ZIV_EPS);
+        // erfc(−|x|) = 1 + erf(|x|) ∈ [1.46, 2): the table fast leg gives erf
+        // directly, no `exp`, and `1 +` cannot cancel.  Ziv-gated against the
+        // accurate erfc bridge (`2 − erfc(|x|)`).
+        let e = ONE + erf_table_eval(ax);
+        let eps = e.high.abs() * ERF_TABLE_ZIV_EPS;
+        let lo = e.high + (e.low - eps);
+        let hi = e.high + (e.low + eps);
         if lo == hi {
             return lo;
         }
+        let (anchor, accurate, _) = erfc_segment(ax);
         let (m, q) = erfc_eval(ax, anchor, accurate, false);
         let r = TWO + neg(scale_dd(m, q));
         r.high + r.low
