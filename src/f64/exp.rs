@@ -811,32 +811,31 @@ pub fn exp_m1(x: f64) -> f64 {
         return result.high + result.low;
     }
 
-    let j = (n & (EXP_N - 1)) as usize;
-    let q0 = n >> 7;
-
-    let a = crate::correct_mul_add(scaled, -LN2_OVER_N_HI, x);
-    let r = DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO);
-
     // exp(x) = 2^q · mantissa; form `2^q · mantissa − 1` as a double-double.  The
     // scaling stays normal (`q ∈ [−1022, 1023]`), and the double-double subtraction
     // absorbs the cancellation that plain `exp(x) − 1` would suffer near zero.
-    //
-    // Fast path: the lean mantissa, accepted by a Ziv test.  Its absolute error is
-    // bounded by `EXP_ZIV_EPS` (on the [1, 2) mantissa), so on the result it is
-    // bounded by `2^q · EXP_ZIV_EPS`.
     let neg_one = DoubleDouble {
         high: -1.0,
         low: 0.0,
     };
-    let (mantissa, q) = exp_mantissa_fast(j, q0, r);
-    let result = mantissa * crate::exp2i(q) + neg_one;
-    let eps = crate::exp2i(q) * EXP_ZIV_EPS;
+
+    // Fast path: the two-level lean mantissa, accepted by a Ziv test.  Its error is
+    // ≈2⁻⁶⁴ on the [1, 2) mantissa, so on the result it is bounded by
+    // `2^q · EXP_TWO_LEVEL_ZIV_EPS`.
+    let (mantissa, qf) = exp_two_level_fast(x);
+    let result = mantissa * crate::exp2i(qf) + neg_one;
+    let eps = crate::exp2i(qf) * EXP_TWO_LEVEL_ZIV_EPS;
     let lo = result.high + (result.low - eps);
     let hi = result.high + (result.low + eps);
     if lo == hi {
         return lo;
     }
 
+    // Accurate path: the N=128 reduction and double-double mantissa.
+    let j = (n & (EXP_N - 1)) as usize;
+    let q0 = n >> 7;
+    let a = crate::correct_mul_add(scaled, -LN2_OVER_N_HI, x);
+    let r = DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO);
     let (mantissa, q) = exp_mantissa(j, q0, r);
     let result = mantissa * crate::exp2i(q) + neg_one;
     result.high + result.low
