@@ -7,9 +7,11 @@
 //! binary exponent so it never overflows even for very negative `z`.  A lean
 //! lower-degree fast leg is Ziv-gated against the ≈2⁻¹¹⁰ accurate path.
 //!
-//! `lgamma = ln|Γ|` reduces `y ≥ ½` upward to the Stirling region and applies the
-//! asymptotic series in double-double; for `z < ½` it reflects through
-//! `ln π − ln|sin(πz)| − ln Γ(1−z)`, with `|sin(πz)|` from `trig::abs_sinpi_dd`.
+//! `lgamma = ln|Γ|` reduces `y ≥ ½` upward to the Stirling region (the recurrence
+//! product on four parallel lanes) and applies the asymptotic series; for `z < ½`
+//! it reflects through `ln π − ln|sin(πz)| − ln Γ(1−z)`, with `|sin(πz)|` from
+//! `trig::abs_sinpi_dd`.  A lean leg (lean `ln_fast` + an `f64` Stirling tail) is
+//! Ziv-gated against the double-double accurate path.
 //!
 //! Neither has an f64 oracle in `core-math`, so correctness is verified against
 //! MPFR (`tests/cases`).
@@ -276,10 +278,12 @@ const TGAMMA_UNDERFLOW: f64 = -179.5;
 /// Argument above which the Stirling series for `ln Γ` converges fast enough
 const LGAMMA_CUTOFF: f64 = 40.0;
 
-/// π as a double-double (the lgamma reflection's `ln π`)
-const GAMMA_PI: DoubleDouble = DoubleDouble {
-    high: 3.141592653589793,
-    low: 1.2246467991473532e-16,
+/// `ln π` as a double-double, the additive constant of the lgamma reflection
+///
+/// Precomputed so the reflection never pays a logarithm for the constant `π`.
+const LN_PI: DoubleDouble = DoubleDouble {
+    high: 1.1447298858494002,
+    low: 1.0265951162707826e-17,
 };
 
 /// `½·ln(2π)`, the additive Stirling constant
@@ -332,6 +336,40 @@ const LGAMMA_TAIL_DD: [DoubleDouble; 10] = [
         low: 1.5837056989230303e-17,
     },
 ];
+
+/// Stirling tail in plain `f64` (the leading 6 high words of [`LGAMMA_TAIL_DD`])
+///
+/// The direct Stirling leg ([`lgamma_stirling_fast`], `z ≥ 40`, no recurrence)
+/// lands a result ≥ ln Γ(40) ≈ 105 with ulp ≥ 2⁻⁴⁵, while the whole tail is ≤ 2⁻⁹,
+/// so an `f64` evaluation (≈2⁻⁶⁰ absolute) is far inside half an ulp.  Six terms
+/// suffice at `z ≥ 40` (`u = 1/z² ≤ 2⁻¹⁰·⁶`).  The accurate fallback and the
+/// reduced/reflection paths still use the double-double [`LGAMMA_TAIL_DD`].
+const LGAMMA_TAIL_F64: [f64; 6] = [
+    0.08333333333333333,
+    -0.002777777777777778,
+    0.0007936507936507937,
+    -0.0005952380952380953,
+    0.0008417508417508417,
+    -0.0019175269175269176,
+];
+
+/// Absolute error bound for the [`lgamma_fast`] Ziv leg
+///
+/// The leg's sub-double-double slack is the `f64` tail (≲2⁻⁶⁰ absolute) plus
+/// `ln_fast`'s ≈2⁻⁶⁸-absolute error scaled by the largest log multiplier `t − ½`.
+/// Keeping `|z|` below [`LGAMMA_FAST_BOUND`] keeps `t ≲ 1024`, so that scaled term
+/// stays ≲2⁻⁵⁸ and the total below `2⁻⁵⁶` with a comfortable margin.  Being
+/// absolute, the gate also forces the accurate fallback whenever the result
+/// cancels toward zero (lgamma's zeros at `z = 1, 2` and on `z < 0`), where `2⁻⁵⁶`
+/// spans many ulps.
+const LGAMMA_FAST_ERR: f64 = 1.3877787807814457e-17; // 2^-56
+
+/// `|z|` ceiling for the [`lgamma_fast`] Ziv leg
+///
+/// Above it the largest log multiplier `t` would push `ln_fast`'s absolute slack
+/// past [`LGAMMA_FAST_ERR`], so the gate could no longer certify the leg; such
+/// `z` (rare, and far outside any benchmark) go straight to the accurate path.
+const LGAMMA_FAST_BOUND: f64 = 1024.0;
 
 /// Keep the divisor product's high word below this (rescale by `2⁵¹²`, tracking a
 /// binary exponent) so the long negative-`z` product never overflows `f64`.
@@ -459,6 +497,50 @@ fn ln_sum(s: DoubleDouble) -> DoubleDouble {
         }
 }
 
+/// [`ln_sum`] with the lean `ln_fast` (≈2⁻⁶⁸ absolute) — the Ziv fast leg's log.
+#[inline]
+fn ln_fast_sum(s: DoubleDouble) -> DoubleDouble {
+    crate::f64::ln_fast(s.high)
+        + DoubleDouble {
+            high: s.low / s.high,
+            low: 0.0,
+        }
+}
+
+/// `∏_{j=0}^{n−1}(y + j)` as a double-double, on four parallel lanes (`n ≥ 1`)
+///
+/// Each factor `y + j` is formed by a double-double add so it is exact even when
+/// `y.high + j` rounds (`y.high ≈ 1`, `j ≈ 40`: the bottom bits of `y.high` fall
+/// off the high word and are caught in the low word — exactly what the serial
+/// `t + 1` recurrence preserved).  The only added error is the reassociation
+/// across lanes, a few `2⁻¹⁰⁵` ulps.  Four lanes cut the dependency chain from `n`
+/// to `≈n/4` double-double multiplies, the long-latency cost that dominates the
+/// reduced `lgamma` range; the same trick as `f32`'s `recurrence_product`.
+#[inline]
+fn recurrence_product_dd(y: DoubleDouble, n: i64) -> DoubleDouble {
+    let factor = |j: i64| {
+        y + DoubleDouble {
+            high: j as f64,
+            low: 0.0,
+        }
+    };
+
+    let mut p = [ONE; 4];
+    let mut j = 0;
+    while j + 4 <= n {
+        p[0] = p[0] * factor(j);
+        p[1] = p[1] * factor(j + 1);
+        p[2] = p[2] * factor(j + 2);
+        p[3] = p[3] * factor(j + 3);
+        j += 4;
+    }
+    while j < n {
+        p[0] = p[0] * factor(j);
+        j += 1;
+    }
+    (p[0] * p[1]) * (p[2] * p[3])
+}
+
 /// `ln Γ(y)` as a double-double for a positive double-double `y`
 ///
 /// Reduce `y` upward to [`LGAMMA_CUTOFF`] via `ln Γ(y) = ln Γ(t) − ln ∏(y+j)` (the
@@ -466,18 +548,18 @@ fn ln_sum(s: DoubleDouble) -> DoubleDouble {
 /// `(t−½)·ln t − t + ½ln(2π) + tail(1/t²)`.  The cutoff is high enough that the
 /// Bernoulli tail stays short and well-conditioned (see [`LGAMMA_TAIL_DD`]).
 #[inline]
-// `t.high` rises by exactly 1.0 each pass (exact in f64), so `while t.high < …`
-// terminates cleanly.
-#[allow(clippy::while_float)]
 fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
-    let mut product = ONE;
-    let mut t = y;
-    let mut reduced = false;
-    while t.high < LGAMMA_CUTOFF {
-        product = product * t;
-        t = t + ONE;
-        reduced = true;
-    }
+    // Number of upward steps to reach the Stirling region, in one shot.  An
+    // off-by-one is harmless: the telescoping `ln Γ(t) − ln ∏(y+j) = ln Γ(y)` is
+    // exact for *any* `steps` as long as `t = y + steps` is exact and `t.high`
+    // clears the cutoff (the Bernoulli tail still converges a step early).
+    let steps = (LGAMMA_CUTOFF - y.high).ceil().max(0.0) as i64;
+    // `t = y + steps` exactly: the double-double add keeps the low bits a scalar
+    // `y.high + steps` would round off once `t` crosses into a higher binade.
+    let t = y + DoubleDouble {
+        high: steps as f64,
+        low: 0.0,
+    };
 
     // tail = P(u)/t with u = 1/t², the Stirling asymptotic series past the leads.
     let inv_t = t.recip();
@@ -493,10 +575,98 @@ fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
         + HALF_LN_2PI
         + tail;
 
-    if reduced {
-        stirling + neg(ln_sum(product))
+    if steps > 0 {
+        stirling + neg(ln_sum(recurrence_product_dd(y, steps)))
     } else {
         stirling
+    }
+}
+
+/// `ln Γ(y)` as a double-double for positive `y`, the Ziv fast leg
+///
+/// Same reduction + Stirling shape as [`lgamma_pos_dd`], but with the lean
+/// `ln_fast` ([`ln_fast_sum`]) and an `f64` asymptotic tail ([`LGAMMA_TAIL_F64`]).
+/// The dominant `(t−½)·ln t − t` and the recurrence product stay double-double, so
+/// only the tail and `ln_fast`'s slack carry sub-double-double rounding — within
+/// [`LGAMMA_FAST_ERR`] while the caller keeps `y` under [`LGAMMA_FAST_BOUND`].
+#[inline]
+fn lgamma_pos_fast(y: DoubleDouble) -> DoubleDouble {
+    let steps = (LGAMMA_CUTOFF - y.high).ceil().max(0.0) as i64;
+    let t = y + DoubleDouble {
+        high: steps as f64,
+        low: 0.0,
+    };
+
+    // `t − ½` stays double-double (the add keeps the ½ even for large `t`); the
+    // tail drops to `f64` (≤ 2⁻⁹, well inside half an ulp of the result).
+    let inv_t = 1.0 / t.high;
+    let u = inv_t * inv_t;
+    let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
+
+    let stirling = ln_fast_sum(t)
+        * (t + DoubleDouble {
+            high: -0.5,
+            low: 0.0,
+        })
+        + neg(t)
+        + HALF_LN_2PI
+        + DoubleDouble {
+            high: tail,
+            low: 0.0,
+        };
+
+    if steps > 0 {
+        stirling + neg(ln_fast_sum(recurrence_product_dd(y, steps)))
+    } else {
+        stirling
+    }
+}
+
+/// Direct Stirling `ln Γ(z)` for `z ≥ LGAMMA_CUTOFF`, the lean no-recurrence leg
+///
+/// The hot path: `z` (hence `z − ½`) is an exact `f64`, so the big term is a plain
+/// `ln_fast(z) · (z − ½)` with no double-double add for the argument.  This is
+/// [`lgamma_pos_fast`] specialised to `steps = 0`, `y.low = 0`.
+#[inline]
+fn lgamma_stirling_fast(z: f64) -> DoubleDouble {
+    let inv_t = 1.0 / z;
+    let u = inv_t * inv_t;
+    let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
+
+    crate::f64::ln_fast(z) * (z - 0.5)
+        + neg(DoubleDouble { high: z, low: 0.0 })
+        + HALF_LN_2PI
+        + DoubleDouble {
+            high: tail,
+            low: 0.0,
+        }
+}
+
+/// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg
+///
+/// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½`; otherwise applies
+/// Stirling, taking the lean [`lgamma_stirling_fast`] once past the cutoff and the
+/// recurrence-reducing [`lgamma_pos_fast`] below it.  The caller restricts `|z|`
+/// to below [`LGAMMA_FAST_BOUND`].
+#[inline]
+fn lgamma_fast(z: f64) -> DoubleDouble {
+    if z < 0.5 {
+        LN_PI + neg(ln_fast_sum(abs_sinpi_dd(z)) + lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z)))
+    } else if z < LGAMMA_CUTOFF {
+        lgamma_pos_fast(DoubleDouble { high: z, low: 0.0 })
+    } else {
+        lgamma_stirling_fast(z)
+    }
+}
+
+/// `ln|Γ(z)|` as a double-double via the accurate path, the Ziv fallback
+#[inline]
+fn lgamma_dd(z: f64) -> DoubleDouble {
+    if z < 0.5 {
+        // Reflection ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z); `1 − z` is exact.
+        LN_PI + neg(ln_sum(abs_sinpi_dd(z)) + lgamma_pos_dd(DoubleDouble::from_sum(1.0, -z)))
+    } else {
+        lgamma_pos_dd(DoubleDouble { high: z, low: 0.0 })
     }
 }
 
@@ -519,14 +689,19 @@ pub fn lgamma(z: f64) -> f64 {
         return 0.0;
     }
 
-    let value = if z < 0.5 {
-        // Reflection ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z); `1 − z` is exact.
-        ln_sum(GAMMA_PI)
-            + neg(ln_sum(abs_sinpi_dd(z)))
-            + neg(lgamma_pos_dd(DoubleDouble::from_sum(1.0, -z)))
-    } else {
-        lgamma_pos_dd(DoubleDouble { high: z, low: 0.0 })
-    };
+    // Ziv two-step: a lean leg (lean log + `f64` tail) gated against the accurate
+    // double-double path.  Restricted to `|z| < LGAMMA_FAST_BOUND`, where the
+    // absolute gate can certify the leg; the gate also defers any result that
+    // cancels toward zero (the gate's `2⁻⁵⁶` then spans many ulps).
+    if z > -LGAMMA_FAST_BOUND && z < LGAMMA_FAST_BOUND {
+        let value = lgamma_fast(z);
+        let lo = value.high + (value.low - LGAMMA_FAST_ERR);
+        let hi = value.high + (value.low + LGAMMA_FAST_ERR);
+        if lo == hi {
+            return lo;
+        }
+    }
 
+    let value = lgamma_dd(z);
     value.high + value.low
 }
