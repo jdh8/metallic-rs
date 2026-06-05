@@ -49,7 +49,7 @@ fn test_lgamma_corpus() {
 }
 
 /// Size of `tests/cases/f64_lgamma.wc` (kept in sync with the generator).
-const CORPUS_LEN: usize = 585;
+const CORPUS_LEN: usize = 2142;
 
 /// Broad correct-rounding sweep against MPFR (gated behind `mpfr`).  Run with
 /// `cargo test --release --features mpfr`.

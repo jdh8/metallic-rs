@@ -54,7 +54,7 @@ fn test_tgamma_corpus() {
 }
 
 /// Size of `tests/cases/f64_tgamma.wc` (kept in sync with the generator).
-const CORPUS_LEN: usize = 541;
+const CORPUS_LEN: usize = 1990;
 
 /// Broad correct-rounding sweep against MPFR (gated behind `mpfr`, like the
 /// corpus generator, so the default test stays dependency-light).  Run with

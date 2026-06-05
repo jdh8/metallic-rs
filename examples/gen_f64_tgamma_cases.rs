@@ -23,10 +23,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// ulp even at the overflow end, so `to_f64` is correctly rounded everywhere).
 const PREC: u32 = 250;
 
-/// Keep results within this *normalized* distance of an `f64` midpoint.
-const THRESHOLD: f64 = 1.0 / 1_048_576.0; // 2⁻²⁰
+/// Keep results within this *normalized* distance of an `f64` midpoint.  At 2⁻¹⁸
+/// the band is still ~2²⁷ wider than the implementation's real danger (≈2⁻⁴⁵), so
+/// every survivor is a genuine near-miss, while the corpus reaches the density of
+/// the (bivariate, 3-billion-scan) `f64_log` corpus from a far cheaper scan.
+const THRESHOLD: f64 = 1.0 / 262_144.0; // 2⁻¹⁸
 
-/// Inputs scanned per family.
+/// Inputs scanned per family (survivors ≈ `COUNT` × 2 families × `THRESHOLD` ×
+/// accept-rate ≈ 2200).
 const COUNT: u64 = 400_000_000;
 
 /// SplitMix64 hash.
