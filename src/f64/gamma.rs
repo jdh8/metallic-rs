@@ -8,11 +8,13 @@
 //! `z`.  A table-driven fast leg (per-cell minimax of `Γ(2.875 + d)`) is Ziv-gated
 //! against the degree-31 ≈2⁻¹¹⁰ accurate path.
 //!
-//! `lgamma = ln|Γ|` reduces `y ≥ ½` upward to the Stirling region (the recurrence
-//! product on four parallel lanes) and applies the asymptotic series; for `z < ½`
-//! it reflects through `ln π − ln|sin(πz)| − ln Γ(1−z)`, with `|sin(πz)|` from
-//! `trig::abs_sinpi_dd`.  A lean leg (lean `ln_fast` + an `f64` Stirling tail) is
-//! Ziv-gated against the double-double accurate path.
+//! `lgamma = ln|Γ|` reads a central per-cell minimax of `ln Γ(2.875 + d)` for
+//! `½ ≤ y < 8` (reducing into `[2.375, 3.375]` by `i = round(y − 2.875)` and adding
+//! `± ln ∏` of the ≤ 5 recurrence factors), and applies direct Stirling for
+//! `y ≥ 8`; for `z < ½` it reflects through `ln π − ln|sin(πz)| − ln Γ(1−z)`, with
+//! `|sin(πz)|` from `trig::abs_sinpi_dd`.  A lean leg (`ln_fast` + the table or an
+//! `f64` Stirling tail) is Ziv-gated against the double-double accurate path, which
+//! shares the same central table.
 //!
 //! Neither has an f64 oracle in `core-math`, so correctness is verified against
 //! MPFR (`tests/cases`).
@@ -28,6 +30,12 @@ use super::trig::abs_sinpi_dd;
 /// `1` as a double-double.
 const ONE: DoubleDouble = DoubleDouble {
     high: 1.0,
+    low: 0.0,
+};
+
+/// `0` as a double-double.
+const ZERO: DoubleDouble = DoubleDouble {
+    high: 0.0,
     low: 0.0,
 };
 
@@ -473,6 +481,398 @@ const LGAMMA_CUTOFF: f64 = 40.0;
 /// recurrence at ≤ 8 steps (was ≤ 40) — the dominant cost for moderate `z`.
 const LGAMMA_FAST_CUTOFF: f64 = 8.0;
 
+/// Center of the lgamma central-table interval, `ln Γ(LGAMMA_CENTER + d)`
+const LGAMMA_CENTER: f64 = 2.875;
+// ln Γ(2.875 + d), d ∈ [−½, ½]: degree 30, err 2^-112.6
+
+/// Accurate `ln Γ(2.875 + d)` minimax, double-double (degree 30, ≈2⁻¹¹⁰)
+const LGAMMA_DD: [DoubleDouble; 31] = [
+    DoubleDouble {
+        high: 0.5809359740231859,
+        low: -2.5656804770465922e-17,
+    },
+    DoubleDouble {
+        high: 0.8721734046427808,
+        low: -5.870301790101574e-18,
+    },
+    DoubleDouble {
+        high: 0.20758703225044092,
+        low: 6.158099260536006e-18,
+    },
+    DoubleDouble {
+        high: -0.028352847622464046,
+        low: -1.5076319552358057e-18,
+    },
+    DoubleDouble {
+        high: 0.005738272251365373,
+        low: 3.7196109786039465e-19,
+    },
+    DoubleDouble {
+        high: -0.001378013326981361,
+        low: -4.9425681851074157e-20,
+    },
+    DoubleDouble {
+        high: 0.000363906229973969,
+        low: -1.445278091710143e-20,
+    },
+    DoubleDouble {
+        high: -0.00010199470476492863,
+        low: -6.4983514567406224e-21,
+    },
+    DoubleDouble {
+        high: 2.9758062671005415e-05,
+        low: 2.6480068876609444e-22,
+    },
+    DoubleDouble {
+        high: -8.93330111155507e-06,
+        low: -2.30398062188423e-22,
+    },
+    DoubleDouble {
+        high: 2.7387396161994973e-06,
+        low: -1.9307783191942454e-22,
+    },
+    DoubleDouble {
+        high: -8.531625199351918e-07,
+        low: 2.4049261292810225e-23,
+    },
+    DoubleDouble {
+        high: 2.6910676649153097e-07,
+        low: -8.488386749504722e-25,
+    },
+    DoubleDouble {
+        high: -8.572896296387957e-08,
+        low: -7.0193291471213795e-25,
+    },
+    DoubleDouble {
+        high: 2.7531386945775175e-08,
+        low: 9.857171936638687e-25,
+    },
+    DoubleDouble {
+        high: -8.900500913334526e-09,
+        low: -9.490025275984083e-26,
+    },
+    DoubleDouble {
+        high: 2.893461615602942e-09,
+        low: 1.99852755319786e-26,
+    },
+    DoubleDouble {
+        high: -9.450888289719845e-10,
+        low: 8.863204674242735e-26,
+    },
+    DoubleDouble {
+        high: 3.0994911024154373e-10,
+        low: 5.755344280859591e-27,
+    },
+    DoubleDouble {
+        high: -1.0200926388570966e-10,
+        low: 2.5861492745008663e-27,
+    },
+    DoubleDouble {
+        high: 3.3676933830660465e-11,
+        low: 1.9984323406321347e-27,
+    },
+    DoubleDouble {
+        high: -1.1148480803998898e-11,
+        low: 5.742537944391341e-28,
+    },
+    DoubleDouble {
+        high: 3.699641215332498e-12,
+        low: -3.5767768641431813e-28,
+    },
+    DoubleDouble {
+        high: -1.2303567996585222e-12,
+        low: 6.521958525186233e-29,
+    },
+    DoubleDouble {
+        high: 4.100074376761586e-13,
+        low: -1.4744173700346995e-29,
+    },
+    DoubleDouble {
+        high: -1.370954103579572e-13,
+        low: -8.9203504359661e-30,
+    },
+    DoubleDouble {
+        high: 4.584503551615155e-14,
+        low: 2.1159539199440712e-30,
+    },
+    DoubleDouble {
+        high: -1.4940113618828544e-14,
+        low: 7.719062159618601e-31,
+    },
+    DoubleDouble {
+        high: 5.009904940366794e-15,
+        low: 5.502495127419647e-32,
+    },
+    DoubleDouble {
+        high: -2.1551713524065003e-15,
+        low: -7.945611417564297e-32,
+    },
+    DoubleDouble {
+        high: 7.249530460786751e-16,
+        low: -1.368293728459151e-32,
+    },
+];
+
+/// Fast-path table for `ln Γ(2.875 + d)`, `d ∈ [−½, ½]`: per-cell minimax of
+/// `ln Γ(2.875 + i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8,
+/// `i ∈ [-4, 4]`.  Degree 11 (`c0..c3` double-double, `c4..c11` plain
+/// `f64`); worst-cell minimax error 2^-78, f64 tail ≤ 2^-22 absolute.
+/// From `tools/gen_gamma_f64.py`.
+const LGAMMA_TABLE: [GammaCell; 9] = [
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.20069846037745584,
+            low: 1.8049632428270175e-18,
+        },
+        c1: DoubleDouble {
+            high: 0.6399403447942543,
+            low: 4.0361432171250925e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.260870450907843,
+            low: 1.06612113759111e-18,
+        },
+        c3: DoubleDouble {
+            high: -0.044474369164167075,
+            low: -1.9447274310907295e-18,
+        },
+        tail: [
+            0.011171407751736888,
+            -0.0033138246000669826,
+            0.0010767319685298581,
+            -0.0003701142461351217,
+            0.00013208652164381263,
+            -4.8398715189738215e-05,
+            1.811056113537898e-05,
+            -6.865082592028107e-06,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.2846828704729192,
+            low: -2.0938633057424727e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.7031566406452432,
+            low: -4.430586061606244e-18,
+        },
+        c2: DoubleDouble {
+            high: 0.24517887805011743,
+            low: 5.564305193886725e-18,
+        },
+        c3: DoubleDouble {
+            high: -0.0393673419402879,
+            low: 2.7173457074110724e-18,
+        },
+        tail: [
+            0.009329410367385367,
+            -0.0026146333292227115,
+            0.0008035683037142958,
+            -0.00026150914837805354,
+            8.842344721245403e-05,
+            -3.071544572645795e-05,
+            1.0899289470315173e-05,
+            -3.920015818918779e-06,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.3763336820249054,
+            low: 2.1570329405842268e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.7626758508080488,
+            low: 3.434633515915438e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.23124247409416873,
+            low: 7.258361388580056e-18,
+        },
+        c3: DoubleDouble {
+            high: -0.03508187654413724,
+            low: -1.2442663714074845e-18,
+        },
+        tail: [
+            0.007867125433810735,
+            -0.0020889610346440635,
+            0.0006089012184493784,
+            -0.00018809651475793922,
+            6.041265579658852e-05,
+            -1.994451550573386e-05,
+            6.7282184059254605e-06,
+            -2.3016594364144246e-06,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.47521466691493713,
+            low: -3.543864838649412e-18,
+        },
+        c1: DoubleDouble {
+            high: 0.8189010249754326,
+            low: -8.68292534874758e-18,
+        },
+        c2: DoubleDouble {
+            high: 0.21878562882446537,
+            low: 1.3873194122649167e-17,
+        },
+        c3: DoubleDouble {
+            high: -0.0314524388385502,
+            low: -3.118973548329453e-18,
+        },
+        tail: [
+            0.006692338645394513,
+            -0.001687962278096428,
+            0.00046778983553421856,
+            -0.0001374954918699528,
+            4.204485775932683e-05,
+            -1.3222370299273497e-05,
+            4.250243474135181e-06,
+            -1.3860660406723284e-06,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.5809359740231859,
+            low: -2.5656805237851858e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.8721734046427808,
+            low: -5.870301641204445e-18,
+        },
+        c2: DoubleDouble {
+            high: 0.20758703225044092,
+            low: 6.166714070295089e-18,
+        },
+        c3: DoubleDouble {
+            high: -0.028352847622464046,
+            low: -1.510376411530836e-18,
+        },
+        tail: [
+            0.005738272251365348,
+            -0.0013780133269813528,
+            0.00036390623000207006,
+            -0.0001019947047738809,
+            2.975804879868109e-05,
+            -8.933296692203377e-06,
+            2.741895575623978e-06,
+            -8.541679206351352e-07,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.6931471805599453,
+            low: 2.319046785684956e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.9227843350984671,
+            low: 4.942915238333246e-18,
+        },
+        c2: DoubleDouble {
+            high: 0.19746703342411323,
+            low: -1.2547023191209976e-17,
+        },
+        c3: DoubleDouble {
+            high: -0.025685634386531427,
+            low: -1.2202832580248053e-18,
+        },
+        tail: [
+            0.0049558084277845325,
+            -0.0011355510286739806,
+            0.00028634366409178844,
+            -7.668248313699724e-05,
+            2.1388266384425222e-05,
+            -6.140867015007826e-06,
+            1.8031644088881301e-06,
+            -5.376122562457082e-07,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.811531653906724,
+            low: 3.0452587605594064e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.9709844608871516,
+            low: 4.453569930026673e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.1882783505003396,
+            low: 4.92039342165987e-18,
+        },
+        c3: DoubleDouble {
+            high: -0.023374595284797902,
+            low: 1.3602449705026531e-18,
+        },
+        tail: [
+            0.004308302136817328,
+            -0.0009437913178625607,
+            0.00022768168701281803,
+            -5.83659244876972e-05,
+            1.5591052374061736e-05,
+            -4.288910813267621e-06,
+            1.2069385669959023e-06,
+            -3.4499668711842164e-07,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 0.9358019311087253,
+            low: 2.0465037110882812e-17,
+        },
+        c1: DoubleDouble {
+            high: 1.016990911068179,
+            low: 7.644647751971187e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.17989914515478994,
+            low: -3.63113861168604e-18,
+        },
+        c3: DoubleDouble {
+            high: -0.02135949118985252,
+            low: 2.839265803811587e-19,
+        },
+        tail: [
+            0.0037680564718606496,
+            -0.000790599332947922,
+            0.00018278623025788976,
+            -4.49303115580373e-05,
+            1.151376890588226e-05,
+            -3.0396210900505142e-06,
+            8.211037558668384e-07,
+            -2.2538287955529745e-07,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.0656958978640603,
+            low: 1.0223970890350607e-16,
+        },
+        c1: DoubleDouble {
+            high: 1.0609929763732018,
+            low: -4.7287755730966894e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.17222779162806462,
+            low: -1.2702329410904152e-17,
+        },
+        c3: DoubleDouble {
+            high: -0.01959221919089595,
+            low: -7.957829297903279e-20,
+        },
+        tail: [
+            0.0033138867075462523,
+            -0.0006670806693922554,
+            0.00014804988732099823,
+            -3.495078824772582e-05,
+            8.605381164957104e-06,
+            -2.1835534234719785e-06,
+            5.67073249776973e-07,
+            -1.4969302029153483e-07,
+        ],
+    },
+];
+
 /// `ln π` as a double-double, the additive constant of the lgamma reflection
 ///
 /// Precomputed so the reflection never pays a logarithm for the constant `π`.
@@ -568,7 +968,7 @@ const LGAMMA_TAIL_F64_FAR: [f64; 6] = [
     -0.0019175269175269176,
 ];
 
-/// Absolute error bound for the [`lgamma_fast`] Ziv leg
+/// Absolute error bound for the Stirling [`lgamma_fast`] Ziv leg (`|z| ≥ 8`)
 ///
 /// The leg's sub-double-double slack is the `f64` tail (≲2⁻⁶⁰ absolute) plus
 /// `ln_fast`'s ≈2⁻⁶⁸-absolute error scaled by the largest log multiplier `t − ½`.
@@ -578,6 +978,17 @@ const LGAMMA_TAIL_F64_FAR: [f64; 6] = [
 /// cancels toward zero (lgamma's zeros at `z = 1, 2` and on `z < 0`), where `2⁻⁵⁶`
 /// spans many ulps.
 const LGAMMA_FAST_ERR: f64 = 1.3877787807814457e-17; // 2^-56
+
+/// Absolute error bound for the central-table [`lgamma_fast`] Ziv leg (`½ ≤ z < 8`,
+/// and the reflection's `ln Γ(1−z)` when `1−z < 8`)
+///
+/// The table leg has no Stirling tail: it is the per-cell minimax (worst 2⁻⁷⁸, the
+/// `f64` cell tail and dropped `h.low` landing ≈2⁻⁶⁹) plus one `ln_fast` of the
+/// ≤ 5 recurrence factors (≈2⁻⁶⁸), so ≈2⁻⁶⁷ overall — far tighter than the Stirling
+/// leg.  `2⁻⁶²` certifies it with ≈5 bits of margin, and being ~16× tighter than
+/// [`LGAMMA_FAST_ERR`] it straddles (defers) far less where `ln Γ` is O(1), which is
+/// exactly this moderate band.
+const LGAMMA_TABLE_ERR: f64 = 2.168404344971009e-19; // 2^-62
 
 /// `|z|` ceiling for the [`lgamma_fast`] Ziv leg
 ///
@@ -645,19 +1056,21 @@ fn tgamma_reduce(z: f64) -> (f64, DoubleDouble) {
     (i, DoubleDouble::from_sum(z, -(TGAMMA_CENTER + i)))
 }
 
-/// `Γ(2.875 + d)` for `d ∈ [−½, ½]` straight from [`TGAMMA_TABLE`] — the fast leg
+/// A per-cell minimax `f(2.875 + d)` for `d ∈ [−½, ½]` straight from a 9-cell
+/// `table` — the fast-leg evaluator shared by `Γ` ([`TGAMMA_TABLE`]) and `ln Γ`
+/// ([`LGAMMA_TABLE`]).
 ///
 /// `fi = round(8·d)` picks the cell; the high-word subtraction `d.high − fi/8` is
 /// Sterbenz-exact and `d.low` rides along, so `h` is exact.  The `c4..c11` tail
-/// sums in `f64` (it is ≤ 2⁻¹⁹ of the result), then the `c3..c0` leads fold in
-/// double-double — a few double-double FMAs versus the degree-31 accurate
-/// polynomial.  `h` keeps its low word through the folds: `c1·d.low` alone can
-/// reach 2⁻⁵⁴ of Γ, far above the leg's 2⁻⁶⁸ budget.
+/// sums in `f64` (small relative to the result), then the `c3..c0` leads fold in
+/// double-double — a few double-double FMAs versus the accurate polynomial.  `h`
+/// keeps its low word through the leads: `c1·d.low` alone can reach 2⁻⁵⁴, far above
+/// the leg's budget.
 #[inline]
-fn tgamma_table_eval(d: DoubleDouble) -> DoubleDouble {
+fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
     let fi = (d.high * 8.0).round_ties_even();
     // SAFETY: d.high ∈ [−½, ½] ⇒ fi ∈ [−4, 4].
-    let cell = &TGAMMA_TABLE[(unsafe { fi.to_int_unchecked::<i64>() } + 4) as usize];
+    let cell = &table[(unsafe { fi.to_int_unchecked::<i64>() } + 4) as usize];
     let h = DoubleDouble {
         high: d.high - fi * 0.125,
         low: d.low,
@@ -673,6 +1086,12 @@ fn tgamma_table_eval(d: DoubleDouble) -> DoubleDouble {
     let acc = cell.c2 + acc * h;
     let acc = cell.c1 + acc * h;
     cell.c0 + acc * h
+}
+
+/// `Γ(2.875 + d)` for `d ∈ [−½, ½]` straight from [`TGAMMA_TABLE`] — the fast leg
+#[inline]
+fn tgamma_table_eval(d: DoubleDouble) -> DoubleDouble {
+    cell_eval(&TGAMMA_TABLE, d)
 }
 
 /// Walk the recurrence from `value = Γ(z − i)` to `(value, e2)` with
@@ -833,14 +1252,103 @@ fn recurrence_product_dd(y: DoubleDouble, n: i64) -> DoubleDouble {
     (p[0] * p[1]) * (p[2] * p[3])
 }
 
+/// Reduce positive `y` (with `y.high < LGAMMA_FAST_CUTOFF`) onto the central cell:
+/// `(i, d)` with `d = y − (LGAMMA_CENTER + i)` exact, `|d.high| ≤ ½`
+///
+/// `i = round(y.high − 2.875) ∈ [−2, 5]`.  `2.875 + i` is exact, and
+/// `|y.high − (2.875+i)| ≤ ½ ≪ y.high`, so the double-double subtract loses nothing
+/// (the high word is Sterbenz-exact, `y.low` folds into the normalized low).
+#[inline]
+fn lgamma_center_reduce(y: DoubleDouble) -> (i64, DoubleDouble) {
+    let fi = (y.high - LGAMMA_CENTER).round_ties_even();
+    // SAFETY: y.high ∈ [½, 8) ⇒ y.high − 2.875 ∈ [−2.375, 5.125) ⇒ fi ∈ [−2, 5].
+    let i = unsafe { fi.to_int_unchecked::<i64>() };
+    let d = y + DoubleDouble {
+        high: -(LGAMMA_CENTER + fi),
+        low: 0.0,
+    };
+    (i, d)
+}
+
+/// `ln ∏` of the recurrence factors that carry the central cell back to `y`
+///
+/// `i > 0` reduces `y` down to `y − i ∈ [2.375, 3.375]`, contributing
+/// `+ ln ∏_{j=0}^{i−1}(y−i+j)`; `i < 0` reduces up, contributing `− ln ∏_{j=0}^{|i|−1}(y+j)`.
+/// All `|i| ≤ 5` factors are positive (≥ 0.5), so the product cannot overflow and
+/// its logarithm is real.  `ln_of` is [`ln_fast_sum`] (fast leg) or [`ln_sum`]
+/// (accurate); `i = 0` (already central) contributes nothing.
+#[inline]
+fn lgamma_recurrence_log(
+    y: DoubleDouble,
+    i: i64,
+    ln_of: impl Fn(DoubleDouble) -> DoubleDouble,
+) -> DoubleDouble {
+    if i > 0 {
+        let yc = y + DoubleDouble {
+            high: -(i as f64),
+            low: 0.0,
+        };
+        ln_of(recurrence_product_dd(yc, i))
+    } else if i < 0 {
+        neg(ln_of(recurrence_product_dd(y, -i)))
+    } else {
+        ZERO
+    }
+}
+
+/// `ln Γ(y)` for positive `y` with `y.high < LGAMMA_FAST_CUTOFF`, the central-table
+/// fast leg: `ln Γ(2.875 + d)` from [`LGAMMA_TABLE`] plus the recurrence's `ln ∏`
+#[inline]
+fn lgamma_table_fast(y: DoubleDouble) -> DoubleDouble {
+    let (i, d) = lgamma_center_reduce(y);
+    cell_eval(&LGAMMA_TABLE, d) + lgamma_recurrence_log(y, i, ln_fast_sum)
+}
+
+/// `ln Γ(y)` for positive `y` with `y.high < LGAMMA_FAST_CUTOFF`, the accurate
+/// central-table leg: the degree-30 [`LGAMMA_DD`] minimax plus the recurrence's `ln ∏`
+#[inline]
+fn lgamma_table_dd(y: DoubleDouble) -> DoubleDouble {
+    let (i, d) = lgamma_center_reduce(y);
+    poly_dd(d, &LGAMMA_DD) + lgamma_recurrence_log(y, i, ln_sum)
+}
+
+/// Direct Stirling `ln Γ(y)` for a positive double-double `y` with `y.high ≥ 8`,
+/// the lean fast leg (`steps = 0`): the reflection's `ln Γ(1−z)` once `1−z` clears
+/// the cutoff
+#[inline]
+fn lgamma_stirling_dd(y: DoubleDouble) -> DoubleDouble {
+    let inv_t = 1.0 / y.high;
+    let u = inv_t * inv_t;
+    let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
+
+    ln_fast_sum(y)
+        * (y + DoubleDouble {
+            high: -0.5,
+            low: 0.0,
+        })
+        + neg(y)
+        + HALF_LN_2PI
+        + DoubleDouble {
+            high: tail,
+            low: 0.0,
+        }
+}
+
 /// `ln Γ(y)` as a double-double for a positive double-double `y`
 ///
-/// Reduce `y` upward to [`LGAMMA_CUTOFF`] via `ln Γ(y) = ln Γ(t) − ln ∏(y+j)` (the
-/// product exact in double-double), then apply Stirling
-/// `(t−½)·ln t − t + ½ln(2π) + tail(1/t²)`.  The cutoff is high enough that the
-/// Bernoulli tail stays short and well-conditioned (see [`LGAMMA_TAIL_DD`]).
+/// For `y.high < LGAMMA_FAST_CUTOFF` the accurate central table ([`lgamma_table_dd`])
+/// reduces in ≤ 5 steps; above it, reduce `y` upward to [`LGAMMA_CUTOFF`] via
+/// `ln Γ(y) = ln Γ(t) − ln ∏(y+j)` (the product exact in double-double), then apply
+/// Stirling `(t−½)·ln t − t + ½ln(2π) + tail(1/t²)`.  The cutoff is high enough that
+/// the Bernoulli tail stays short and well-conditioned (see [`LGAMMA_TAIL_DD`]).
 #[inline]
 fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
+    // Moderate `y`: the central table reduces in ≤ 5 steps instead of ~40, so the
+    // fast leg's rare straddles (where `ln Γ` is O(1)) fall back cheaply.
+    if y.high < LGAMMA_FAST_CUTOFF {
+        return lgamma_table_dd(y);
+    }
+
     // Number of upward steps to reach the Stirling region, in one shot.  An
     // off-by-one is harmless: the telescoping `ln Γ(t) − ln ∏(y+j) = ln Γ(y)` is
     // exact for *any* `steps` as long as `t = y + steps` is exact and `t.high`
@@ -874,43 +1382,18 @@ fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
     }
 }
 
-/// `ln Γ(y)` as a double-double for positive `y`, the Ziv fast leg
+/// `ln Γ(y)` for positive `y`, the Ziv fast leg, with its absolute error bound
 ///
-/// Same reduction + Stirling shape as [`lgamma_pos_dd`], but with the lean
-/// `ln_fast` ([`ln_fast_sum`]) and an `f64` asymptotic tail ([`LGAMMA_TAIL_F64`]).
-/// The dominant `(t−½)·ln t − t` and the recurrence product stay double-double, so
-/// only the tail and `ln_fast`'s slack carry sub-double-double rounding — within
-/// [`LGAMMA_FAST_ERR`] while the caller keeps `y` under [`LGAMMA_FAST_BOUND`].
+/// Below [`LGAMMA_FAST_CUTOFF`] the central table ([`lgamma_table_fast`], ≈2⁻⁶⁷,
+/// gate [`LGAMMA_TABLE_ERR`]); above it the lean direct Stirling
+/// ([`lgamma_stirling_dd`], ≈2⁻⁵⁸, gate [`LGAMMA_FAST_ERR`]).  The reflection feeds
+/// its `1−z` here, so the gate the caller applies tracks which leg ran.
 #[inline]
-fn lgamma_pos_fast(y: DoubleDouble) -> DoubleDouble {
-    let steps = (LGAMMA_FAST_CUTOFF - y.high).ceil().max(0.0) as i64;
-    let t = y + DoubleDouble {
-        high: steps as f64,
-        low: 0.0,
-    };
-
-    // `t − ½` stays double-double (the add keeps the ½ even for large `t`); the
-    // tail drops to `f64` (≤ 2⁻⁹, well inside half an ulp of the result).
-    let inv_t = 1.0 / t.high;
-    let u = inv_t * inv_t;
-    let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
-
-    let stirling = ln_fast_sum(t)
-        * (t + DoubleDouble {
-            high: -0.5,
-            low: 0.0,
-        })
-        + neg(t)
-        + HALF_LN_2PI
-        + DoubleDouble {
-            high: tail,
-            low: 0.0,
-        };
-
-    if steps > 0 {
-        stirling + neg(ln_fast_sum(recurrence_product_dd(y, steps)))
+fn lgamma_pos_fast(y: DoubleDouble) -> (DoubleDouble, f64) {
+    if y.high < LGAMMA_FAST_CUTOFF {
+        (lgamma_table_fast(y), LGAMMA_TABLE_ERR)
     } else {
-        stirling
+        (lgamma_stirling_dd(y), LGAMMA_FAST_ERR)
     }
 }
 
@@ -930,22 +1413,26 @@ fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
         }
 }
 
-/// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg
+/// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg, with its error bound
 ///
-/// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½`; otherwise applies
-/// Stirling.  Only `[½, 8)` needs the recurrence-reducing [`lgamma_pos_fast`]
-/// (cutoff [`LGAMMA_FAST_CUTOFF`] = 8, ≤ 8 steps); `[8, ∞)` takes the lean direct
-/// [`lgamma_stirling_fast`] with the ten-term [`LGAMMA_TAIL_F64`] up to
-/// [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term [`LGAMMA_TAIL_F64_FAR`] on the
-/// hot `z ≥ 40` tail.  The caller restricts `|z|` to below [`LGAMMA_FAST_BOUND`].
+/// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½` (the gate comes from
+/// the [`lgamma_pos_fast`] leg that handles `1−z`; the double-double `|sin πz|` and
+/// its `ln_fast` add only ≈2⁻⁶⁸, well inside that gate).  `[½, 8)` reads the central
+/// table; `[8, ∞)` takes the lean direct [`lgamma_stirling_fast`] with the ten-term
+/// [`LGAMMA_TAIL_F64`] up to [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term
+/// [`LGAMMA_TAIL_F64_FAR`] on the hot `z ≥ 40` tail.  The caller restricts `|z|` to
+/// below [`LGAMMA_FAST_BOUND`].
 #[inline]
-fn lgamma_fast(z: f64) -> DoubleDouble {
+fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     if z < 0.5 {
-        return LN_PI
-            + neg(ln_fast_sum(abs_sinpi_dd(z)) + lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z)));
+        let (pos, gate) = lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z));
+        return (LN_PI + neg(ln_fast_sum(abs_sinpi_dd(z)) + pos), gate);
     }
     if z < LGAMMA_FAST_CUTOFF {
-        return lgamma_pos_fast(DoubleDouble { high: z, low: 0.0 });
+        return (
+            lgamma_table_fast(DoubleDouble { high: z, low: 0.0 }),
+            LGAMMA_TABLE_ERR,
+        );
     }
 
     let inv = 1.0 / z;
@@ -955,7 +1442,7 @@ fn lgamma_fast(z: f64) -> DoubleDouble {
     } else {
         crate::poly(u, &LGAMMA_TAIL_F64_FAR) * inv
     };
-    lgamma_stirling_fast(z, tail)
+    (lgamma_stirling_fast(z, tail), LGAMMA_FAST_ERR)
 }
 
 /// `ln|Γ(z)|` as a double-double via the accurate path, the Ziv fallback
@@ -988,14 +1475,16 @@ pub fn lgamma(z: f64) -> f64 {
         return 0.0;
     }
 
-    // Ziv two-step: a lean leg (lean log + `f64` tail) gated against the accurate
-    // double-double path.  Restricted to `|z| < LGAMMA_FAST_BOUND`, where the
-    // absolute gate can certify the leg; the gate also defers any result that
-    // cancels toward zero (the gate's `2⁻⁵⁶` then spans many ulps).
+    // Ziv two-step: a lean leg (central table or lean Stirling) gated against the
+    // accurate double-double path.  The leg returns its own absolute error bound —
+    // the tight [`LGAMMA_TABLE_ERR`] in the moderate band, the looser
+    // [`LGAMMA_FAST_ERR`] for Stirling.  Restricted to `|z| < LGAMMA_FAST_BOUND`,
+    // where those gates certify the leg; either gate also defers a result that
+    // cancels toward zero (it then spans many ulps), to the accurate path.
     if z > -LGAMMA_FAST_BOUND && z < LGAMMA_FAST_BOUND {
-        let value = lgamma_fast(z);
-        let lo = value.high + (value.low - LGAMMA_FAST_ERR);
-        let hi = value.high + (value.low + LGAMMA_FAST_ERR);
+        let (value, gate) = lgamma_fast(z);
+        let lo = value.high + (value.low - gate);
+        let hi = value.high + (value.low + gate);
         if lo == hi {
             return lo;
         }

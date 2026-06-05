@@ -13,7 +13,7 @@ Design (recurrence around a central minimax, mirroring `f32::tgamma`):
 The accurate path runs entirely in double-double (≈2⁻¹¹⁰); residual hard-to-round
 cases are caught by the MPFR corpus and patched with `match` fixups.
 """
-from mpmath import mp, mpf, gamma, chebyfit, floor, pi, sin, log, bernoulli
+from mpmath import mp, mpf, gamma, loggamma, chebyfit, floor, pi, sin, log, bernoulli
 import struct
 
 mp.prec = 400
@@ -169,6 +169,48 @@ print("/// (no Horner cancellation).  Dropping the cutoff from 40 to 8 turns the
 print("/// `[8, 40)` band into a recurrence-free direct Stirling and caps the `[½, 8)`")
 print("/// recurrence at ≤ 8 steps (was ≤ 40) — the dominant cost for moderate `z`.")
 print(f"const LGAMMA_FAST_CUTOFF: f64 = {hexf(f64(LGAMMA_FAST_CUTOFF))};")
+
+# --- lgamma central table (ln Γ around CENTER, mirroring the tgamma table) ----
+# For ½ ≤ z < LGAMMA_FAST_CUTOFF, ln Γ is O(1) (near its zeros at z = 1, 2 and its
+# minimum), so the absolute Ziv gate straddles often.  Reduce z into [2.375, 3.375]
+# by i = round(z − CENTER) (≤ 5 steps), read ln Γ(CENTER + d) from a per-cell
+# minimax, and add ± ln ∏ of the recurrence factors: no Stirling tail, an accurate
+# (≈2⁻⁶⁸) leg that a tight gate accepts, and a fast accurate fallback.
+LG_C = CENTER  # reuse 2.875; ln Γ is smooth and monotone on [2.375, 3.375]
+lg_coeffs, lg_err, lg_deg = fit(lambda d: loggamma(LG_C + d), mpf("-0.5"), mpf("0.5"), TARGET)
+print(f"\n/// Center of the lgamma central-table interval, `ln Γ(LGAMMA_CENTER + d)`")
+print(f"const LGAMMA_CENTER: f64 = {hexf(f64(LG_C))};")
+print(f"// ln Γ(2.875 + d), d ∈ [−½, ½]: degree {lg_deg}, err 2^{float(mp.log(lg_err,2)):.1f}")
+print_dd_array("LGAMMA_DD", lg_coeffs,
+               f"Accurate `ln Γ(2.875 + d)` minimax, double-double (degree {lg_deg}, ≈2⁻¹¹⁰)")
+
+lg_rows = []
+lg_worst = -mp.inf
+lg_tail_worst = -mp.inf
+for i in range(TABLE_ILO, TABLE_IHI + 1):
+    ci = LG_C + mpf(i) / 8
+    coeffs, err = chebyfit(lambda h, ci=ci: loggamma(ci + h), [-TABLE_W, TABLE_W],
+                           TABLE_DEG + 1, error=True)
+    coeffs = list(reversed(coeffs))
+    lg_rows.append(coeffs)
+    lg_worst = max(lg_worst, mp.log(err, 2))
+    lg_tail_worst = max(lg_tail_worst, mp.log(abs(coeffs[4]) * TABLE_W ** 4, 2))
+
+print(f"\n/// Fast-path table for `ln Γ(2.875 + d)`, `d ∈ [−½, ½]`: per-cell minimax of")
+print(f"/// `ln Γ(2.875 + i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8,")
+print(f"/// `i ∈ [{TABLE_ILO}, {TABLE_IHI}]`.  Degree {TABLE_DEG} (`c0..c3` double-double, `c4..c{TABLE_DEG}` plain")
+print(f"/// `f64`); worst-cell minimax error 2^{float(lg_worst):.0f}, f64 tail ≤ 2^{float(lg_tail_worst):.0f} absolute.")
+print(f"/// From `tools/gen_gamma_f64.py`.")
+print(f"const LGAMMA_TABLE: [GammaCell; {TABLE_IHI - TABLE_ILO + 1}] = [")
+for coeffs in lg_rows:
+    print("    GammaCell {")
+    for k in range(4):
+        hi, lo = dd(coeffs[k])
+        print(f"        c{k}: DoubleDouble {{ high: {hexf(hi)}, low: {hexf(lo)} }},")
+    tail = ", ".join(hexf(f64(c)) for c in coeffs[4:])
+    print(f"        tail: [{tail}],")
+    print("    },")
+print("];")
 
 dd_const("LN_PI", log(pi),
          "`ln π` as a double-double, the additive constant of the lgamma reflection\n///\n"
