@@ -3,9 +3,10 @@
 //! `tgamma` reduces `z` into `[2.375, 3.375]` (centre 2.875), evaluates a
 //! double-double minimax `Γ(2.875 + d)`, then walks the recurrence
 //! `Γ(z) = Γ(z−i)·∏(z−k)` upward or `Γ(z) = Γ(z−i)/∏(z+k)` downward.  Every factor
-//! is formed exactly (`from_sum(z, k)`); the downward divisor product carries a
-//! binary exponent so it never overflows even for very negative `z`.  A lean
-//! lower-degree fast leg is Ziv-gated against the ≈2⁻¹¹⁰ accurate path.
+//! is formed exactly (`from_sum(z, k)`) and the products run on four parallel
+//! lanes; a deep downward divisor carries a binary exponent so it never overflows
+//! even for very negative `z`.  A lean lower-degree fast leg is Ziv-gated against
+//! the ≈2⁻¹¹⁰ accurate path.
 //!
 //! `lgamma = ln|Γ|` reduces `y ≥ ½` upward to the Stirling region (the recurrence
 //! product on four parallel lanes) and applies the asymptotic series; for `z < ½`
@@ -381,12 +382,51 @@ const PRODUCT_RESCALE: f64 = crate::exp2i(512);
 /// only ≈2⁻⁹⁸); `2⁻⁶⁶` keeps a ~60× margin.
 const TGAMMA_ZIV_EPS: f64 = 1.3552527156068805e-20; // 2^-66
 
+/// Max downward recurrence length for the rescale-free parallel divisor product
+///
+/// With at most this many factors, every parallel lane (≤ ⌈n/4⌉ factors, each
+/// `|z + k| ≤ |z| ≈ n`) stays well under `f64::MAX`, and so does their product, so
+/// no binary-exponent rescaling is needed.  Deeper (more negative `z`) products
+/// would overflow and take the serial rescaling path instead.
+const TGAMMA_DOWNWARD_DIRECT: i64 = 100;
+
+/// `∏_{m=0}^{n−1} (z + first + step·m)` as a double-double, on four parallel lanes
+///
+/// The `tgamma` recurrence products: upward `(z−1)(z−2)…(z−n)` is `first = step =
+/// −1`, downward `z(z+1)…(z+n−1)` is `first = 0`, `step = 1`.  Each factor
+/// `from_sum(z, …)` is exact (one 2Sum, `z` being a plain `f64`); four lanes cut
+/// the dependency chain from `n` to `≈n/4` double-double multiplies, the
+/// long-latency cost of the far-from-centre range.  The caller keeps `n` small
+/// enough (all factors > 1 upward; [`TGAMMA_DOWNWARD_DIRECT`] downward) that the
+/// product cannot overflow.
+#[inline]
+fn recurrence_product_z(z: f64, first: i64, step: i64, n: i64) -> DoubleDouble {
+    let factor = |m: i64| DoubleDouble::from_sum(z, (first + step * m) as f64);
+
+    let mut p = [ONE; 4];
+    let mut m = 0;
+    while m + 4 <= n {
+        p[0] = p[0] * factor(m);
+        p[1] = p[1] * factor(m + 1);
+        p[2] = p[2] * factor(m + 2);
+        p[3] = p[3] * factor(m + 3);
+        m += 4;
+    }
+    while m < n {
+        p[0] = p[0] * factor(m);
+        m += 1;
+    }
+    (p[0] * p[1]) * (p[2] * p[3])
+}
+
 /// `Γ(z)` over the recurrence range as `(value, e2)` with `Γ(z) = value · 2`<sup>`e2`</sup>
 ///
 /// Reduce `z` into `[2.375, 3.375]`, evaluate `Γ(2.875 + d)` with `coeffs`, then
-/// walk the recurrence.  Upward (`i > 0`) the partial products stay below the
-/// final `Γ(z)`, so no scaling is needed; downward (`i < 0`) the divisor product
-/// is rescaled by `2⁵¹²` whenever it grows large, with the total folded into `e2`.
+/// walk the recurrence via the parallel-lane [`recurrence_product_z`].  Upward
+/// (`i > 0`) the partial products stay below the final `Γ(z)`, so no scaling is
+/// needed; downward (`i < 0`) a short divisor (≤ [`TGAMMA_DOWNWARD_DIRECT`]) also
+/// fits, while a deep one is accumulated serially and rescaled by `2⁵¹²` whenever
+/// it grows large, with the total folded into `e2`.
 #[inline]
 fn tgamma_kernel(z: f64, coeffs: &[DoubleDouble]) -> (DoubleDouble, i64) {
     let i = (z - TGAMMA_CENTER).round_ties_even();
@@ -401,16 +441,16 @@ fn tgamma_kernel(z: f64, coeffs: &[DoubleDouble]) -> (DoubleDouble, i64) {
     let steps = i.abs() as i64;
 
     if i > 0.0 {
-        // Γ(z) = Γ(z−i)·(z−1)(z−2)…(z−i); every factor is exact and > 1.
-        let mut value = value;
-        let mut k = 0.0;
-        for _ in 0..steps {
-            k += 1.0;
-            value = value * DoubleDouble::from_sum(z, -k);
-        }
-        (value, 0)
+        // Γ(z) = Γ(z−i)·(z−1)(z−2)…(z−i); every factor `from_sum(z, −k)` is exact
+        // and > 1, so the product never overflows and needs no rescaling.
+        (value * recurrence_product_z(z, -1, -1, steps), 0)
+    } else if i < 0.0 && steps <= TGAMMA_DOWNWARD_DIRECT {
+        // Γ(z) = Γ(z−i)/[z(z+1)…(z+|i|−1)].  Short divisor: no overflow, so form it
+        // on parallel lanes and divide.
+        (value * recurrence_product_z(z, 0, 1, steps).recip(), 0)
     } else if i < 0.0 {
-        // Γ(z) = Γ(z−i)/[z(z+1)…(z+|i|−1)], the product carrying a binary exponent.
+        // Deep negative z: the long divisor product would overflow, so accumulate
+        // it serially, carrying a binary exponent folded into the result scale.
         let mut product = DoubleDouble { high: z, low: 0.0 };
         let mut e2: i64 = 0;
         let mut k = 0.0;
