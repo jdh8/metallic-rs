@@ -449,6 +449,26 @@ fn exp_two_level_fast(x: f64) -> (DoubleDouble, i64) {
 
     // SAFETY: `|x| < 746`, so `|scaled| < 2^23`.
     let t = unsafe { scaled.to_int_unchecked::<i64>() };
+
+    // Cody–Waite reduced argument `dx = x − t·ln2/4096`, `|dx| ≤ ln2/8192`.
+    // `scaled · LN2_OVER_4096_HI` is exact (HI has 24 trailing zero bits,
+    // `|scaled| < 2²⁴`), so the FMA `x − scaled·HI` is exact; subtracting
+    // `scaled · LO` finishes the residual.
+    let a = crate::correct_mul_add(scaled, -LN2_OVER_4096_HI, x);
+    let dx = crate::correct_mul_add(scaled, -LN2_OVER_4096_LO, a);
+    exp_two_level_mantissa(t, dx)
+}
+
+/// Lean two-level fold shared by the exponential family's fast legs.
+///
+/// `t` is the reduction index (`t = round(N₂·e)`, `N₂ = 4096`) and `dx` the
+/// reduced residual (`|dx| ≤ ln2/8192`), so the value is
+/// `2`<sup>`q`</sup>` · 2`<sup>`j/4096`</sup>` · exp(dx)` with `q = t >> 12` and
+/// `j = t & 4095 = 64·i0 + i1`.  Returns the mantissa as a double-double
+/// normalized into [1, 2) with `q` adjusted, the same contract as
+/// [`exp_mantissa_fast`].
+#[inline]
+fn exp_two_level_mantissa(t: i64, dx: f64) -> (DoubleDouble, i64) {
     let i0 = ((t >> 6) & 63) as usize;
     let i1 = (t & 63) as usize;
     let q = t >> 12;
@@ -463,13 +483,6 @@ fn exp_two_level_fast(x: f64) -> (DoubleDouble, i64) {
         high: t1h,
         low: t1l,
     };
-
-    // Cody–Waite reduced argument `dx = x − t·ln2/4096`, `|dx| ≤ ln2/8192`.
-    // `scaled · LN2_OVER_4096_HI` is exact (HI has 24 trailing zero bits,
-    // `|scaled| < 2²⁴`), so the FMA `x − scaled·HI` is exact; subtracting
-    // `scaled · LO` finishes the residual.
-    let a = crate::correct_mul_add(scaled, -LN2_OVER_4096_HI, x);
-    let dx = crate::correct_mul_add(scaled, -LN2_OVER_4096_LO, a);
 
     // `exp(dx) − 1 = dx · p(dx)`; fold `th·(exp(dx) − 1)` into the table low word.
     // Dropping the `tl·(exp(dx) − 1) ≈ 2⁻⁶⁶` cross term keeps the leg under its
@@ -686,7 +699,24 @@ pub fn exp2(x: f64) -> f64 {
         return 0.0;
     }
 
-    // Argument reduction: m = round(N·x), so 2^x = 2^(m/N) · 2^s with
+    // Fast path: the two-level lean mantissa.  Index `t = round(4096·x)`, residual
+    // `dx = (4096·x − t)·ln2/4096`; `sigma = 4096·x − t` is exact (4096 is a power
+    // of two).
+    let scaled4 = (x * 4096.0).round_ties_even();
+    // SAFETY: `|x| < 1075`, so `|scaled4| < 2^22`.
+    let t = unsafe { scaled4.to_int_unchecked::<i64>() };
+    let sigma4 = crate::correct_mul_add(x, 4096.0, -scaled4);
+    let dx = crate::correct_mul_add(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
+    let (product, qf) = exp_two_level_mantissa(t, dx);
+    if qf >= -1021 {
+        let lo = product.high + (product.low - EXP_TWO_LEVEL_ZIV_EPS);
+        let hi = product.high + (product.low + EXP_TWO_LEVEL_ZIV_EPS);
+        if lo == hi {
+            return fast_ldexp(lo, qf);
+        }
+    }
+
+    // Accurate path: m = round(N·x), so 2^x = 2^(m/N) · 2^s with
     // s = x − m/N ∈ [−1/2N, 1/2N].  `sigma = N·x − m` is exact (N is a power of
     // two), and r = s·ln2 = sigma·(ln2/N) is carried as a double-double.
     let scaled = (x * EXP_N as f64).round_ties_even();
@@ -724,6 +754,8 @@ pub fn exp10(x: f64) -> f64 {
 
     // 10^x = exp(x·ln10) = 2^q · 2^(j/N) · exp(r), with the reduction index
     // n = round(N·x·log2(10)) and r = x·ln10 − n·ln2/N carried as a double-double.
+    // (exp10 stays on the N=128 reduction: its cost is the double-double `x·ln10`
+    // reduction, not the table fold, so the two-level lean leg buys little here.)
     let scaled = (x * N_LOG2_10).round_ties_even();
 
     // SAFETY: `|x| < 324`, so `|scaled| < 2^18`.
