@@ -444,7 +444,7 @@ pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: DoubleDouble) -> (DoubleDou
 /// `fl = tl + (th·dx)·p` — no double-double `exp(r)` and no `dd × dd` poly
 /// multiply.  `x` must be finite and within the non-overflow range.
 #[inline]
-fn exp_two_level_fast(x: f64) -> (DoubleDouble, i64) {
+pub(super) fn exp_two_level_fast(x: f64) -> (DoubleDouble, i64) {
     let scaled = (x * N_OVER_LN2_4096).round_ties_even();
 
     // SAFETY: `|x| < 746`, so `|scaled| < 2^23`.
@@ -635,16 +635,6 @@ pub(super) fn exp_dd_of_dd_fast(w: DoubleDouble) -> (DoubleDouble, i64) {
 pub(super) fn exp_dd(x: f64) -> (DoubleDouble, i64) {
     let (j, q, r) = exp_reduce(x);
     exp_mantissa(j, q, r)
-}
-
-/// Lean counterpart of [`exp_dd`], using [`exp_mantissa_fast`] (≈2⁻⁶⁸ relative).
-///
-/// The hyperbolic functions take this as their fast path and Ziv-gate the result
-/// against [`exp_dd`].
-#[inline]
-pub(super) fn exp_dd_fast(x: f64) -> (DoubleDouble, i64) {
-    let (j, q, r) = exp_reduce(x);
-    exp_mantissa_fast(j, q, r)
 }
 
 /// The exponential function

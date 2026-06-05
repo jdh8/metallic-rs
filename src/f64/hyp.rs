@@ -1,5 +1,5 @@
 use super::double::{DoubleDouble, fast_ldexp, sqrt_dd};
-use super::exp::{exp_dd, exp_dd_fast};
+use super::exp::{exp_dd, exp_two_level_fast};
 use super::{ln_dd, ln_fast};
 use core::cmp::Ordering;
 
@@ -165,7 +165,7 @@ pub fn cosh(x: f64) -> f64 {
 
     // cosh(x) = ½(eˣ + e⁻ˣ) = 2^(q−1)·(m + 2⁻²q/m); the sum never cancels.  Fast
     // path: lean `eˣ` mantissa accepted by a Ziv test, else the accurate one.
-    let (m, q) = exp_dd_fast(x);
+    let (m, q) = exp_two_level_fast(x);
     let mantissa = combine_fast(m, q, true);
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
     let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
@@ -201,7 +201,7 @@ pub fn sinh(x: f64) -> f64 {
     // `m − 2⁻²q/m` captures the cancellation exactly (2Sum), so no separate
     // small-argument polynomial is needed above the 2⁻²⁶ threshold.  Fast path
     // with a Ziv test, as in `cosh`.
-    let (m, q) = exp_dd_fast(s);
+    let (m, q) = exp_two_level_fast(s);
     let mantissa = combine_fast(m, q, false);
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
     let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
