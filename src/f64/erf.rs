@@ -1030,15 +1030,62 @@ const fn scale_dd(value: DoubleDouble, q: i64) -> DoubleDouble {
     }
 }
 
+/// Double-double prefix length for the mixed-precision fast-leg evaluator.
+///
+/// The first `SPLIT` coefficients are kept in double-double; the rest become a
+/// plain-`f64` tail.  A power of two so [`poly_dd_split`] reaches `vᵏ` by repeated
+/// squaring.  `|v| ≤ 0.154` here, so the first dropped term `c·v^SPLIT` is ≲2⁻¹⁰
+/// of `Q` and the whole tail's `f64` slip stays well under the fast leg's 2⁻⁶²
+/// Ziv budget — confirmed by the fast-leg fallback rate being unchanged from the
+/// all-double-double evaluation.
+const SPLIT: usize = 4;
+
+/// Fast-leg `Q(v) = Σ coeffs[k]·vᵏ` with the high-degree tail in plain `f64`.
+///
+/// The tail terms (degree `≥ SPLIT`) are a small fraction of `Q` (see [`SPLIT`]),
+/// so evaluating them in `f64` instead of double-double costs no extra Ziv
+/// fallbacks while doing roughly half the double-double work.  The double-double
+/// prefix, the `f64` tail, and `vᵏ` are independent, so the critical path is
+/// shallow.
+///
+/// Only for the Ziv-gated *fast* legs; the accurate path stays full double-double
+/// (it is what guarantees correct rounding).  `coeffs.len()` must exceed `SPLIT`.
+#[inline]
+fn poly_dd_split(v: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
+    // Tail Σ coeffs[SPLIT+d].high · v.high^d in plain-f64 Horner (the low words and
+    // v.low are dropped — harmless, the tail is a small fraction of `Q`).
+    let mut tail = 0.0_f64;
+    for c in coeffs[SPLIT..].iter().rev() {
+        tail = crate::fast_mul_add(tail, v.high, c.high);
+    }
+
+    // vᵏ = v^SPLIT by repeated squaring (SPLIT is a power of two).
+    let mut vk = v;
+    let mut e = 1;
+    while e < SPLIT {
+        vk = vk * vk;
+        e *= 2;
+    }
+
+    // Q = prefix(v) + v^SPLIT · tail; the three parts are computed independently.
+    poly_dd(v, &coeffs[..SPLIT]) + vk * tail
+}
+
 /// `erf(x) = x·P(x²)` as a double-double for `|x| < 0.4375`
 ///
-/// `coeffs` is the full [`ERF_SMALL_DD`] for the accurate path or its leading
-/// [`ERF_SMALL_FAST_LEN`] prefix for the fast leg.  Forming `x²` exactly and
-/// multiplying by `x` last keeps the through-origin zero and the leading `2/√π`
-/// behaviour exact.
+/// `coeffs` is the full [`ERF_SMALL_DD`] for the accurate path or
+/// [`ERF_SMALL_FAST`] for the fast leg.  Forming `x²` exactly and multiplying by
+/// `x` last keeps the through-origin zero and the leading `2/√π` behaviour exact.
+/// `split` routes the fast leg through [`poly_dd_split`] (mixed precision).
 #[inline]
-fn erf_small_eval(x: f64, coeffs: &[DoubleDouble]) -> DoubleDouble {
-    poly_dd(DoubleDouble::from_product(x, x), coeffs) * x
+fn erf_small_eval(x: f64, coeffs: &[DoubleDouble], split: bool) -> DoubleDouble {
+    let u = DoubleDouble::from_product(x, x);
+    let p = if split {
+        poly_dd_split(u, coeffs)
+    } else {
+        poly_dd(u, coeffs)
+    };
+    p * x
 }
 
 /// Select the `erfc` segment for `x ≥ 0.4375`: its anchor `t`, the accurate `Q`
@@ -1056,20 +1103,15 @@ fn erfc_segment(x: f64) -> (f64, &'static [DoubleDouble], &'static [DoubleDouble
     } else {
         4
     };
-    let accurate: &[DoubleDouble] = [
-        &ERFC_Q0[..],
-        &ERFC_Q1[..],
-        &ERFC_Q2[..],
-        &ERFC_Q3[..],
-        &ERFC_Q4[..],
-    ][i];
-    let fast: &[DoubleDouble] = [
-        &ERFC_QF0[..],
-        &ERFC_QF1[..],
-        &ERFC_QF2[..],
-        &ERFC_QF3[..],
-        &ERFC_QF4[..],
-    ][i];
+    // Return the slices by `match` rather than indexing a freshly-built array of
+    // fat pointers (which the optimizer would materialize on the stack each call).
+    let (accurate, fast): (&[DoubleDouble], &[DoubleDouble]) = match i {
+        0 => (&ERFC_Q0, &ERFC_QF0),
+        1 => (&ERFC_Q1, &ERFC_QF1),
+        2 => (&ERFC_Q2, &ERFC_QF2),
+        3 => (&ERFC_Q3, &ERFC_QF3),
+        _ => (&ERFC_Q4, &ERFC_QF4),
+    };
     (ERFC_ANCHORS[i], accurate, fast)
 }
 
@@ -1079,8 +1121,8 @@ fn erfc_segment(x: f64) -> (f64, &'static [DoubleDouble], &'static [DoubleDouble
 /// `erfc(x) = t·exp(Q(t) − x²)`, `t = 2/(2+x)`: `Q(t)` from the per-segment
 /// double-double minimax in `v = t − anchor`, `x²` exact, the exponent `W = Q − x²`
 /// carried in double-double, and the `t` factor folded into the mantissa before
-/// renormalizing into `[1, 2)`.  `coeffs` selects accuracy (full = accurate,
-/// prefix = fast); `fast` picks the matching `exp` leg.
+/// renormalizing into `[1, 2)`.  `coeffs` selects accuracy; `fast` picks both the
+/// mixed-precision `Q` ([`poly_dd_split`]) and the matching `exp` leg.
 #[inline]
 fn erfc_eval(x: f64, anchor: f64, coeffs: &[DoubleDouble], fast: bool) -> (DoubleDouble, i64) {
     // t = 2/(2+x) to ≈2⁻¹⁰⁶: `2 + x` must be exact (a plain `2.0 + x` would round
@@ -1090,7 +1132,11 @@ fn erfc_eval(x: f64, anchor: f64, coeffs: &[DoubleDouble], fast: bool) -> (Doubl
         high: -anchor,
         low: 0.0,
     };
-    let q = poly_dd(v, coeffs);
+    let q = if fast {
+        poly_dd_split(v, coeffs)
+    } else {
+        poly_dd(v, coeffs)
+    };
 
     // W = Q(t) − x², with x² exact and the difference in double-double.
     let w = q + neg(DoubleDouble::from_product(x, x));
@@ -1152,14 +1198,14 @@ pub fn erf(x: f64) -> f64 {
         }
         // Fast leg: a lower-degree double-double minimax, accepted unless its
         // relative error interval straddles a rounding boundary.
-        let e = erf_small_eval(x, &ERF_SMALL_FAST);
+        let e = erf_small_eval(x, &ERF_SMALL_FAST, true);
         let eps = e.high.abs() * ERF_SMALL_ZIV_EPS;
         let lo = e.high + (e.low - eps);
         let hi = e.high + (e.low + eps);
         if lo == hi {
             return lo;
         }
-        let e = erf_small_eval(x, &ERF_SMALL_DD);
+        let e = erf_small_eval(x, &ERF_SMALL_DD, false);
         return e.high + e.low;
     }
 
@@ -1206,7 +1252,7 @@ pub fn erfc(x: f64) -> f64 {
     if ax < 0.4375 {
         // erfc(x) = 1 − erf(x); the result is ≈ 1, so carry 1 − erf in double-double
         // (the accurate small kernel — this regime is cheap and not the hot path).
-        let r = ONE + neg(erf_small_eval(x, &ERF_SMALL_DD));
+        let r = ONE + neg(erf_small_eval(x, &ERF_SMALL_DD, false));
         return r.high + r.low;
     }
 
