@@ -103,3 +103,34 @@ for k in range(10):
     hi, lo = dd(mpf(1) / factorial(k + 1))
     print(f"    ({hexf(hi)}, {hexf(lo)}),")
 print("];")
+
+# --- two-level (N2 = 4096) table for exp's lean fast leg ----------------------
+# exp(x) = 2^q · 2^(j/4096) · exp(dx),  j = t & 4095,  q = t >> 12,
+#   t = round(x · 4096/ln2),  |dx| <= ln2/8192 ~ 2^-13.5.
+# 2^(j/4096) factors as EXP2_T0[j>>6] · EXP2_T1[j&63] with
+#   EXP2_T0[i] = 2^(i/64),  EXP2_T1[i] = 2^(i/4096),  0 <= i < 64.
+# The finer grid (vs the N=128 table above) makes the `tl·(exp(dx)-1)` cross term
+# negligible, so the fold reduces to `fl = tl + (th·dx)·p` with a degree-3 f64
+# tail `p = (exp(dx)-1)/dx` — CORE-MATH's structure (no DD exp(r), no DD×DD poly).
+N2 = 4096
+print(f"\nconst N_OVER_LN2_4096: f64 = {hexf(f64(mpf(N2) / ln2))};")
+# ln2/4096 with the low 24 significand bits of HI cleared: t·HI exact for |t| < 2^24.
+step2 = ln2 / N2
+b2 = struct.unpack('<Q', struct.pack('<d', f64(step2)))[0] & ~((1 << 24) - 1)
+L2H = struct.unpack('<d', struct.pack('<Q', b2))[0]
+L2L = f64(step2 - mpf(L2H))
+print(f"const LN2_OVER_4096_HI: f64 = {hexf(L2H)};")
+print(f"const LN2_OVER_4096_LO: f64 = {hexf(L2L)};")
+err2 = (mpf(L2H) + mpf(L2L) - step2) / step2
+print(f"// rel err of (HI+LO) vs ln2/4096: 2^{float(mp.log(abs(err2),2)):.1f}")
+# p(z) = (exp(z)-1)/z = sum z^k/(k+1)!, degree 3 (Taylor; truncation ~2^-74 in result)
+print(f"\nconst EXP_FAST3_COEFFS: [f64; 4] = [")
+for k in range(4):
+    print(f"    {hexf(f64(mpf(1) / factorial(k + 1)))},")
+print("];")
+for name, denom in (("EXP2_T0", 64), ("EXP2_T1", N2)):
+    print(f"\nconst {name}: [(f64, f64); 64] = [")
+    for i in range(64):
+        hi, lo = dd(power(2, mpf(i) / denom))
+        print(f"    ({hexf(hi)}, {hexf(lo)}),")
+    print("];")
