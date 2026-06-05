@@ -416,13 +416,26 @@ pub fn ln_dd(x: f64) -> DoubleDouble {
 pub fn ln_fast(x: f64) -> DoubleDouble {
     let (e, i, r) = log_reduce(x);
     let e = e as f64;
+    let (l_hi, l_lo) = L_TABLE[i];
 
-    let e_ln2 = DoubleDouble {
-        high: e * LN2_HI,
-        low: e * LN2_LO,
-    };
-    let (high, low) = L_TABLE[i];
-    e_ln2 + DoubleDouble { high, low } + ln_1p_kernel_fast(r)
+    // EL = e·ln2 + L as a (possibly unnormalized) pair, off the kernel's critical
+    // path.  `e·LN2_HI` is exact, so the 2Sum with the table lead is lossless; the
+    // tiny `e·LN2_LO + l_lo` joins the low word.
+    let el = DoubleDouble::from_sum(e * LN2_HI, l_hi);
+    let el_low = el.low + (e * LN2_LO + l_lo);
+
+    // ln(1+r); the kernel folds its tail into `p.high`, so `|p.high| ≤ 1/256`.
+    let p = ln_1p_kernel_fast(r);
+
+    // EL + ln(1+r), fused into one normalization: `el.high` dominates `p.high`
+    // except the e=0,i=0 corner, so a 2Sum (not Fast2Sum) keeps the result ordered
+    // there.  Saves the intermediate renormalization of two separate double-double
+    // adds — the `el.high + p.high` round captures `p.high` down to `ulp(el.high)`
+    // and the residual joins `low`, which stays tiny because the kernel already
+    // absorbed its `r²` tail.
+    let sum = DoubleDouble::from_sum(el.high, p.high);
+    let low = sum.low + (el_low + p.low);
+    fast_sum(sum.high, low)
 }
 
 /// The natural logarithm
