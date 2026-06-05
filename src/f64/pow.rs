@@ -190,18 +190,49 @@ pub const EXP2_FAST: [f64; 11] = [
 
 /// Evaluate a double-double polynomial `Σ coeffs[k]·uᵏ` at the double-double `u`
 ///
-/// Horner in double-double arithmetic; the leading coefficient must be last.
-/// Used by [`log2_dd`]/[`exp2_dd`], where `f64` precision is far too coarse: in
-/// `xʸ = 2^(y·log₂x)` the error in `log₂x` is amplified by `y`, so the whole
-/// `log₂ → ×y → exp2` chain runs in double-double.
+/// Estrin scheme in double-double arithmetic; the constant term `coeffs[0]` is
+/// first (low-degree first).  Used wherever `f64` precision is too coarse — the
+/// `log₂ → ×y → exp2` chain of `xʸ`, the `erf`/`erfc` minimax `Q`, and the trig,
+/// `atan`, and `gamma` kernels — so its latency dominates those functions.
+///
+/// Pairing adjacent coefficients into `c[2i] + power·c[2i+1]` and squaring
+/// `power` (`u → u² → u⁴ → …`) builds a balanced tree of depth `⌈log₂ n⌉` instead
+/// of Horner's length-`n` chain.  Double-double FMAs have a long latency, and the
+/// callers evaluate one polynomial per call on the critical path, so shortening
+/// the dependency chain — not the operation count — is what speeds them up.
 #[inline]
 pub fn poly_dd(u: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
-    let (last, rest) = coeffs.split_last().unwrap();
-    let mut acc = *last;
-    for c in rest.iter().rev() {
-        acc = acc * u + *c;
+    /// Scratch capacity; the largest caller (the `erfc` `Q` segments) has 25 terms.
+    const CAP: usize = 32;
+    const ZERO: DoubleDouble = DoubleDouble {
+        high: 0.0,
+        low: 0.0,
+    };
+
+    let n = coeffs.len();
+    debug_assert!(n <= CAP);
+    let mut buf = [ZERO; CAP];
+    buf[..n].copy_from_slice(coeffs);
+
+    // Each pass folds `buf` (a polynomial in `power`) to half its length and
+    // squares `power`.  Writing `buf[i]` only reads `buf[2i]`/`buf[2i+1]`, both
+    // at indices `> i` once `i ≥ 1`, so the in-place update never clobbers an
+    // unread entry.
+    let mut len = n;
+    let mut power = u;
+    while len > 1 {
+        let half = len.div_ceil(2);
+        for i in 0..half {
+            buf[i] = if 2 * i + 1 < len {
+                buf[2 * i] + power * buf[2 * i + 1]
+            } else {
+                buf[2 * i]
+            };
+        }
+        len = half;
+        power = power * power;
     }
-    acc
+    buf[0]
 }
 
 /// `log₂(x)` as a double-double for a finite positive `f64`
