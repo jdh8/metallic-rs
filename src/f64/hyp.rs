@@ -117,6 +117,29 @@ fn combine(m: DoubleDouble, q: i64, add: bool) -> DoubleDouble {
     }
 }
 
+/// Lean counterpart of [`combine`] for the fast leg: forms `t = 2⁻²q/m ≈ e⁻ˣ`
+/// (relative to `eˣ`) with a single `f64` division instead of the double-double
+/// reciprocal of [`combine`].
+///
+/// Used only when `q ≥ 8`.  There `t < 2⁻¹⁶`, so the `f64` reciprocal's relative
+/// error contributes only `t·2⁻⁵³ ≲ 2⁻⁶⁹` absolutely — far inside the
+/// [`HYP_ZIV_EPS`] gate — and `m − t` (sinh) cannot catastrophically cancel.  For
+/// smaller `q` the term approaches `1`, where that error would breach the gate and
+/// the cancellation needs full precision, so it defers to the dd [`combine`].
+/// `exp2i(-2q)` underflows to `0` once `e⁻ˣ` is negligible, collapsing `t` to `0`
+/// (the result is then `½eˣ`).
+#[inline]
+fn combine_fast(m: DoubleDouble, q: i64, add: bool) -> DoubleDouble {
+    if q < 8 {
+        return combine(m, q, add);
+    }
+    let t = crate::exp2i(-2 * q) / m.high;
+    m + DoubleDouble {
+        high: if add { t } else { -t },
+        low: 0.0,
+    }
+}
+
 /// Ziv gate for the hyperbolic fast path, as an absolute bound on the mantissa.
 ///
 /// The fast `eˣ` mantissa is ≈2⁻⁶⁸ relative, and `m ± 2⁻²q/m` keeps that, so the
@@ -143,7 +166,7 @@ pub fn cosh(x: f64) -> f64 {
     // cosh(x) = ½(eˣ + e⁻ˣ) = 2^(q−1)·(m + 2⁻²q/m); the sum never cancels.  Fast
     // path: lean `eˣ` mantissa accepted by a Ziv test, else the accurate one.
     let (m, q) = exp_dd_fast(x);
-    let mantissa = combine(m, q, true);
+    let mantissa = combine_fast(m, q, true);
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
     let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
     if lo == hi {
@@ -179,7 +202,7 @@ pub fn sinh(x: f64) -> f64 {
     // small-argument polynomial is needed above the 2⁻²⁶ threshold.  Fast path
     // with a Ziv test, as in `cosh`.
     let (m, q) = exp_dd_fast(s);
-    let mantissa = combine(m, q, false);
+    let mantissa = combine_fast(m, q, false);
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
     let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
     if lo == hi {
