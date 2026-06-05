@@ -459,8 +459,19 @@ const TGAMMA_TINY: f64 = 5.562684646268003e-309;
 const TGAMMA_UNDERFLOW: f64 = -179.5;
 // checks: Γ(overflow)≈1.798e+308 (MAX=1.798e+308); Γ(tiny)≈inf; |Γ(underflow)|≈0.000e+00
 
-/// Argument above which the Stirling series for `ln Γ` converges fast enough
+/// Argument above which the Stirling series for `ln Γ` converges fast enough for
+/// the **accurate** double-double path (a long Bernoulli tail, ≈2⁻¹⁰⁸ at `t = 40`)
 const LGAMMA_CUTOFF: f64 = 40.0;
+
+/// Argument above which the **fast** leg takes Stirling directly (no recurrence)
+///
+/// The lean leg only needs ≈2⁻⁵⁶ (its Ziv gate), so it can start Stirling far
+/// below the accurate path's [`LGAMMA_CUTOFF`]: the 10-term [`LGAMMA_TAIL_F64`]
+/// truncates below 2⁻⁵⁹ at `t = 8` and its terms still shrink monotonically there
+/// (no Horner cancellation).  Dropping the cutoff from 40 to 8 turns the whole
+/// `[8, 40)` band into a recurrence-free direct Stirling and caps the `[½, 8)`
+/// recurrence at ≤ 8 steps (was ≤ 40) — the dominant cost for moderate `z`.
+const LGAMMA_FAST_CUTOFF: f64 = 8.0;
 
 /// `ln π` as a double-double, the additive constant of the lgamma reflection
 ///
@@ -521,14 +532,34 @@ const LGAMMA_TAIL_DD: [DoubleDouble; 10] = [
     },
 ];
 
-/// Stirling tail in plain `f64` (the leading 6 high words of [`LGAMMA_TAIL_DD`])
+/// Stirling tail in plain `f64` for the cutoff-8 fast leg (all 10 high words of
+/// [`LGAMMA_TAIL_DD`])
 ///
-/// The direct Stirling leg ([`lgamma_stirling_fast`], `z ≥ 40`, no recurrence)
-/// lands a result ≥ ln Γ(40) ≈ 105 with ulp ≥ 2⁻⁴⁵, while the whole tail is ≤ 2⁻⁹,
-/// so an `f64` evaluation (≈2⁻⁶⁰ absolute) is far inside half an ulp.  Six terms
-/// suffice at `z ≥ 40` (`u = 1/z² ≤ 2⁻¹⁰·⁶`).  The accurate fallback and the
-/// reduced/reflection paths still use the double-double [`LGAMMA_TAIL_DD`].
-const LGAMMA_TAIL_F64: [f64; 6] = [
+/// [`lgamma_pos_fast`] reduces to `t ≥ LGAMMA_FAST_CUTOFF = 8`, where
+/// `u = 1/t² ≤ 2⁻⁶`.  The 10 terms truncate at 2^-59.3 there (and still shrink
+/// monotonically — no Horner cancellation), inside the leg's 2⁻⁵⁶ Ziv gate.  The
+/// hot `z ≥ 40` leg uses the shorter [`LGAMMA_TAIL_F64_FAR`]; the accurate fallback
+/// and the reduced/reflection paths use the double-double [`LGAMMA_TAIL_DD`].
+const LGAMMA_TAIL_F64: [f64; 10] = [
+    0.08333333333333333,
+    -0.002777777777777778,
+    0.0007936507936507937,
+    -0.0005952380952380953,
+    0.0008417508417508417,
+    -0.0019175269175269176,
+    0.00641025641025641,
+    -0.029550653594771242,
+    0.17964437236883057,
+    -1.3924322169059011,
+];
+
+/// Stirling tail in plain `f64` for the hot large-`z` leg (the leading 6 high words
+/// of [`LGAMMA_TAIL_DD`])
+///
+/// [`lgamma_stirling_fast`] runs only at `z ≥ LGAMMA_CUTOFF = 40`, where
+/// `u = 1/z² ≤ 2⁻¹⁰·⁶`, so 6 terms truncate at 2^-76.5 — far below the result's
+/// ulp — no need to evaluate the extra terms [`LGAMMA_TAIL_F64`] carries to `t = 8`.
+const LGAMMA_TAIL_F64_FAR: [f64; 6] = [
     0.08333333333333333,
     -0.002777777777777778,
     0.0007936507936507937,
@@ -852,7 +883,7 @@ fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
 /// [`LGAMMA_FAST_ERR`] while the caller keeps `y` under [`LGAMMA_FAST_BOUND`].
 #[inline]
 fn lgamma_pos_fast(y: DoubleDouble) -> DoubleDouble {
-    let steps = (LGAMMA_CUTOFF - y.high).ceil().max(0.0) as i64;
+    let steps = (LGAMMA_FAST_CUTOFF - y.high).ceil().max(0.0) as i64;
     let t = y + DoubleDouble {
         high: steps as f64,
         low: 0.0,
@@ -883,17 +914,13 @@ fn lgamma_pos_fast(y: DoubleDouble) -> DoubleDouble {
     }
 }
 
-/// Direct Stirling `ln Γ(z)` for `z ≥ LGAMMA_CUTOFF`, the lean no-recurrence leg
+/// Direct Stirling `ln Γ(z)` (no recurrence) from a precomputed `f64` `tail`
 ///
-/// The hot path: `z` (hence `z − ½`) is an exact `f64`, so the big term is a plain
-/// `ln_fast(z) · (z − ½)` with no double-double add for the argument.  This is
-/// [`lgamma_pos_fast`] specialised to `steps = 0`, `y.low = 0`.
+/// The lean leg: `z` (hence `z − ½`) is an exact `f64`, so the big term is a plain
+/// `ln_fast(z) · (z − ½)` — a double-double × scalar, no double-double argument add.
+/// The caller picks the tail length by `z` (see [`lgamma_fast`]).
 #[inline]
-fn lgamma_stirling_fast(z: f64) -> DoubleDouble {
-    let inv_t = 1.0 / z;
-    let u = inv_t * inv_t;
-    let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
-
+fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
     crate::f64::ln_fast(z) * (z - 0.5)
         + neg(DoubleDouble { high: z, low: 0.0 })
         + HALF_LN_2PI
@@ -906,18 +933,29 @@ fn lgamma_stirling_fast(z: f64) -> DoubleDouble {
 /// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg
 ///
 /// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½`; otherwise applies
-/// Stirling, taking the lean [`lgamma_stirling_fast`] once past the cutoff and the
-/// recurrence-reducing [`lgamma_pos_fast`] below it.  The caller restricts `|z|`
-/// to below [`LGAMMA_FAST_BOUND`].
+/// Stirling.  Only `[½, 8)` needs the recurrence-reducing [`lgamma_pos_fast`]
+/// (cutoff [`LGAMMA_FAST_CUTOFF`] = 8, ≤ 8 steps); `[8, ∞)` takes the lean direct
+/// [`lgamma_stirling_fast`] with the ten-term [`LGAMMA_TAIL_F64`] up to
+/// [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term [`LGAMMA_TAIL_F64_FAR`] on the
+/// hot `z ≥ 40` tail.  The caller restricts `|z|` to below [`LGAMMA_FAST_BOUND`].
 #[inline]
 fn lgamma_fast(z: f64) -> DoubleDouble {
     if z < 0.5 {
-        LN_PI + neg(ln_fast_sum(abs_sinpi_dd(z)) + lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z)))
-    } else if z < LGAMMA_CUTOFF {
-        lgamma_pos_fast(DoubleDouble { high: z, low: 0.0 })
-    } else {
-        lgamma_stirling_fast(z)
+        return LN_PI
+            + neg(ln_fast_sum(abs_sinpi_dd(z)) + lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z)));
     }
+    if z < LGAMMA_FAST_CUTOFF {
+        return lgamma_pos_fast(DoubleDouble { high: z, low: 0.0 });
+    }
+
+    let inv = 1.0 / z;
+    let u = inv * inv;
+    let tail = if z < LGAMMA_CUTOFF {
+        crate::poly(u, &LGAMMA_TAIL_F64) * inv
+    } else {
+        crate::poly(u, &LGAMMA_TAIL_F64_FAR) * inv
+    };
+    lgamma_stirling_fast(z, tail)
 }
 
 /// `ln|Γ(z)|` as a double-double via the accurate path, the Ziv fallback

@@ -151,8 +151,24 @@ def dd_const(name, value, doc):
 # coefficients stay O(1), so Horner over them does not catastrophically cancel (at
 # t = 14 the K = 19 terms reach 3·10¹¹ and lose ~42 bits; at t = 40, ~4 bits).
 LGAMMA_CUTOFF = 40
-print(f"\n/// Argument above which the Stirling series for `ln Γ` converges fast enough")
+print(f"\n/// Argument above which the Stirling series for `ln Γ` converges fast enough for")
+print(f"/// the **accurate** double-double path (a long Bernoulli tail, ≈2⁻¹⁰⁸ at `t = 40`)")
 print(f"const LGAMMA_CUTOFF: f64 = {hexf(f64(LGAMMA_CUTOFF))};")
+
+# The lean leg only needs ≈2⁻⁵⁶ (its Ziv gate), so it starts Stirling far below the
+# accurate cutoff: at t = 8 the 10-term f64 tail truncates below 2⁻⁵⁹ and its terms
+# still shrink monotonically (no Horner cancellation).  Below this, the lean leg
+# reduces with a recurrence of ≤ 8 steps (was ≤ 40).
+LGAMMA_FAST_CUTOFF = 8
+print(f"\n/// Argument above which the **fast** leg takes Stirling directly (no recurrence)")
+print("///")
+print("/// The lean leg only needs ≈2⁻⁵⁶ (its Ziv gate), so it can start Stirling far")
+print("/// below the accurate path's [`LGAMMA_CUTOFF`]: the 10-term [`LGAMMA_TAIL_F64`]")
+print("/// truncates below 2⁻⁵⁹ at `t = 8` and its terms still shrink monotonically there")
+print("/// (no Horner cancellation).  Dropping the cutoff from 40 to 8 turns the whole")
+print("/// `[8, 40)` band into a recurrence-free direct Stirling and caps the `[½, 8)`")
+print("/// recurrence at ≤ 8 steps (was ≤ 40) — the dominant cost for moderate `z`.")
+print(f"const LGAMMA_FAST_CUTOFF: f64 = {hexf(f64(LGAMMA_FAST_CUTOFF))};")
 
 dd_const("LN_PI", log(pi),
          "`ln π` as a double-double, the additive constant of the lgamma reflection\n///\n"
@@ -176,15 +192,45 @@ print(f"// lgamma Stirling tail: {K} double-double coeffs, residual at t={LGAMMA
 print_dd_array("LGAMMA_TAIL_DD", coeffs,
                f"Stirling tail `P(u) = Σ B_2k/(2k(2k−1)) u^(k−1)`, `u = 1/t²` ({K} terms, double-double)")
 
-# The Ziv fast leg evaluates the tail in plain f64.  Six terms suffice at t ≥ 40
-# (u = 1/t² ≤ 2⁻¹⁰·⁶): the truncation past them is far below the result's ulp.
-TAIL_F64 = 6
+# The Ziv fast legs evaluate the tail in plain f64 over two regimes, each taking
+# just enough terms that the truncation at its floor `t` is under the 2⁻⁵⁶ gate.
+# The series is asymptotic (it diverges past its minimum term near 2k ≈ 2πt), so
+# the truncation after N terms is the first omitted term, not the difference to a
+# longer — divergent — partial sum.
+
+def first_omitted(N, t):
+    j = N + 1
+    return abs(bernoulli(2 * j) / (2 * j * (2 * j - 1)) * mpf(t) ** (1 - 2 * j))
+
+# Cutoff-8 leg (`lgamma_pos_fast`, reduces to t ≥ LGAMMA_FAST_CUTOFF): take all K
+# terms.  At t = 8 they truncate well under the gate yet still shrink monotonically
+# (c_k grows ~×8 per term, u = 1/t² ≤ 2⁻⁶ shrinks ×64), so the f64 Horner does not
+# cancel.
+TAIL_F64 = K
+fast_resid = first_omitted(TAIL_F64, LGAMMA_FAST_CUTOFF)
 f64_tail = ", ".join(hexf(f64(c)) for c in coeffs[:TAIL_F64])
-print(f"\n/// Stirling tail in plain `f64` (the leading {TAIL_F64} high words of [`LGAMMA_TAIL_DD`])")
+print(f"\n/// Stirling tail in plain `f64` for the cutoff-8 fast leg (all {TAIL_F64} high words of")
+print(f"/// [`LGAMMA_TAIL_DD`])")
 print("///")
-print("/// The direct Stirling leg ([`lgamma_stirling_fast`], `z ≥ 40`, no recurrence)")
-print("/// lands a result ≥ ln Γ(40) ≈ 105 with ulp ≥ 2⁻⁴⁵, while the whole tail is ≤ 2⁻⁹,")
-print("/// so an `f64` evaluation (≈2⁻⁶⁰ absolute) is far inside half an ulp.  Six terms")
-print("/// suffice at `z ≥ 40` (`u = 1/z² ≤ 2⁻¹⁰·⁶`).  The accurate fallback and the")
-print("/// reduced/reflection paths still use the double-double [`LGAMMA_TAIL_DD`].")
+print(f"/// [`lgamma_pos_fast`] reduces to `t ≥ LGAMMA_FAST_CUTOFF = {LGAMMA_FAST_CUTOFF}`, where")
+print(f"/// `u = 1/t² ≤ 2⁻⁶`.  The {TAIL_F64} terms truncate at 2^{float(mp.log(fast_resid,2)):.1f}"
+      " there (and still shrink")
+print("/// monotonically — no Horner cancellation), inside the leg's 2⁻⁵⁶ Ziv gate.  The")
+print("/// hot `z ≥ 40` leg uses the shorter [`LGAMMA_TAIL_F64_FAR`]; the accurate fallback")
+print("/// and the reduced/reflection paths use the double-double [`LGAMMA_TAIL_DD`].")
 print(f"const LGAMMA_TAIL_F64: [f64; {TAIL_F64}] = [{f64_tail}];")
+
+# Large-z leg (`lgamma_stirling_fast`, z ≥ LGAMMA_CUTOFF): the smallest N whose
+# first omitted term at t = CUTOFF is far below the result's ulp (2⁻⁷⁰ ≪ the gate
+# and the large-z ln_fast floor), i.e. the validated original count.
+TAIL_FAR = next(N for N in range(1, K + 1) if first_omitted(N, LGAMMA_CUTOFF) < mpf(2) ** -70)
+far_resid = first_omitted(TAIL_FAR, LGAMMA_CUTOFF)
+far_tail = ", ".join(hexf(f64(c)) for c in coeffs[:TAIL_FAR])
+print(f"\n/// Stirling tail in plain `f64` for the hot large-`z` leg (the leading {TAIL_FAR} high words")
+print(f"/// of [`LGAMMA_TAIL_DD`])")
+print("///")
+print(f"/// [`lgamma_stirling_fast`] runs only at `z ≥ LGAMMA_CUTOFF = {LGAMMA_CUTOFF}`, where")
+print(f"/// `u = 1/z² ≤ 2⁻¹⁰·⁶`, so {TAIL_FAR} terms truncate at 2^{float(mp.log(far_resid,2)):.1f}"
+      " — far below the result's")
+print("/// ulp — no need to evaluate the extra terms [`LGAMMA_TAIL_F64`] carries to `t = 8`.")
+print(f"const LGAMMA_TAIL_F64_FAR: [f64; {TAIL_FAR}] = [{far_tail}];")
