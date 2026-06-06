@@ -50,6 +50,13 @@ def dd(x):
     return hi, lo
 
 
+def td(x):
+    hi = f64(x)
+    mi = f64(mpf(x) - mpf(hi))
+    lo = f64(mpf(x) - mpf(hi) - mpf(mi))
+    return hi, mi, lo
+
+
 # a_k = C(2k,k) / (4^k (2k+1)); the exact Taylor coefficients of asin(t)/t in u.
 def a(k):
     return binomial(2 * k, k) / (mpf(4) ** k * (2 * k + 1))
@@ -183,3 +190,40 @@ print(f"// -> ASIN_ZIV_EPS = 2^-59 = {f64(GATE)!r} leaves "
       f"~{mp.nstr(mp.log(GATE / e2e, 2), 4)} bits margin")
 emit_lead("ASIN_LEAD")
 emit_poly("ASIN_POLY", DEG)
+
+
+# --- Triple-double accurate series for the |x| < 1/2 fallback (asin only) ---
+# A handful of f64 hard-to-round acos points need the result to ~2^-111, beyond
+# what the double-double accurate path resolves.  For the direct branch the
+# fallback evaluates asin(t) = t*B(t^2), B(u) = sum_k a_k u^k, in TRIPLE-double:
+#   B = 1 + u*(a1 + u*(a2 + u*(... )))   Horner,
+# with a1, a2, a3 carried to a third limb (their double-double rounding alone
+# would cap B near 2^-110) and the slowly-decaying tail a4.. in double-double.
+# NLEAD leading coefficients are carried as triple-doubles (their dd rounding
+# alone would cap B above 2^-120 at u=1/4); the rest run double-double Horner.
+NLEAD = 8
+# K is chosen so the truncated tail a_K (1/4)^K lands below 2^-130 at u = 1/4.
+UMAX = mpf(1) / 4
+KACC = NLEAD
+while A[KACC] * UMAX ** KACC > mpf(2) ** -130:
+    KACC += 1
+# Floor from the first double-double (non-triple) coefficient a_{NLEAD+1}: its
+# ~2^-106 rounding scaled by its term value at u=1/4.
+floor = A[NLEAD + 1] * UMAX ** (NLEAD + 1) * mpf(2) ** -106
+print(f"// triple-double accurate series: {KACC} terms, {NLEAD} triple-double leads;"
+      f" tail ~ 2^{mp.nstr(mp.log(A[KACC] * UMAX ** KACC, 2), 4)},"
+      f" dd-lead floor ~ 2^{mp.nstr(mp.log(floor, 2), 4)} at u=1/4")
+
+# a_1..a_KACC as double-double, low-degree first.
+print(f"const ASIN_ACC: [DoubleDouble; {KACC}] = [")
+for k in range(1, KACC + 1):
+    hi, lo = dd(a(k))
+    print(f"    DoubleDouble {{ high: {hi!r}, low: {lo!r} }},")
+print("];\n")
+
+# Third limbs of a_1..a_NLEAD (carried to triple-double):
+# a_k = ASIN_ACC[k-1].high + .low + ASIN_ACC_LO[k-1].
+print(f"const ASIN_ACC_LO: [f64; {NLEAD}] = [")
+for k in range(1, NLEAD + 1):
+    print(f"    {td(a(k))[2]!r},")
+print("];")
