@@ -445,35 +445,44 @@ pub(super) fn exp_mantissa_fast(j: usize, q: i64, r: DoubleDouble) -> (DoubleDou
 /// multiply.  `x` must be finite and within the non-overflow range.
 #[inline]
 pub(super) fn exp_two_level_fast(x: f64) -> (DoubleDouble, i64) {
+    let (t, dx) = exp_two_level_reduce(x);
+    exp_two_level_mantissa(t, dx)
+}
+
+/// Two-level base-`e` reduction: `(t, dx)` with `eˣ = 2^(t/4096)·exp(dx)`,
+/// `t = round(4096·x/ln2)`, `|dx| ≤ ln2/8192`.
+///
+/// `scaled · LN2_OVER_4096_HI` is exact (HI has 24 trailing zero bits,
+/// `|scaled| < 2²⁴`), so the FMA `x − scaled·HI` is exact; subtracting
+/// `scaled · LO` finishes the residual.  `x` must be finite and in the
+/// non-overflow range.
+#[inline]
+fn exp_two_level_reduce(x: f64) -> (i64, f64) {
     let scaled = (x * N_OVER_LN2_4096).round_ties_even();
 
     // SAFETY: `|x| < 746`, so `|scaled| < 2^23`.
     let t = unsafe { scaled.to_int_unchecked::<i64>() };
 
-    // Cody–Waite reduced argument `dx = x − t·ln2/4096`, `|dx| ≤ ln2/8192`.
-    // `scaled · LN2_OVER_4096_HI` is exact (HI has 24 trailing zero bits,
-    // `|scaled| < 2²⁴`), so the FMA `x − scaled·HI` is exact; subtracting
-    // `scaled · LO` finishes the residual.
     let a = crate::correct_mul_add(scaled, -LN2_OVER_4096_HI, x);
     let dx = crate::correct_mul_add(scaled, -LN2_OVER_4096_LO, a);
-    exp_two_level_mantissa(t, dx)
+    (t, dx)
 }
 
-/// Lean two-level fold shared by the exponential family's fast legs.
+/// Un-normalized lean two-level fold: returns `(th, fl, q)` with the value
+/// `(th + fl)·2`<sup>`q`</sup>` = eˣ`, where `th = 2`<sup>`j/4096`</sup>` ∈ [1, 2)`,
+/// `|fl| ≲ ln2/8192`, `q = t >> 12`, `j = t & 4095 = 64·i0 + i1`.
 ///
-/// `t` is the reduction index (`t = round(N₂·e)`, `N₂ = 4096`) and `dx` the
-/// reduced residual (`|dx| ≤ ln2/8192`), so the value is
-/// `2`<sup>`q`</sup>` · 2`<sup>`j/4096`</sup>` · exp(dx)` with `q = t >> 12` and
-/// `j = t & 4095 = 64·i0 + i1`.  Returns the mantissa as a double-double
-/// normalized into [1, 2) with `q` adjusted, the same contract as
-/// [`exp_mantissa_fast`].
+/// The table value `2`<sup>`j/4096`</sup>` = EXP2_T0[j>>6] · EXP2_T1[j&63]` (one
+/// `dd × dd`), folded in with CORE-MATH's lean `fl = tl + (th·dx)·p` — no
+/// double-double `exp(r)` and no `dd × dd` poly multiply.  Scalar [`exp`] gates
+/// `th + fl` directly; [`exp_two_level_mantissa`] renormalizes it into [1, 2) for
+/// the reuse consumers (`exp2`/`exp_m1`/`sinh`/`cosh`).
 #[inline]
-fn exp_two_level_mantissa(t: i64, dx: f64) -> (DoubleDouble, i64) {
+fn exp_two_level_fold(t: i64, dx: f64) -> (f64, f64, i64) {
     let i0 = ((t >> 6) & 63) as usize;
     let i1 = (t & 63) as usize;
     let q = t >> 12;
 
-    // `2^(j/4096)` as a double-double, `j = t mod 4096 = 64·i0 + i1`.
     let (t0h, t0l) = EXP2_T0[i0];
     let (t1h, t1l) = EXP2_T1[i1];
     let table = DoubleDouble {
@@ -488,8 +497,16 @@ fn exp_two_level_mantissa(t: i64, dx: f64) -> (DoubleDouble, i64) {
     // Dropping the `tl·(exp(dx) − 1) ≈ 2⁻⁶⁶` cross term keeps the leg under its
     // Ziv budget thanks to the finer table.
     let p = crate::poly(dx, &EXP_FAST3_COEFFS);
-    let lo = crate::correct_mul_add(table.high * dx, p, table.low);
-    let product = fast_sum(table.high, lo);
+    let fl = crate::correct_mul_add(table.high * dx, p, table.low);
+    (table.high, fl, q)
+}
+
+/// Lean two-level fold for the reuse consumers: the [`exp_two_level_fold`] value
+/// renormalized into the `(mantissa ∈ [1, 2), q)` contract of [`exp_mantissa_fast`].
+#[inline]
+fn exp_two_level_mantissa(t: i64, dx: f64) -> (DoubleDouble, i64) {
+    let (th, fl, q) = exp_two_level_fold(t, dx);
+    let product = fast_sum(th, fl);
 
     // `2^(j/4096) · exp(dx)` lies in (0.9999, 2.0001); fold its exponent into `q`.
     if product.high < 1.0 {
@@ -653,21 +670,33 @@ pub fn exp(x: f64) -> f64 {
         return 0.0;
     }
 
-    // Fast path: the two-level lean mantissa, accepted when both ends of its
-    // `±EXP_TWO_LEVEL_ZIV_EPS` interval round to the same `f64`.  Restricting it to
-    // comfortably-normal results (`qf ≥ −1021`) keeps the normal/subnormal
-    // transition entirely on the accurate path below.
-    let (product, qf) = exp_two_level_fast(x);
-    if qf >= -1021 {
-        let lo = product.high + (product.low - EXP_TWO_LEVEL_ZIV_EPS);
-        let hi = product.high + (product.low + EXP_TWO_LEVEL_ZIV_EPS);
+    // Fast path: the un-normalized two-level fold `eˣ = (th + fl)·2^q`, gated
+    // CORE-MATH style.  `th ∈ [1, 2)` and `|fl| ≲ ln2/8192`, so `ε = 2⁻⁶²` is
+    // ~11 ulp of `fl` and survives the inner `fl ± ε`; the outer `th + …` then
+    // resolves the nearest rounding without the renormalizing `fast_sum` + branch
+    // the reuse contract needs.  `q ≥ −1021` keeps `(th + fl)·2^q ≥ 2⁻¹⁰²¹·⁰`
+    // comfortably normal (so `fast_ldexp` is exact and the subnormal boundary
+    // stays on the accurate path).
+    let (t, dx) = exp_two_level_reduce(x);
+    let (th, fl, q) = exp_two_level_fold(t, dx);
+    if q >= -1021 {
+        let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
+        let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);
         if lo == hi {
-            return fast_ldexp(lo, qf);
+            return fast_ldexp(lo, q);
         }
     }
 
-    // Accurate path: the existing N=128 reduction and double-double mantissa,
-    // correctly rounded across the normal/subnormal boundary.
+    exp_accurate(x)
+}
+
+/// Correctly-rounded `eˣ` via the N=128 double-double mantissa — [`exp`]'s rare
+/// fallback when the lean leg straddles a rounding boundary or nears the
+/// subnormal range.  Kept `#[cold]` and out-of-line so it does not bloat `exp`'s
+/// hot path.
+#[cold]
+#[inline(never)]
+fn exp_accurate(x: f64) -> f64 {
     let (j, q, r) = exp_reduce(x);
     let (product, q) = exp_mantissa(j, q, r);
     super::double::round_general64(product, q)
