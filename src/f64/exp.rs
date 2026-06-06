@@ -662,7 +662,9 @@ pub fn exp(x: f64) -> f64 {
         return x;
     }
 
-    // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero
+    // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero.  These FP
+    // compares (`comisd`, predicted not-taken) are cheaper here than a `|x|`-bit
+    // magnitude trick, which would force an XMM→GPR `movq`.
     if x >= 709.782_712_893_384 {
         return f64::INFINITY;
     }
