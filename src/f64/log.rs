@@ -422,7 +422,7 @@ pub fn ln_fast(x: f64) -> DoubleDouble {
     // path.  `e·LN2_HI` is exact, so the 2Sum with the table lead is lossless; the
     // tiny `e·LN2_LO + l_lo` joins the low word.
     let el = DoubleDouble::from_sum(e * LN2_HI, l_hi);
-    let el_low = el.low + (e * LN2_LO + l_lo);
+    let el_low = el.low + crate::fast_mul_add(e, LN2_LO, l_lo);
 
     // ln(1+r); the kernel folds its tail into `p.high`, so `|p.high| ≤ 1/256`.
     let p = ln_1p_kernel_fast(r);
