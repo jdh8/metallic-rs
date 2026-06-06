@@ -23,6 +23,24 @@ source of that lineage, distilled from
 <https://jdh8.org/how-to-program-math-functions/> and the conventions already in
 `src/f32/` and `src/f64/`.
 
+**Performance target: beat CORE-MATH.** CORE-MATH is the correctly-rounded
+reference implementation. Matching its throughput is the floor; the real goal is
+to run *faster*. The main lever: CORE-MATH supports all four IEEE rounding modes
+and must detect the current mode at runtime, while metallic-rs targets
+**round-to-nearest only**. This unlocks:
+
+- **Tighter polynomial bounds.** Under RTN the error budget is exactly ½ ulp;
+  other modes need more headroom. A coefficients search can be tighter, sometimes
+  saving a degree.
+- **No rounding-mode branching.** CORE-MATH often checks `fegetround()` in its
+  final rounding step. We skip that branch entirely.
+- **Faster Ziv refinement.** A first-pass approximation only needs to clear the
+  RTN tie-breaking threshold, not the wider fence that covers directed rounding.
+
+Always `cargo bench` against `metallic__f64__<fn>` (the metallic path) and
+`core_math__f64__<fn>` (the CORE-MATH path) — not the `f64__<fn>` criterion
+group, which benchmarks std.
+
 A real function ties together four ideas, each with a reference file:
 
 - **Exact arithmetic & rounding** → [reference/exact-arithmetic.md](reference/exact-arithmetic.md)
