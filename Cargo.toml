@@ -17,8 +17,8 @@ autobenches = false
 # `poly_array`/`rational_array`) requires; without it the library does not build
 # on its own (only under `cargo test`, where dev-dependencies pull it in).
 fast_polynomial = { version = "0.4", features = ["std"] }
-# MPFR oracle used only by the corpus generators (`gen_f32_log_cases`,
-# `gen_f64_log_cases`).  They freeze the hard-to-round `log(x, base)` cases into
+# MPFR oracle used only by the corpus generators (`gen_f64_tgamma_cases`,
+# `gen_f64_lgamma_cases`).  They freeze the hard-to-round cases into
 # `tests/cases/*.wc`, which the default `cargo test` then checks with no oracle.
 # Optional and gated behind the `mpfr` feature so neither the default test run
 # nor the library build needs rug or a system MPFR/GMP build.
@@ -55,245 +55,245 @@ name = "gen_f64_lgamma_cases"
 required-features = ["mpfr"]
 
 [[bench]]
-name = "f32_acos"
+name = "acosf"
 harness = false
 
 [[bench]]
-name = "f32_acosh"
+name = "acoshf"
 harness = false
 
 [[bench]]
-name = "f32_asin"
+name = "asinf"
 harness = false
 
 [[bench]]
-name = "f32_asinh"
+name = "asinhf"
 harness = false
 
 [[bench]]
-name = "f32_atan"
+name = "atanf"
 harness = false
 
 [[bench]]
-name = "f32_atanh"
+name = "atanhf"
 harness = false
 
 [[bench]]
-name = "f32_cbrt"
+name = "cbrtf"
 harness = false
 
 [[bench]]
-name = "f32_cos"
+name = "cosf"
 harness = false
 
 [[bench]]
-name = "f32_cosh"
+name = "coshf"
 harness = false
 
 [[bench]]
-name = "f32_exp_m1"
+name = "expm1f"
 harness = false
 
 [[bench]]
-name = "f32_exp"
+name = "expf"
 harness = false
 
 [[bench]]
-name = "f32_exp2"
+name = "exp2f"
 harness = false
 
 [[bench]]
-name = "f32_exp10"
+name = "exp10f"
 harness = false
 
 [[bench]]
-name = "f32_frexp"
+name = "frexpf"
 harness = false
 
 [[bench]]
-name = "f32_hypot"
+name = "hypotf"
 harness = false
 
 [[bench]]
-name = "f32_ldexp"
+name = "ldexpf"
 harness = false
 
 [[bench]]
-name = "f32_lgamma"
+name = "lgammaf"
 harness = false
 
 [[bench]]
-name = "f32_ln_1p"
+name = "log1pf"
 harness = false
 
 [[bench]]
-name = "f32_ln"
+name = "logf"
 harness = false
 
 [[bench]]
-name = "f32_log2"
+name = "log2f"
 harness = false
 
 [[bench]]
-name = "f32_log10"
+name = "log10f"
 harness = false
 
 [[bench]]
-name = "f32_powf"
+name = "powf"
 harness = false
 
 [[bench]]
-name = "f32_round"
+name = "roundf"
 harness = false
 
 [[bench]]
-name = "f32_sin_cos"
+name = "sincosf"
 harness = false
 
 [[bench]]
-name = "f32_sin"
+name = "sinf"
 harness = false
 
 [[bench]]
-name = "f32_sinh"
+name = "sinhf"
 harness = false
 
 [[bench]]
-name = "f32_tan"
+name = "tanf"
 harness = false
 
 [[bench]]
-name = "f32_tanh"
+name = "tanhf"
 harness = false
 
 [[bench]]
-name = "f32_tgamma"
+name = "tgammaf"
 harness = false
 
 [[bench]]
-name = "f64_acos"
+name = "acos"
 harness = false
 
 [[bench]]
-name = "f64_acosh"
+name = "acosh"
 harness = false
 
 [[bench]]
-name = "f64_asin"
+name = "asin"
 harness = false
 
 [[bench]]
-name = "f64_asinh"
+name = "asinh"
 harness = false
 
 [[bench]]
-name = "f64_atan"
+name = "atan"
 harness = false
 
 [[bench]]
-name = "f64_atan2"
+name = "atan2"
 harness = false
 
 [[bench]]
-name = "f64_atanh"
+name = "atanh"
 harness = false
 
 [[bench]]
-name = "f64_cbrt"
+name = "cbrt"
 harness = false
 
 [[bench]]
-name = "f64_cosh"
+name = "cosh"
 harness = false
 
 [[bench]]
-name = "f64_erf"
+name = "erf"
 harness = false
 
 [[bench]]
-name = "f64_erfc"
+name = "erfc"
 harness = false
 
 [[bench]]
-name = "f64_exp_m1"
+name = "expm1"
 harness = false
 
 [[bench]]
-name = "f64_exp"
+name = "exp"
 harness = false
 
 [[bench]]
-name = "f64_exp2"
+name = "exp2"
 harness = false
 
 [[bench]]
-name = "f64_exp10"
+name = "exp10"
 harness = false
 
 [[bench]]
-name = "f64_frexp"
+name = "frexp"
 harness = false
 
 [[bench]]
-name = "f64_hypot"
+name = "hypot"
 harness = false
 
 [[bench]]
-name = "f64_ldexp"
+name = "ldexp"
 harness = false
 
 [[bench]]
-name = "f64_ln_1p"
+name = "log1p"
 harness = false
 
 [[bench]]
-name = "f64_ln"
+name = "log"
 harness = false
 
 [[bench]]
-name = "f64_log2"
+name = "log2"
 harness = false
 
 [[bench]]
-name = "f64_log10"
+name = "log10"
 harness = false
 
 [[bench]]
-name = "f64_powf"
+name = "pow"
 harness = false
 
 [[bench]]
-name = "f64_round"
+name = "round"
 harness = false
 
 [[bench]]
-name = "f64_sin"
+name = "sin"
 harness = false
 
 [[bench]]
-name = "f64_sin_cos"
+name = "sincos"
 harness = false
 
 [[bench]]
-name = "f64_cos"
+name = "cos"
 harness = false
 
 [[bench]]
-name = "f64_tan"
+name = "tan"
 harness = false
 
 [[bench]]
-name = "f64_sinh"
+name = "sinh"
 harness = false
 
 [[bench]]
-name = "f64_tanh"
+name = "tanh"
 harness = false
 
 [[bench]]
-name = "f64_tgamma"
+name = "tgamma"
 harness = false
 
 [[bench]]
-name = "f64_lgamma"
+name = "lgamma"
 harness = false
