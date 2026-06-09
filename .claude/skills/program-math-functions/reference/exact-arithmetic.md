@@ -3,7 +3,7 @@
 The bits you lose to rounding are the bits between a "looks fine" function and a
 correctly-rounded one. This file collects the tools for tracking and controlling
 that error. In metallic-rs they appear as the `Sum` double-double type, the
-`f64::mul_add`-based error-free transforms, and the hand-compensated tails in the
+`crate::fma`-based error-free transforms, and the hand-compensated tails in the
 kernels.
 
 ## Rounding modes
@@ -14,7 +14,7 @@ accumulated error of an n-step sum grows like O(√n) instead of the O(n) you ge
 from a biased mode like round-toward-zero.
 
 **Rust is effectively RN-only.** `std` has no portable `fesetround`; all the
-arithmetic operators and `mul_add` round to nearest. Treat this as a constraint to
+arithmetic operators and the FMA round to nearest. Treat this as a constraint to
 exploit, not a limitation: every algorithm here can assume RN, and correct
 rounding only has to be proven for one mode (see
 [correct-rounding.md](correct-rounding.md)).
@@ -44,11 +44,12 @@ These compute `op(a, b)` **and** the rounding error exactly, as a pair `(s, e)`
 with `s + e == a op b` mathematically and `s = fl(a op b)`.
 
 **TwoProduct via FMA — the default here.** Rust's `f64::mul_add` is a true,
-correctly-rounded FMA on every target, so the exact product is one line:
+correctly-rounded FMA on every target; the crate exposes it as `crate::fma`
+(call that, not the clippy-denied builtin), so the exact product is one line:
 
 ```rust
 let s = a * b;
-let e = a.mul_add(b, -s);   // s + e == a * b exactly
+let e = crate::fma(a, b, -s);   // s + e == a * b exactly
 ```
 
 This is exactly what `Sum::from_product` does (`src/f64/kernel.rs`):
@@ -56,16 +57,17 @@ This is exactly what `Sum::from_product` does (`src/f64/kernel.rs`):
 ```rust
 pub fn from_product(x: f64, y: f64) -> Self {
     let high = x * y;
-    let low = x.mul_add(y, -high);   // true FMA — the exact tail
+    let low = crate::fma(x, y, -high);   // true FMA — the exact tail
     Self { high, low }
 }
 ```
 
-> Use the method form `a.mul_add(b, -s)` (true FMA) in every error-free transform.
-> Do **not** use the `crate::mul_add` helper here: it degrades to `x * y + a`
+> Use `crate::fma` (`crate::fmaf` for f32, true FMA) in every error-free
+> transform — never the builtin `f64::mul_add`/`f32::mul_add`, which clippy denies.
+> Do **not** use the `crate::fast_mul_add` helper here: it degrades to `x * y + a`
 > without the `fma` target feature and would silently destroy the `e` you are
-> trying to capture. `crate::mul_add` is for hot polynomial spots where a lost low
-> bit is acceptable, not for EFTs.
+> trying to capture. `crate::fast_mul_add` is for hot polynomial spots where a lost
+> low bit is acceptable, not for EFTs.
 
 **Fast2Sum** (Dekker) — requires `|a| >= |b|` (or `exp(a) >= exp(b)`). This is
 `fast_sum` in `src/f64/kernel.rs`:
@@ -97,7 +99,7 @@ robustness of the 2Sum and Fast2Sum algorithms*,
 
 **Dekker split — only without true FMA.** The C/WASM sibling splits each operand
 into two ~27-bit halves to multiply without FMA. You almost never need this in
-Rust because `mul_add` is always a real FMA; reach for it only if you are
+Rust because `crate::fma` is always a real FMA; reach for it only if you are
 deliberately writing a path that must run when even software FMA is too slow.
 
 **Free exact f32 products.** A product of two `f32` is exact in `f64`:
@@ -119,8 +121,8 @@ A value too precise for one `f64` is carried as `Sum { high, low }` with
   the gain for < 1 ulp work.
 - Hand-compensated tails: add the polynomial result to the low word *before* the
   high word, so the largest-magnitude term rounds last (compensated summation by
-  hand). The `crate::mul_add(y, x, x)` tails in `atanh`/`sin` fold the low word
-  back this way.
+  hand). The `crate::fast_mul_add(y, x, x)` tails in `atanh`/`sin` fold the low
+  word back this way.
 
 ## Practical guidance
 
@@ -128,8 +130,8 @@ A value too precise for one `f64` is carried as `Sum { high, low }` with
   the argument-reduction residual, and the final add-back). Carrying `Sum`
   everywhere is slow and rarely necessary for < 1 ulp.
 - Keep the largest-magnitude term for last in a hand-compensated sum.
-- In EFTs and compensation, always use the method `f64::mul_add` (true FMA), never
-  `crate::mul_add`.
+- In EFTs and compensation, always use `crate::fma` / `crate::fmaf` (true FMA),
+  never `crate::fast_mul_add`.
 - For an `f32` function, computing the kernel in `f64` and rounding once at the end
   is the simplest route to a correctly-rounded `f32`.
 - When you genuinely need a correctly-rounded last step from a wider intermediate,

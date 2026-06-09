@@ -350,8 +350,15 @@ fn ratio_1ps(s: f64) -> DoubleDouble {
     // tl = (ph − th·qh − th·ql + pl)/qh, evaluated from `iqh` alone: the rounding
     // error of `th`, plus the reciprocal residual `(1 − qh·iqh)` and `−ql·iqh`
     // amplified by `ph`, all scaled by `iqh`.
-    let tl =
-        f64::mul_add(ph, iqh, -th) + (pl + ph * (f64::mul_add(-qh, iqh, 1.0) - ql * iqh)) * iqh;
+    let tl = crate::fast_mul_add(
+        crate::fast_mul_add(
+            ph,
+            crate::fast_mul_add(-ql, iqh, crate::fma(-qh, iqh, 1.0)),
+            pl,
+        ),
+        iqh,
+        crate::fma(ph, iqh, -th),
+    );
     DoubleDouble { high: th, low: tl }
 }
 

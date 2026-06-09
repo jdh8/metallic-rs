@@ -75,7 +75,7 @@ pub fn sin(x: f64) -> f32 {
         -1.984_126_982_945_719_3e-4, 2.755_731_358_196_805e-6,
         -2.505_074_230_488_205e-8, 1.589_594_452_434_234_8e-10,
     ]);
-    crate::mul_add(y, x, x) as f32        // x + x·g(x²), low word folded in last
+    crate::fast_mul_add(y, x, x) as f32   // x + x·g(x²), low word folded in last
 }
 ```
 
@@ -134,8 +134,9 @@ friendly scheme internally, so:
 - Coefficients go **low-degree first** in the slice (`c[0]` lowest), matching the
   order `poly_array` expects.
 - **Compensated / two-word** evaluation is still your job when the last few terms
-  decide the final bit: fold a low word back in with `f64::mul_add` or a `Sum`, as
-  the kernels do with the `crate::mul_add(y, x, x)` tail. You rarely need this for
+  decide the final bit: fold a low word back in with `crate::fast_mul_add` or a
+  `Sum`, as the kernels do with the `crate::fast_mul_add(y, x, x)` tail. You rarely
+  need this for
   the whole polynomial — only the leading term(s) and the add-back.
 
 Guidance: get it correct with `crate::poly` first; only restructure (split

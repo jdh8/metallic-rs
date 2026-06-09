@@ -2360,8 +2360,11 @@ fn erfc_eval(x: f64, anchor: f64, coeffs: &[DoubleDouble], fast: bool) -> (Doubl
     let t = if fast {
         let iqh = 1.0 / d.high;
         let th = 2.0 * iqh;
-        let tl = f64::mul_add(2.0, iqh, -th)
-            + 2.0 * (f64::mul_add(-d.high, iqh, 1.0) - d.low * iqh) * iqh;
+        let tl = crate::fast_mul_add(
+            2.0 * crate::fast_mul_add(-d.low, iqh, crate::fma(-d.high, iqh, 1.0)),
+            iqh,
+            crate::fma(2.0, iqh, -th),
+        );
         DoubleDouble { high: th, low: tl }
     } else {
         d.recip() * 2.0

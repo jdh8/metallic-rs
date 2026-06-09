@@ -58,10 +58,11 @@ a real structural advantage:
 So a from-scratch, **RN-only, correctly-rounded** kernel can plausibly be *faster
 than CORE-MATH* while matching its accuracy — that is the opening this library takes,
 rather than copying a general-purpose design wholesale. And unlike the WASM sibling,
-**you may lean on FMA freely**: Rust's `f64::mul_add` is a true FMA on every target
-(see [exact-arithmetic.md](exact-arithmetic.md)), so FMA-saturated Ziv levels and
-compensated evaluation are fine here — just remember the `crate::mul_add` helper is
-*not* an EFT.
+**you may lean on FMA freely**: Rust's `f64::mul_add` is a true FMA on every target,
+wrapped as `crate::fma`/`crate::fmaf` (call those, not the clippy-denied builtin;
+see [exact-arithmetic.md](exact-arithmetic.md)), so FMA-saturated Ziv levels and
+compensated evaluation are fine here — just remember the `crate::fast_mul_add`
+helper is *not* an EFT.
 
 ## Sources to reference and oracles to test against
 

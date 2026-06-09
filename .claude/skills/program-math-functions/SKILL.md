@@ -89,18 +89,26 @@ everywhere.
 
 **FMA is available and exact — use it.** Unlike the WASM sibling, Rust's
 `f64::mul_add` is a *true*, correctly-rounded fused multiply-add on every target
-(hardware when `target_feature=fma`, correct software FMA otherwise). So
-FMA-based error-free transforms are the default here:
+(hardware when `target_feature=fma`, correct software FMA otherwise). The crate
+wraps it as `crate::fma` (f64) and `crate::fmaf` (f32) — **call those, never
+`f64::mul_add` directly** (clippy denies the builtin), and never hand-write a raw
+`a * b + c` (clippy denies `suboptimal_flops`). FMA-based error-free transforms
+are the default here:
 
-- `let e = a.mul_add(b, -(a * b));` gives the exact product tail. `Sum::from_product`
-  already does this. Prefer it over a Dekker split.
-- **Hazard:** the `crate::mul_add` helper (`src/lib.rs`) degrades to `x * y + a`
-  when the `fma` target feature is *off*, trading accuracy for speed. It is
-  therefore **not** an error-free transform. In EFTs and compensation steps call
-  the real `f64::mul_add` (method form) directly; reserve `crate::mul_add` for
-  hot polynomial-style spots where a lost low bit doesn't matter. Recommend
-  building with `-Ctarget-cpu=native` (see README) so the helper maps to hardware
-  FMA.
+- `let e = crate::fma(a, b, -(a * b));` gives the exact product tail.
+  `Sum::from_product` already does this. Prefer it over a Dekker split.
+- **Hazard:** the `crate::fast_mul_add` helper (re-exported at the crate root)
+  degrades to `x * y + a` when the `fma` target feature is *off*, trading
+  accuracy for speed. It is therefore **not** an error-free transform. In EFTs
+  and compensation steps use `crate::fma` / `crate::fmaf`; reserve
+  `crate::fast_mul_add` for hot polynomial-style spots where a lost low bit
+  doesn't matter. Recommend building with `-Ctarget-cpu=native` (see README) so
+  the helper maps to hardware FMA.
+
+  **Rule:** exact FMA → `crate::fma` / `crate::fmaf`; otherwise →
+  `crate::fast_mul_add`, never a raw `a * b + c`. (No f32 `fast_mul_add` exists
+  yet — f32 hot paths promote to f64 and call `crate::fast_mul_add`; add a
+  `fast_mul_addf` mirroring `fmaf` if a true f32-precision one is ever needed.)
 
 **Coefficient arrays.** Minimax coefficients go in a slice passed to
 `crate::poly`, low-degree first. Keep the generator command in a `///` doc
@@ -137,7 +145,7 @@ comment above the array so the coefficients are reproducible (see
 
 5. **Evaluate** with `crate::poly` / `rational_array` and add the **compensation
    terms** that buy the last bits — fold the low word back in with
-   `f64::mul_add` or a `Sum`. See
+   `crate::fma` or a `Sum`. See
    [reference/exact-arithmetic.md](reference/exact-arithmetic.md) and
    [reference/approximation.md](reference/approximation.md).
 
@@ -186,7 +194,7 @@ pub fn log2(x: f64) -> f64 {
     let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT;
     let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);
     // log2(x) = exponent + 2·log2(e)·atanh((x-1)/(x+1)) — odd kernel in a tiny range
-    crate::mul_add(2.0 * consts::LOG2_E, atanh((x - 1.0) / (x + 1.0)), exponent as f64)
+    crate::fast_mul_add(2.0 * consts::LOG2_E, atanh((x - 1.0) / (x + 1.0)), exponent as f64)
 }
 ```
 

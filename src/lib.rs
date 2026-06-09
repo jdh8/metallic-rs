@@ -1,6 +1,10 @@
 #![doc = include_str!("../README.md")]
 #![warn(clippy::pedantic, clippy::nursery)]
 #![warn(missing_docs)]
+// FMA discipline: never call the builtin `mul_add` directly and never hand-write
+// a raw `a * b + c`.  Use `crate::fma`/`crate::fmaf` for exact (error-free)
+// transforms, or `crate::fast_mul_add` for hot polynomial spots.
+#![deny(clippy::suboptimal_flops, clippy::disallowed_methods)]
 // `!(x <= bound)` / `!(x >= bound)` are deliberate NaN-propagating domain
 // guards — unlike `x > bound`, they route NaN down the reject branch.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
