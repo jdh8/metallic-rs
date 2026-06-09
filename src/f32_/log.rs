@@ -1,6 +1,4 @@
-use crate::f64::EXP_SHIFT as F64_EXP_SHIFT;
-use crate::f64::double::{DoubleDouble, fast_sum};
-use core::num::FpCategory;
+use crate::f64_::EXP_SHIFT as F64_EXP_SHIFT;
 
 /// Polynomial approximation of inverse hyperbolic tangent restricted to
 /// `-c..=c`, where
@@ -25,28 +23,6 @@ pub(super) fn atanh(x: f64) -> f64 {
         ],
     );
     crate::fast_mul_add(y, x, x)
-}
-
-/// Base 2 logarithm for a finite positive `f64`
-#[inline]
-fn log2_f64(x: f64) -> f64 {
-    use core::f64::consts;
-
-    #[allow(clippy::cast_possible_wrap)]
-    let i = x.to_bits() as i64;
-
-    #[allow(clippy::cast_possible_wrap)]
-    let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
-
-    #[allow(clippy::cast_sign_loss)]
-    let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
-
-    #[allow(clippy::cast_precision_loss)]
-    crate::fast_mul_add(
-        2.0 * consts::LOG2_E,
-        atanh((x - 1.0) / (x + 1.0)),
-        exponent as f64,
-    )
 }
 
 /// Natural logarithm
@@ -176,90 +152,4 @@ pub fn log10(x: f32) -> f32 {
             crate::fast_mul_add(LOG10_2_HI, exponent.into(), x) as f32
         }
     }
-}
-
-/// Round a double-double down to `f32`, free of double rounding.
-///
-/// A bare `(high + low) as f32` rounds twice — to `f64`, then to `f32` — and can
-/// land on the wrong side of an `f32` midpoint.  Instead round the pair *to odd*
-/// into an `f64` whose last mantissa bit encodes the sign of the tail, then let
-/// the hardware `as f32` (round-to-nearest-even) finish: an odd `f64` mantissa is
-/// never an `f32` grid point or midpoint, so the second rounding is unambiguous.
-#[inline]
-fn round_to_f32(value: DoubleDouble) -> f32 {
-    // Renormalize so `|low| ≤ ½ ulp(high)`; the product/reciprocal above may leave
-    // the pair slightly denormalized.
-    let DoubleDouble { high, low } = fast_sum(value.high, value.low);
-    if low == 0.0 {
-        return high as f32;
-    }
-    let bits = high.to_bits();
-    let odd = if bits & 1 == 1 {
-        high // already odd: the exact value rounds to odd here
-    } else {
-        // Step one `f64` ulp toward the tail so the kept value is the odd neighbor.
-        let up = (bits >> 63 == 0) == (low > 0.0);
-        f64::from_bits(if up { bits + 1 } else { bits - 1 })
-    };
-    odd as f32
-}
-
-/// Whether the `f64` quotient `q` lies dangerously close to an `f32` midpoint,
-/// the Ziv trigger below.
-///
-/// Rounding a normal `f64` to `f32` discards the low 29 mantissa bits; the
-/// midpoint is exactly bit 28 set, so the 29-bit residual measures the distance
-/// to it.  Slow-path when that residual is within `BAND` of `2²⁸`.  `log`'s
-/// result is always a normal `f32` (its magnitude is in `±[2⁻³², 2³²]`), so the
-/// 29-bit cut never shifts.
-#[inline]
-const fn near_f32_midpoint(q: f64) -> bool {
-    // The fast quotient's measured error is ≤ 2⁻²⁵·⁷ of a half-ulp, i.e. ≲ 8 of
-    // these residual units (half-ulp = 2²⁸ units); `BAND = 2⁸` keeps a ~32× margin.
-    const BAND: i64 = 1 << 8;
-    let residual = (q.to_bits() & 0x1FFF_FFFF) as i64;
-    (residual - (1 << 28)).abs() < BAND
-}
-
-/// Logarithm with arbitrary base
-#[must_use]
-#[inline]
-pub fn log(x: f32, base: f32) -> f32 {
-    #[inline]
-    fn log2_inner(x: f32) -> f64 {
-        match (x.is_sign_negative(), x.classify()) {
-            (false, FpCategory::Infinite) => f64::INFINITY,
-            (_, FpCategory::Zero) => f64::NEG_INFINITY,
-            (true, _) | (_, FpCategory::Nan) => f64::NAN,
-            _ => log2_f64(x.into()),
-        }
-    }
-
-    // Non-finite / non-positive inputs, and `base == 1` (where `log2(base) = 0`),
-    // give ∞/0/NaN that the plain `f64` ratio already rounds correctly.
-    if !(x.is_finite() && x > 0.0 && base.is_finite() && base > 0.0) || base == 1.0 {
-        return (log2_inner(x) / log2_inner(base)) as f32;
-    }
-
-    // Fast path: the single-`f64` quotient is accurate to ≤ 2⁻⁴⁹ relative (≈2⁻²⁵·⁷
-    // of an `f32` half-ulp, measured), so `q as f32` is correctly rounded unless
-    // `q` sits within that error of an `f32` midpoint.  The slow path then runs for
-    // only ~2⁻²⁰ of inputs.
-    let q = log2_f64(x.into()) / log2_f64(base.into());
-    if !near_f32_midpoint(q) {
-        return q as f32;
-    }
-    log_accurate(x, base)
-}
-
-/// Correctly-rounded `log(x, base)` for the rare near-midpoint case, kept out of
-/// line so its heavy double-double machinery does not bloat [`log`]'s hot path.
-///
-/// Forms `log2(x) / log2(base)` as a double-double (≈2⁻⁹⁴, far past `f32`) and
-/// rounds once — exactly `f64::log`'s scheme, a precision tier down.
-#[cold]
-#[inline(never)]
-fn log_accurate(x: f32, base: f32) -> f32 {
-    let ratio = crate::f64::pow::log2_dd(x.into()) * crate::f64::pow::log2_dd(base.into()).recip();
-    round_to_f32(ratio)
 }

@@ -1,7 +1,7 @@
 //! Power function `xʸ = 2^(y·log₂x)`, correctly rounded.
 //!
 //! The double-double `log₂`/`exp2` kernels here are shared with the f32
-//! [`powf`](crate::f32::powf): they already run in f64 double-double, since even
+//! [`powf`](crate::f32_::powf): they already run in f64 double-double, since even
 //! for an f32 result the error in `log₂x` is amplified by `y`.  This module hosts
 //! them (crate-visible) and adds the f64-output `exp2_dd`/`powf_core`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]

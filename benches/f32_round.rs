@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f32::round, ..);
+bench!(bench_metallic, metallic::roundf, ..);
 bench!(bench_std, f32::round, ..);
 bench!(bench_libm, libm::roundf, ..);
 

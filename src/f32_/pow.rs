@@ -1,5 +1,5 @@
-use crate::f64::double::{DoubleDouble, fast_ldexp, round_general};
-use crate::f64::pow::{EXP2_CE, EXP2_FAST, log2_dd, log2_fast_path, poly_dd};
+use crate::f64_::double::{DoubleDouble, fast_ldexp, round_general};
+use crate::f64_::pow::{EXP2_CE, EXP2_FAST, log2_dd, log2_fast_path, poly_dd};
 use core::cmp::Ordering;
 use core::num::FpCategory;
 

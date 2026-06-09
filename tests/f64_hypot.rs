@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 /// Test cases stressing the hard-rounding regime and the full magnitude range.
 fn cases() -> impl Iterator<Item = [f64; 2]> {
@@ -39,5 +38,5 @@ fn cases() -> impl Iterator<Item = [f64; 2]> {
 
 #[test]
 fn test_hypot() {
-    common::test_bivariate_cases(metal::hypot, core_math::hypot, cases());
+    common::test_bivariate_cases(metallic::hypot, core_math::hypot, cases());
 }

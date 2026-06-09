@@ -84,7 +84,7 @@ pub use erf::{erf, erfc};
 pub use exp::{exp, exp_m1, exp2, exp10, frexp, ldexp};
 pub use gamma::{lgamma, tgamma};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
-pub use log::{ln, ln_1p, log, log2, log10};
+pub use log::{ln, ln_1p, log2, log10};
 pub use misc::{cbrt, hypot, round};
 pub use pow::powf;
 pub use trig::{cos, sin, sin_cos, tan};

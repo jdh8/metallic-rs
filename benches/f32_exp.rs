@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f32::exp, -105.0..=90.0);
+bench!(bench_metallic, metallic::expf, -105.0..=90.0);
 bench!(bench_core_math, core_math::expf, -105.0..=90.0);
 bench!(bench_std, f32::exp, -105.0..=90.0);
 bench!(bench_libm, libm::expf, -105.0..=90.0);

@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::hypot, .., ..);
+bench!(bench_metallic, metallic::hypot, .., ..);
 bench!(bench_core_math, core_math::hypot, .., ..);
 bench!(bench_std, f64::hypot, .., ..);
 bench!(bench_libm, libm::hypot, .., ..);

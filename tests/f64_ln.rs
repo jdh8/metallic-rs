@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 /// Bit-pattern sweep plus a dense sweep of [0.5, 2] (the cancellation region near 1).
 fn log_inputs() -> impl Iterator<Item = f64> {
@@ -11,5 +10,5 @@ fn log_inputs() -> impl Iterator<Item = f64> {
 
 #[test]
 fn test_ln() {
-    common::test_univariate_cases(metal::ln, core_math::log, log_inputs());
+    common::test_univariate_cases(metallic::log, core_math::log, log_inputs());
 }

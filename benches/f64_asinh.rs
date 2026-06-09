@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::asinh, ..);
+bench!(bench_metallic, metallic::asinh, ..);
 bench!(bench_core_math, core_math::asinh, ..);
 bench!(bench_std, f64::asinh, ..);
 bench!(bench_libm, libm::asinh, ..);

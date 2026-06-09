@@ -47,14 +47,6 @@ bench = false
 # Generators for the hard-to-round corpora; need the MPFR oracle, so gate them
 # behind `mpfr` to keep them out of the default build.
 [[example]]
-name = "gen_f32_log_cases"
-required-features = ["mpfr"]
-
-[[example]]
-name = "gen_f64_log_cases"
-required-features = ["mpfr"]
-
-[[example]]
 name = "gen_f64_tgamma_cases"
 required-features = ["mpfr"]
 
@@ -136,10 +128,6 @@ harness = false
 
 [[bench]]
 name = "f32_ln"
-harness = false
-
-[[bench]]
-name = "f32_log"
 harness = false
 
 [[bench]]
@@ -260,10 +248,6 @@ harness = false
 
 [[bench]]
 name = "f64_ln"
-harness = false
-
-[[bench]]
-name = "f64_log"
 harness = false
 
 [[bench]]

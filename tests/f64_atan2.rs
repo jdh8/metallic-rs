@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 #[test]
 fn test_atan2() {
@@ -17,5 +16,5 @@ fn test_atan2() {
         let x = f64::from_bits(i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xDEAD);
         [y, x]
     });
-    common::test_bivariate_cases(metal::atan2, core_math::atan2, grid.chain(wide));
+    common::test_bivariate_cases(metallic::atan2, core_math::atan2, grid.chain(wide));
 }

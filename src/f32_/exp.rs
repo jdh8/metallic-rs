@@ -1,5 +1,5 @@
 use super::{EXP_SHIFT, LN_2_HI, LN_2_LO, Magnitude, normalize};
-use crate::f64::double::fast_ldexp;
+use crate::f64_::double::fast_ldexp;
 
 /// Polynomial approximation of restriction of `(exp(x) - 1) / x`
 /// to `-0.5 * ln(2) ..= 0.5 * ln(2)`
@@ -266,7 +266,9 @@ pub const fn ldexp(x: f32, n: i32) -> f32 {
 
     let coefficient = match n {
         ..MIN_EXP => 0.5 * f64::MIN_POSITIVE,
-        n @ MIN_EXP..MAX_EXP => f64::from_bits(((MAX_EXP - 1 + n) as u64) << crate::f64::EXP_SHIFT),
+        n @ MIN_EXP..MAX_EXP => {
+            f64::from_bits(((MAX_EXP - 1 + n) as u64) << crate::f64_::EXP_SHIFT)
+        }
         MAX_EXP.. => f64::MAX,
     };
 

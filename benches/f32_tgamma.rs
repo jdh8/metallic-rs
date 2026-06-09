@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f32::tgamma, -10.0..=35.0);
+bench!(bench_metallic, metallic::tgammaf, -10.0..=35.0);
 bench!(bench_core_math, core_math::tgammaf, -10.0..=35.0);
 bench!(bench_libm, libm::tgammaf, -10.0..=35.0);
 

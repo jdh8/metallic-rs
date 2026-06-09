@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::log10, 0.0..);
+bench!(bench_metallic, metallic::log10, 0.0..);
 bench!(bench_core_math, core_math::log10, 0.0..);
 bench!(bench_std, f64::log10, 0.0..);
 bench!(bench_libm, libm::log10, 0.0..);

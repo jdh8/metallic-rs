@@ -1,5 +1,4 @@
 mod common;
-use metallic::f32 as metal;
 
 #[test]
 fn test_parser() {
@@ -9,7 +8,7 @@ fn test_parser() {
 #[test]
 fn test_powf() {
     common::test_bivariate_cases(
-        metal::powf,
+        metallic::powf,
         core_math::powf,
         common::parse_case_file("powf.wc", common::parse_f32_pair),
     );

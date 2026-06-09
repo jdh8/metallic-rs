@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 #[test]
 fn test_cos() {
@@ -10,5 +9,5 @@ fn test_cos() {
     let wide = (0..=2_000_000)
         .map(|i| metallic::correct_mul_add(f64::from(i), 2.0e8 / 2_000_000.0, -1.0e8));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
-    common::test_univariate_cases(metal::cos, core_math::cos, dense.chain(wide).chain(bits));
+    common::test_univariate_cases(metallic::cos, core_math::cos, dense.chain(wide).chain(bits));
 }

@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 #[test]
 fn test_asin() {
@@ -14,5 +13,9 @@ fn test_asin() {
             let x = common::parse_f64(s).unwrap();
             [x, -x]
         });
-    common::test_univariate_cases(metal::asin, core_math::asin, dense.chain(bits).chain(hard));
+    common::test_univariate_cases(
+        metallic::asin,
+        core_math::asin,
+        dense.chain(bits).chain(hard),
+    );
 }

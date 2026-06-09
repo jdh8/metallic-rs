@@ -1,28 +1,27 @@
 mod common;
 use common::Identity as _;
-use metallic::f64 as metal;
 
 #[test]
 fn test_lgamma_exact() {
     // Exact zeros at Γ(1) = Γ(2) = 1 and the √π / 2√π half-integer values.
-    assert!(metal::lgamma(1.0).eq(&0.0));
-    assert!(metal::lgamma(2.0).eq(&0.0));
-    assert!(metal::lgamma(0.5).eq(&5.723_649_429_247_001e-1)); // ln √π
-    assert!(metal::lgamma(-0.5).eq(&1.265_512_123_484_645_4)); // ln 2√π
-    assert!(metal::lgamma(3.0).eq(&core::f64::consts::LN_2)); // ln 2! = ln 2
+    assert!(metallic::lgamma(1.0).eq(&0.0));
+    assert!(metallic::lgamma(2.0).eq(&0.0));
+    assert!(metallic::lgamma(0.5).eq(&5.723_649_429_247_001e-1)); // ln √π
+    assert!(metallic::lgamma(-0.5).eq(&1.265_512_123_484_645_4)); // ln 2√π
+    assert!(metallic::lgamma(3.0).eq(&core::f64::consts::LN_2)); // ln 2! = ln 2
 
     // Poles and infinities: non-positive integers → +∞.
-    assert!(metal::lgamma(0.0).eq(&f64::INFINITY));
-    assert!(metal::lgamma(-0.0).eq(&f64::INFINITY));
-    assert!(metal::lgamma(-1.0).eq(&f64::INFINITY));
-    assert!(metal::lgamma(-100.0).eq(&f64::INFINITY));
-    assert!(metal::lgamma(-1e6).eq(&f64::INFINITY)); // large integer → pole
-    assert!(metal::lgamma(f64::INFINITY).eq(&f64::INFINITY));
-    assert!(metal::lgamma(f64::NEG_INFINITY).eq(&f64::INFINITY)); // even integer pole
-    assert!(metal::lgamma(f64::NAN).is_nan());
+    assert!(metallic::lgamma(0.0).eq(&f64::INFINITY));
+    assert!(metallic::lgamma(-0.0).eq(&f64::INFINITY));
+    assert!(metallic::lgamma(-1.0).eq(&f64::INFINITY));
+    assert!(metallic::lgamma(-100.0).eq(&f64::INFINITY));
+    assert!(metallic::lgamma(-1e6).eq(&f64::INFINITY)); // large integer → pole
+    assert!(metallic::lgamma(f64::INFINITY).eq(&f64::INFINITY));
+    assert!(metallic::lgamma(f64::NEG_INFINITY).eq(&f64::INFINITY)); // even integer pole
+    assert!(metallic::lgamma(f64::NAN).is_nan());
 
     // Grows without overflow until ~1.4e306; remains finite at 1e300.
-    assert!(metal::lgamma(1e300).is_finite());
+    assert!(metallic::lgamma(1e300).is_finite());
 }
 
 /// Regression guard over the frozen hard-to-round corpus.
@@ -43,7 +42,7 @@ fn test_lgamma_corpus() {
     );
 
     common::truncate_errors(cases.into_iter().filter_map(|[z, want]| {
-        let got = metal::lgamma(z);
+        let got = metallic::lgamma(z);
         (!got.is(&want)).then(|| println!("lgamma({z:e}) = {got:e} != {want:e} (correct)"))
     }));
 }
@@ -76,7 +75,7 @@ fn test_lgamma_vs_mpfr() {
         if z < 0.5 && (z - z.round()).abs() < 1.0 / 1024.0 {
             return None;
         }
-        let got = metal::lgamma(z);
+        let got = metallic::lgamma(z);
         let want = cr(z);
         (!got.is(&want)).then(|| println!("lgamma({z:e}) = {got:e} != {want:e} (correct)"))
     }));

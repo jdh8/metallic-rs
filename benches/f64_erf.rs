@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::erf, -6.0..=6.0);
+bench!(bench_metallic, metallic::erf, -6.0..=6.0);
 bench!(bench_core_math, core_math::erf, -6.0..=6.0);
 bench!(bench_libm, libm::erf, -6.0..=6.0);
 

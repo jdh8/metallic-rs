@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::cos, ..);
+bench!(bench_metallic, metallic::cos, ..);
 bench!(bench_core_math, core_math::cos, ..);
 bench!(bench_std, f64::cos, ..);
 bench!(bench_libm, libm::cos, ..);

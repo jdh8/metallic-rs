@@ -1,12 +1,11 @@
 mod common;
 use core::num::FpCategory;
-use metallic::f64 as metal;
 
 #[test]
 fn test_frexp() {
     (0..=u64::MAX).step_by((1 << 37) - 1337).for_each(|i| {
         let x = f64::from_bits(i);
-        let (significand, exponent) = metal::frexp(x);
+        let (significand, exponent) = metallic::frexp(x);
 
         match x.classify() {
             FpCategory::Nan => assert!(significand.is_nan()),
@@ -17,7 +16,10 @@ fn test_frexp() {
             }
             _ => {
                 assert!((0.5..1.0).contains(&significand.abs()), "frexp({x:e})");
-                assert_eq!(metal::ldexp(significand, exponent).to_bits(), x.to_bits());
+                assert_eq!(
+                    metallic::ldexp(significand, exponent).to_bits(),
+                    x.to_bits()
+                );
             }
         }
     });

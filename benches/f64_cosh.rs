@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f64::cosh, -710.0..=710.0);
+bench!(bench_metallic, metallic::cosh, -710.0..=710.0);
 bench!(bench_core_math, core_math::cosh, -710.0..=710.0);
 bench!(bench_std, f64::cosh, -710.0..=710.0);
 bench!(bench_libm, libm::cosh, -710.0..=710.0);

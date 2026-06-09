@@ -13,6 +13,17 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 [Metallic]: https://github.com/jdh8/metallic
 
+## Usage
+
+The functions follow the C / libm naming convention: bare names operate on
+`f64`, and the `f` suffix marks the `f32` variant, so the crate is a drop-in
+replacement for `libm` and `core-math`.
+
+```rust
+assert_eq!(metallic::exp(0.0), 1.0); // f64
+assert_eq!(metallic::expf(0.0_f32), 1.0); // f32
+```
+
 ## Enable [fused multiply-add][fma] for best performance
 
 This crate leans heavily on the fused multiply-add instruction.  Most modern
@@ -57,7 +68,7 @@ metallic = { version = "0.2.0", features = ["core-math"] }
 This would replace the following functions with those from
 [`core-math`][crate]:
 
-- `f32::powf`, which is notoriously hard to round correctly
+- `powf`, which is notoriously hard to round correctly
 
 [CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 [crate]: https://crates.io/crates/core-math
@@ -110,7 +121,7 @@ library is the default [rounding half to even][round-even].
 - [x] Real `f32`/`float` functions in [`<math.h>`][math]
   - [x] Exponential functions
   - [x] Logarithm with constant base
-  - [x] Power and logarithm with arbitrary base
+  - [x] Power with arbitrary base
   - [x] Trigonometric and hyperbolic functions
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)
@@ -118,7 +129,7 @@ library is the default [rounding half to even][round-even].
 - [x] Real `f64`/`double` functions in [`<math.h>`][math]
   - [x] Exponential functions
   - [x] Logarithm with constant base
-  - [x] Power and logarithm with arbitrary base
+  - [x] Power with arbitrary base
   - [x] Trigonometric and hyperbolic functions
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)

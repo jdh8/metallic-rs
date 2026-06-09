@@ -9,7 +9,7 @@ mod bench;
 // narrowed to stay in range.  See `bench::PositiveExponents`.
 bench!(
     bench_metallic,
-    metallic::f64::powf,
+    metallic::pow,
     bench::PositiveExponents(-20..=20),
     -48.0..=48.0
 );

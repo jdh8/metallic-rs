@@ -1201,7 +1201,7 @@ pub fn tgamma(z: f64) -> f64 {
 /// `ln(s) = ln(s.high) + ln(1 + s.low/s.high) ≈ ln_dd(s.high) + s.low/s.high`.
 #[inline]
 fn ln_sum(s: DoubleDouble) -> DoubleDouble {
-    crate::f64::ln_dd(s.high)
+    crate::f64_::ln_dd(s.high)
         + DoubleDouble {
             high: s.low / s.high,
             low: 0.0,
@@ -1211,7 +1211,7 @@ fn ln_sum(s: DoubleDouble) -> DoubleDouble {
 /// [`ln_sum`] with the lean `ln_fast` (≈2⁻⁶⁸ absolute) — the Ziv fast leg's log.
 #[inline]
 fn ln_fast_sum(s: DoubleDouble) -> DoubleDouble {
-    crate::f64::ln_fast(s.high)
+    crate::f64_::ln_fast(s.high)
         + DoubleDouble {
             high: s.low / s.high,
             low: 0.0,
@@ -1404,7 +1404,7 @@ fn lgamma_pos_fast(y: DoubleDouble) -> (DoubleDouble, f64) {
 /// The caller picks the tail length by `z` (see [`lgamma_fast`]).
 #[inline]
 fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
-    crate::f64::ln_fast(z) * (z - 0.5)
+    crate::f64_::ln_fast(z) * (z - 0.5)
         + neg(DoubleDouble { high: z, low: 0.0 })
         + HALF_LN_2PI
         + DoubleDouble {

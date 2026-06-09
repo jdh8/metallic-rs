@@ -1,32 +1,31 @@
 mod common;
 use common::Identity as _;
-use metallic::f64 as metal;
 
 #[test]
 fn test_tgamma_exact() {
     // Exact integer factorials and the half-integer √π values.
-    assert!(metal::tgamma(1.0).eq(&1.0));
-    assert!(metal::tgamma(2.0).eq(&1.0));
-    assert!(metal::tgamma(3.0).eq(&2.0));
-    assert!(metal::tgamma(6.0).eq(&120.0));
-    assert!(metal::tgamma(0.5).eq(&1.772_453_850_905_516)); // √π
-    assert!(metal::tgamma(-0.5).eq(&-3.544_907_701_811_032)); // −2√π
+    assert!(metallic::tgamma(1.0).eq(&1.0));
+    assert!(metallic::tgamma(2.0).eq(&1.0));
+    assert!(metallic::tgamma(3.0).eq(&2.0));
+    assert!(metallic::tgamma(6.0).eq(&120.0));
+    assert!(metallic::tgamma(0.5).eq(&1.772_453_850_905_516)); // √π
+    assert!(metallic::tgamma(-0.5).eq(&-3.544_907_701_811_032)); // −2√π
 
     // Poles and signed infinities.
-    assert!(metal::tgamma(0.0).eq(&f64::INFINITY));
-    assert!(metal::tgamma(-0.0).eq(&f64::NEG_INFINITY));
-    assert!(metal::tgamma(-1.0).is_nan());
-    assert!(metal::tgamma(-100.0).is_nan());
-    assert!(metal::tgamma(f64::NAN).is_nan());
+    assert!(metallic::tgamma(0.0).eq(&f64::INFINITY));
+    assert!(metallic::tgamma(-0.0).eq(&f64::NEG_INFINITY));
+    assert!(metallic::tgamma(-1.0).is_nan());
+    assert!(metallic::tgamma(-100.0).is_nan());
+    assert!(metallic::tgamma(f64::NAN).is_nan());
 
     // Overflow / underflow / infinities.
-    assert!(metal::tgamma(172.0).eq(&f64::INFINITY));
-    assert!(metal::tgamma(f64::INFINITY).eq(&f64::INFINITY));
-    assert!(metal::tgamma(f64::NEG_INFINITY).is_nan());
-    assert!(metal::tgamma(-200.5).eq(&0.0)); // even floor → +0
-    assert!(metal::tgamma(-200.3).eq(&-0.0)); // odd floor (−201) → −0
-    assert!(metal::tgamma(f64::from_bits(1)).eq(&f64::INFINITY)); // 1/z pole overflows
-    assert!(metal::tgamma(-f64::from_bits(1)).eq(&f64::NEG_INFINITY));
+    assert!(metallic::tgamma(172.0).eq(&f64::INFINITY));
+    assert!(metallic::tgamma(f64::INFINITY).eq(&f64::INFINITY));
+    assert!(metallic::tgamma(f64::NEG_INFINITY).is_nan());
+    assert!(metallic::tgamma(-200.5).eq(&0.0)); // even floor → +0
+    assert!(metallic::tgamma(-200.3).eq(&-0.0)); // odd floor (−201) → −0
+    assert!(metallic::tgamma(f64::from_bits(1)).eq(&f64::INFINITY)); // 1/z pole overflows
+    assert!(metallic::tgamma(-f64::from_bits(1)).eq(&f64::NEG_INFINITY));
 }
 
 /// Regression guard over the frozen hard-to-round corpus.
@@ -48,7 +47,7 @@ fn test_tgamma_corpus() {
     );
 
     common::truncate_errors(cases.into_iter().filter_map(|[z, want]| {
-        let got = metal::tgamma(z);
+        let got = metallic::tgamma(z);
         (!got.is(&want)).then(|| println!("tgamma({z:e}) = {got:e} != {want:e} (correct)"))
     }));
 }
@@ -82,7 +81,7 @@ fn test_tgamma_vs_mpfr() {
         if !(-179.5..171.6).contains(&z) || (z < 0.5 && (z - z.round()).abs() < 1.0 / 1024.0) {
             return None;
         }
-        let got = metal::tgamma(z);
+        let got = metallic::tgamma(z);
         let want = cr(z);
         (!got.is(&want)).then(|| println!("tgamma({z:e}) = {got:e} != {want:e} (correct)"))
     }));

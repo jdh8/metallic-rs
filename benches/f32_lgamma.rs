@@ -1,6 +1,6 @@
 mod bench;
 
-bench!(bench_metallic, metallic::f32::lgamma, -10.0..=35.0);
+bench!(bench_metallic, metallic::lgammaf, -10.0..=35.0);
 bench!(bench_core_math, core_math::lgammaf, -10.0..=35.0);
 bench!(bench_libm, libm::lgammaf, -10.0..=35.0);
 

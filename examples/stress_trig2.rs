@@ -1,5 +1,4 @@
 fn main() {
-    use metallic::f64 as m;
     // Representation-uniform bit sweep over all f64 (finite).
     let mut bad = [0u64; 3];
     let mut worst = [0i64; 3];
@@ -10,9 +9,12 @@ fn main() {
         if x.is_finite() {
             n += 1;
             for (k, (f, g)) in [
-                (m::sin as fn(f64) -> f64, core_math::sin as fn(f64) -> f64),
-                (m::cos, core_math::cos),
-                (m::tan, core_math::tan),
+                (
+                    metallic::sin as fn(f64) -> f64,
+                    core_math::sin as fn(f64) -> f64,
+                ),
+                (metallic::cos, core_math::cos),
+                (metallic::tan, core_math::tan),
             ]
             .into_iter()
             .enumerate()

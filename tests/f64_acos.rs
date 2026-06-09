@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 #[test]
 fn test_acos() {
@@ -21,5 +20,9 @@ fn test_acos() {
     ]
     .into_iter()
     .map(|s| common::parse_f64(s).unwrap());
-    common::test_univariate_cases(metal::acos, core_math::acos, dense.chain(bits).chain(hard));
+    common::test_univariate_cases(
+        metallic::acos,
+        core_math::acos,
+        dense.chain(bits).chain(hard),
+    );
 }

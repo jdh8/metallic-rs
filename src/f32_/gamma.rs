@@ -1,4 +1,4 @@
-use crate::f64::double::{DoubleDouble, fast_ldexp, round_general, round_signed};
+use crate::f64_::double::{DoubleDouble, fast_ldexp, round_general, round_signed};
 
 /// π as a double-double (needed for lgamma reflection)
 const PI: DoubleDouble = DoubleDouble {
@@ -232,7 +232,7 @@ fn sinpi(x: f32) -> f64 {
 /// a tiny correction folded into the double-double `ln`.
 #[inline]
 fn ln_sum(x: DoubleDouble) -> DoubleDouble {
-    crate::f64::ln_dd(x.high)
+    crate::f64_::ln_dd(x.high)
         + DoubleDouble {
             high: x.low / x.high,
             low: 0.0,
@@ -469,7 +469,7 @@ fn lgamma_pos_dd(y: f64) -> DoubleDouble {
     let u = 1.0 / (t * t);
     let rest = crate::poly(u, &LGAMMA_TAIL) * (u / t);
 
-    let stirling = crate::f64::ln_dd(t) * (t - 0.5)
+    let stirling = crate::f64_::ln_dd(t) * (t - 0.5)
         + DoubleDouble { high: -t, low: 0.0 }
         + HALF_LN_2PI
         + DoubleDouble::from_quotient(1.0, 12.0 * t)
@@ -539,7 +539,7 @@ fn lgamma_dd(z: f32) -> f32 {
     if z < 0.5 {
         // ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z), the reflection formula.
         let value = ln_sum(PI)
-            + neg(crate::f64::ln_dd(sinpi(z).abs()))
+            + neg(crate::f64_::ln_dd(sinpi(z).abs()))
             + neg(lgamma_pos_dd(1.0 - f64::from(z)));
         return round_signed(value);
     }

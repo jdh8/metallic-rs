@@ -1,5 +1,4 @@
 mod common;
-use metallic::f64 as metal;
 
 /// Map a 64-bit hash to a value-uniform `f64` in `[-half, half]`.
 fn signed(hash: u64, half: f64) -> f64 {
@@ -62,5 +61,5 @@ fn cases() -> impl Iterator<Item = [f64; 2]> {
 
 #[test]
 fn test_powf() {
-    common::test_bivariate_cases(metal::powf, core_math::pow, cases());
+    common::test_bivariate_cases(metallic::pow, core_math::pow, cases());
 }

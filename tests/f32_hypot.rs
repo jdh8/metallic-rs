@@ -1,5 +1,4 @@
 mod common;
-use metallic::f32 as metal;
 
 #[test]
 fn test_parser() {
@@ -9,7 +8,7 @@ fn test_parser() {
 #[test]
 fn test_hypot() {
     common::test_bivariate_cases(
-        metal::hypot,
+        metallic::hypotf,
         core_math::hypotf,
         common::parse_case_file("hypotf.wc", common::parse_f32_pair),
     );
