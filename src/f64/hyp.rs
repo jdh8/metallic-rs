@@ -322,6 +322,30 @@ pub fn acosh(x: f64) -> f64 {
     ln_sum_rounded(c + DoubleDouble { high: x, low: 0.0 }, 1.0)
 }
 
+/// `(1 + s)/(1 − s)` as a double-double for `s ∈ (0, 1)`, formed with a single
+/// `f64` division.
+///
+/// `1 ± s` are exact double-doubles (2Sum); one reciprocal `iqh = 1/qh` then
+/// drives the standard double-double division correction (all remaining steps
+/// FMAs), reaching ≈2⁻¹⁰⁶.  This is the atan "fuse the quotient" trick: it
+/// replaces the double-double reciprocal *plus* double-double product of the
+/// naive `from_sum(1, s) · from_sum(1, −s).recip()` with one division and a
+/// short FMA chain.
+#[inline]
+fn ratio_1ps(s: f64) -> DoubleDouble {
+    let DoubleDouble { high: ph, low: pl } = DoubleDouble::from_sum(1.0, s);
+    let DoubleDouble { high: qh, low: ql } = DoubleDouble::from_sum(1.0, -s);
+
+    let iqh = 1.0 / qh;
+    let th = ph * iqh;
+    // tl = (ph − th·qh − th·ql + pl)/qh, evaluated from `iqh` alone: the rounding
+    // error of `th`, plus the reciprocal residual `(1 − qh·iqh)` and `−ql·iqh`
+    // amplified by `ph`, all scaled by `iqh`.
+    let tl =
+        f64::mul_add(ph, iqh, -th) + (pl + ph * (f64::mul_add(-qh, iqh, 1.0) - ql * iqh)) * iqh;
+    DoubleDouble { high: th, low: tl }
+}
+
 /// Inverse hyperbolic tangent
 ///
 /// `atanh(x) = ½·ln((1 + x)/(1 − x))` for `|x| < 1`, odd.  Both `1 ± x` are
@@ -340,7 +364,7 @@ pub fn atanh(x: f64) -> f64 {
             }
 
             // (1 + |x|)/(1 − |x|) in double-double, then ½·ln of it.
-            let u = DoubleDouble::from_sum(1.0, s) * DoubleDouble::from_sum(1.0, -s).recip();
+            let u = ratio_1ps(s);
             ln_sum_rounded(u, 0.5).copysign(x)
         }
         Some(Ordering::Equal) => f64::INFINITY.copysign(x),
