@@ -406,16 +406,11 @@ pub fn ln_dd(x: f64) -> DoubleDouble {
     e_ln2 + DoubleDouble { high, low } + ln_1p_kernel(r)
 }
 
-/// Lean natural logarithm of a finite positive `x ≠ 1`, as a double-double.
-///
-/// Same decomposition as [`ln_dd`] but with the lean [`ln_1p_kernel_fast`], so it
-/// is ≈2⁻⁶⁸ absolute instead of ≈2⁻⁸⁷.  The log family's fast paths gate this
-/// against an accurate fallback ([`dint::ln_accurate`] for `ln`, `ln_dd` for
-/// `log2`/`log10`) with a Ziv test.
+/// Assemble `ln(2^e · m) = e·ln2 + L[i] + ln(1+r)` from a [`log_reduce`] result,
+/// with the lean [`ln_1p_kernel_fast`] — the shared core of [`ln_fast`] and
+/// [`ln_fast_scaled`].
 #[inline]
-pub fn ln_fast(x: f64) -> DoubleDouble {
-    let (e, i, r) = log_reduce(x);
-    let e = e as f64;
+fn ln_assemble(e: f64, i: usize, r: DoubleDouble) -> DoubleDouble {
     let (l_hi, l_lo) = L_TABLE[i];
 
     // EL = e·ln2 + L as a (possibly unnormalized) pair, off the kernel's critical
@@ -436,6 +431,31 @@ pub fn ln_fast(x: f64) -> DoubleDouble {
     let sum = DoubleDouble::from_sum(el.high, p.high);
     let low = sum.low + (el_low + p.low);
     fast_sum(sum.high, low)
+}
+
+/// Lean natural logarithm of a finite positive `x ≠ 1`, as a double-double.
+///
+/// Same decomposition as [`ln_dd`] but with the lean [`ln_1p_kernel_fast`], so it
+/// is ≈2⁻⁶⁸ absolute instead of ≈2⁻⁸⁷.  The log family's fast paths gate this
+/// against an accurate fallback ([`dint::ln_accurate`] for `ln`, `ln_dd` for
+/// `log2`/`log10`) with a Ziv test.
+#[inline]
+pub fn ln_fast(x: f64) -> DoubleDouble {
+    let (e, i, r) = log_reduce(x);
+    ln_assemble(e as f64, i, r)
+}
+
+/// Lean natural logarithm of `2^k · x`, as a double-double — [`ln_fast`] with the
+/// binary exponent biased by `k`.
+///
+/// `ln(2^k·x) = (e+k)·ln2 + L[i] + ln(1+r)`, so the scale folds into the
+/// reduction's exponent for free, avoiding a separate `+ k·ln2` double-double add.
+/// `(e+k)·LN2_HI` stays exact for `|e+k| ≤ 1074`.  Used by the inverse-hyperbolic
+/// large-|x| path (`ln(2|x|)`, `k = 1`).
+#[inline]
+pub fn ln_fast_scaled(x: f64, k: i64) -> DoubleDouble {
+    let (e, i, r) = log_reduce(x);
+    ln_assemble((e + k) as f64, i, r)
 }
 
 /// The natural logarithm

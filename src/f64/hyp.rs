@@ -1,6 +1,6 @@
 use super::double::{DoubleDouble, fast_ldexp, sqrt_dd};
 use super::exp::{exp_dd, exp_two_level_fast};
-use super::{ln_dd, ln_fast};
+use super::{ln_dd, ln_fast, ln_fast_scaled};
 use core::cmp::Ordering;
 
 /// `ln(2)` as a double-double (CORE-MATH's split, matching `log.rs`).
@@ -84,12 +84,13 @@ const LARGE_IHYP: f64 = 134_217_728.0;
 /// the correct negligible value, subsuming the old `ln(2x)`-only branch.
 #[inline]
 fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
-    // Fast leg: `ln_fast(s) + LN2` as a double-double, then fold `correction` into
+    // Fast leg: `ln(2s)` straight from the scaled reduction (the `×2` folds into
+    // the exponent, so no `+ LN2` double-double add), then fold `correction` into
     // the low word.  Since `s > 2²⁷`, the result is `≥ ln(2²⁸) ≈ 19` while
     // `|correction| = 0.25/s² ≤ 2⁻⁵⁶`, far below `ulp(high) ≥ 2⁻⁴⁸`, so it only
     // perturbs the low word — a single `f64` add instead of a second
     // double-double add.
-    let DoubleDouble { high, low } = ln_fast(s) + LN2;
+    let DoubleDouble { high, low } = ln_fast_scaled(s, 1);
     let low = low + correction;
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
