@@ -309,6 +309,20 @@ const LN1P_Q_COEFFS: [f64; 8] = [
     0.1111111111111111,
 ];
 
+/// Degree-5 truncation of [`LN1P_Q_COEFFS`] for the `ln_1p` tiny-`|x|` path, where
+/// the argument is a plain `f64` (not a reduced double-double).  Over `|x| < 1/256`
+/// the dropped `x⁷` term is `2⁻⁵⁹` relative — clear of the
+/// [`LN1P_SMALL_ZIV_REL`] `= 2⁻⁵⁶` gate (8× margin), and the rare straddle defers
+/// to the accurate [`ln_1p_kernel`].
+const LN1P_TINY_COEFFS: [f64; 6] = [
+    -0.5,
+    0.3333333333333333,
+    -0.25,
+    0.2,
+    -0.16666666666666666,
+    0.14285714285714285,
+];
+
 /// Ziv gate for the natural log's fast path, as an absolute error bound.
 ///
 /// `ln_fast` is good to ≈2⁻⁶⁸ absolute (the `e·ln2 + L[i]` terms are double-double
@@ -578,13 +592,14 @@ pub fn ln_1p(x: f64) -> f64 {
     // `L[i] + ln(1+r)` cancellation, which would cap accuracy when the result is
     // tiny, and `x` is already an exact reduced argument in the kernel's range.
     if x.abs() < 1.0 / 256.0 {
-        let xr = DoubleDouble { high: x, low: 0.0 };
-
-        // Fast path: the lean kernel is correct to ≈2⁻⁶⁰ *relative* here (its tail
-        // error ≈2⁻⁵³·x² is tiny against the result ≈ x).  A relative Ziv gate keeps
-        // the fast path even for arbitrarily small `x`; the accurate kernel handles
-        // the rare straddling case.
-        let DoubleDouble { high, low } = ln_1p_kernel_fast(xr);
+        // Fast path: `x` is exact here, so `ln(1+x) = x + x²·Q(x)` evaluates
+        // directly with a degree-5 plain-`f64` `Q` — no double-double input to
+        // carry (unlike `ln_1p_kernel_fast`, which the table path shares), and the
+        // `x` lead stays exact in the Fast2Sum.  A relative Ziv gate keeps the fast
+        // path even for arbitrarily small `x`; the accurate kernel handles the rare
+        // straddling case.
+        let tail = (x * x) * crate::poly(x, &LN1P_TINY_COEFFS);
+        let DoubleDouble { high, low } = fast_sum(x, tail);
         let err = LN1P_SMALL_ZIV_REL * high.abs();
         let lo = high + (low - err);
         let hi = high + (low + err);
@@ -592,7 +607,7 @@ pub fn ln_1p(x: f64) -> f64 {
             return lo;
         }
 
-        let result = ln_1p_kernel(xr);
+        let result = ln_1p_kernel(DoubleDouble { high: x, low: 0.0 });
         return result.high + result.low;
     }
 
