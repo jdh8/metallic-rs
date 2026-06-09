@@ -2352,7 +2352,20 @@ fn erfc_segment(x: f64) -> (f64, &'static [DoubleDouble], &'static [DoubleDouble
 fn erfc_eval(x: f64, anchor: f64, coeffs: &[DoubleDouble], fast: bool) -> (DoubleDouble, i64) {
     // t = 2/(2+x) to ≈2⁻¹⁰⁶: `2 + x` must be exact (a plain `2.0 + x` would round
     // first, injecting a ≈2⁻⁵³ error into both the t-factor and the Q variable).
-    let t = DoubleDouble::from_sum(2.0, x).recip() * 2.0;
+    // `t` is on the critical path (feeds the Q variable `v` and the final `t·m`),
+    // so the fast leg fuses `2/(2+x)` into one division — one reciprocal `iqh =
+    // 1/d.high` driving the double-double division correction (the atan quotient
+    // trick) — instead of the accurate leg's dd reciprocal + Newton step and ×2.
+    let d = DoubleDouble::from_sum(2.0, x);
+    let t = if fast {
+        let iqh = 1.0 / d.high;
+        let th = 2.0 * iqh;
+        let tl = f64::mul_add(2.0, iqh, -th)
+            + 2.0 * (f64::mul_add(-d.high, iqh, 1.0) - d.low * iqh) * iqh;
+        DoubleDouble { high: th, low: tl }
+    } else {
+        d.recip() * 2.0
+    };
     let v = t + DoubleDouble {
         high: -anchor,
         low: 0.0,
