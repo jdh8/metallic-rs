@@ -51,7 +51,7 @@ I struggle to make some functions faster than [CORE-MATH].  You can enable the
 
 ```toml
 [dependencies]
-metallic = { version = "0.1.2", features = ["core-math"] }
+metallic = { version = "0.2.0", features = ["core-math"] }
 ```
 
 This would replace the following functions with those from
