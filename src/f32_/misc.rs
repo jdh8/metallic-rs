@@ -6,7 +6,7 @@ use core::num::FpCategory;
 /// Rounds half-way cases away from zero
 #[must_use]
 #[inline]
-pub fn round(x: f32) -> f32 {
+pub fn roundf(x: f32) -> f32 {
     let r = x.abs();
     let i = r.trunc();
 
@@ -16,7 +16,7 @@ pub fn round(x: f32) -> f32 {
 /// The cube root
 #[must_use]
 #[inline]
-pub fn cbrt(x: f32) -> f32 {
+pub fn cbrtf(x: f32) -> f32 {
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return x;
     };
@@ -39,7 +39,7 @@ pub fn cbrt(x: f32) -> f32 {
 /// r as f32`; only the tight-rounding sliver runs the residual correction.
 #[must_use]
 #[inline]
-pub fn hypot(x: f32, y: f32) -> f32 {
+pub fn hypotf(x: f32, y: f32) -> f32 {
     /// Largest f64 ≤ 2⁻¹³ (= `0x1.fffffep-13`); the small-`ay` cutoff
     const SMALL_RATIO: f64 = f64::from_bits(0x3F2F_FFFF_C000_0000);
 

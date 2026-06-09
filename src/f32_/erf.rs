@@ -91,7 +91,7 @@ fn erfc_dd(x: f64) -> DoubleDouble {
 /// The error function
 #[must_use]
 #[inline]
-pub fn erf(x: f32) -> f32 {
+pub fn erff(x: f32) -> f32 {
     if x.is_nan() {
         return x;
     }
@@ -124,7 +124,7 @@ pub fn erf(x: f32) -> f32 {
 /// The complementary error function `1 - erf(x)`
 #[must_use]
 #[inline]
-pub fn erfc(x: f32) -> f32 {
+pub fn erfcf(x: f32) -> f32 {
     if x.is_nan() {
         return x;
     }

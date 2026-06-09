@@ -37,7 +37,7 @@ const COSH_CORE: [f64; 6] = [
 /// reusing [`COSH_CORE`] and [`SINH_CORE`] with no division.
 #[must_use]
 #[inline]
-pub fn cosh(x: f32) -> f32 {
+pub fn coshf(x: f32) -> f32 {
     let x = x.abs();
 
     if x > (f32::MAX_EXP + 1) as f32 * core::f32::consts::LN_2 {
@@ -70,7 +70,7 @@ pub fn cosh(x: f32) -> f32 {
 /// `fast_ldexp`, so no division is needed anywhere on the main path.
 #[must_use]
 #[inline]
-pub fn sinh(x: f32) -> f32 {
+pub fn sinhf(x: f32) -> f32 {
     let magnitude = match x.abs() {
         5.589_425e-4 => 5.589_425e-4,
         x if x > 89.415_985 => f32::INFINITY,
@@ -101,7 +101,7 @@ pub fn sinh(x: f32) -> f32 {
 /// Hyperbolic tangent
 #[must_use]
 #[inline]
-pub fn tanh(x: f32) -> f32 {
+pub fn tanhf(x: f32) -> f32 {
     let magnitude = match x.abs() {
         x if x > 9.010_913 => 1.0,
 
@@ -134,7 +134,7 @@ pub fn tanh(x: f32) -> f32 {
 /// Inverse hyperbolic tangent
 #[must_use]
 #[inline]
-pub fn atanh(x: f32) -> f32 {
+pub fn atanhf(x: f32) -> f32 {
     match x.abs().partial_cmp(&1.0) {
         Some(core::cmp::Ordering::Less) => {
             use core::f64::consts;
@@ -163,7 +163,7 @@ pub fn atanh(x: f32) -> f32 {
 /// Inverse hyperbolic sine
 #[must_use]
 #[inline]
-pub fn asinh(x: f32) -> f32 {
+pub fn asinhf(x: f32) -> f32 {
     use core::f64::consts;
     let s = x.abs();
 
@@ -199,7 +199,7 @@ pub fn asinh(x: f32) -> f32 {
 /// Inverse hyperbolic cosine
 #[must_use]
 #[inline]
-pub fn acosh(x: f32) -> f32 {
+pub fn acoshf(x: f32) -> f32 {
     match x {
         f32::INFINITY => f32::INFINITY,
         6.391_892e22 => 53.20505,

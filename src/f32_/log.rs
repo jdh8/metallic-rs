@@ -28,7 +28,7 @@ pub(super) fn atanh(x: f64) -> f64 {
 /// Natural logarithm
 #[must_use]
 #[inline]
-pub fn ln(x: f32) -> f32 {
+pub fn logf(x: f32) -> f32 {
     match super::normalize(x) {
         (crate::Sign::Positive, super::Magnitude::Infinite) => f32::INFINITY,
         (_, super::Magnitude::Zero) => f32::NEG_INFINITY,
@@ -66,7 +66,7 @@ pub fn ln(x: f32) -> f32 {
 /// Compute `ln(1 + x)` accurately especially for small `x`
 #[must_use]
 #[inline]
-pub fn ln_1p(x: f32) -> f32 {
+pub fn log1pf(x: f32) -> f32 {
     // TODO: the hard-coded returns below are double-rounding cases (see the note
     // in `ln`); remove them with a round-to-odd / hi+lo final round.
     match x {
@@ -102,7 +102,7 @@ pub fn ln_1p(x: f32) -> f32 {
 /// Base 2 logarithm
 #[must_use]
 #[inline]
-pub fn log2(x: f32) -> f32 {
+pub fn log2f(x: f32) -> f32 {
     match super::normalize(x) {
         (crate::Sign::Positive, super::Magnitude::Infinite) => f32::INFINITY,
         (_, super::Magnitude::Zero) => f32::NEG_INFINITY,
@@ -125,7 +125,7 @@ pub fn log2(x: f32) -> f32 {
 /// Base 10 logarithm
 #[must_use]
 #[inline]
-pub fn log10(x: f32) -> f32 {
+pub fn log10f(x: f32) -> f32 {
     const LOG10_2_HI: f64 = 0.301_029_995_663_981_25;
     const LOG10_2_LO: f64 = -5.831_487_935_904_3e-17;
 

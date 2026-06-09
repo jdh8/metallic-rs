@@ -376,7 +376,7 @@ fn tgamma_dd(x: f64) -> f32 {
 /// The gamma function
 #[must_use]
 #[inline]
-pub fn tgamma(z: f32) -> f32 {
+pub fn tgammaf(z: f32) -> f32 {
     if z.is_nan() {
         return z;
     }
@@ -550,7 +550,7 @@ fn lgamma_dd(z: f32) -> f32 {
 /// The natural logarithm of the absolute value of the gamma function
 #[must_use]
 #[inline]
-pub fn lgamma(z: f32) -> f32 {
+pub fn lgammaf(z: f32) -> f32 {
     if z == 0.0 || z == f32::INFINITY {
         return f32::INFINITY;
     }

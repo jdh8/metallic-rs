@@ -99,7 +99,7 @@ fn sin_kernel(x: f64) -> f32 {
 /// Sine
 #[must_use]
 #[inline]
-pub fn sin(x: f32) -> f32 {
+pub fn sinf(x: f32) -> f32 {
     let y = match x.abs() {
         9830.398 => -0.347_613_25,
         x if !x.is_finite() => f32::NAN,
@@ -121,7 +121,7 @@ pub fn sin(x: f32) -> f32 {
 /// Cosine
 #[must_use]
 #[inline]
-pub fn cos(x: f32) -> f32 {
+pub fn cosf(x: f32) -> f32 {
     let x = x.abs();
 
     match x {
@@ -143,7 +143,7 @@ pub fn cos(x: f32) -> f32 {
 /// Compute sine and cosine simultaneously
 #[must_use]
 #[inline]
-pub fn sin_cos(x: f32) -> (f32, f32) {
+pub fn sincosf(x: f32) -> (f32, f32) {
     let (s, c) = match x.abs() {
         9830.398 => (-0.347_613_25, -0.937_638),
         2.861_650_8e15 => (-0.845_537_3, 0.533_916_4),
@@ -176,7 +176,7 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
 ///   --type=[3,3] --numF=D --denF=D`.
 #[must_use]
 #[inline]
-pub fn tan(x: f32) -> f32 {
+pub fn tanf(x: f32) -> f32 {
     const NUM: [f64; 4] = [
         1.0,
         -0.128_282_401_241_495_37,

@@ -12,15 +12,15 @@ mod misc;
 mod pow;
 mod trig;
 
-pub use atan::{acos, asin, atan, atan2};
-pub use erf::{erf, erfc};
-pub use exp::{exp, exp_m1, exp2, exp10, frexp, ldexp};
-pub use gamma::{lgamma, tgamma};
-pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
-pub use log::{ln, ln_1p, log2, log10};
-pub use misc::{cbrt, fmaf, hypot, round};
+pub use atan::{acosf, asinf, atan2f, atanf};
+pub use erf::{erfcf, erff};
+pub use exp::{exp2f, exp10f, expf, expm1f, frexpf, ldexpf};
+pub use gamma::{lgammaf, tgammaf};
+pub use hyp::{acoshf, asinhf, atanhf, coshf, sinhf, tanhf};
+pub use log::{log1pf, log2f, log10f, logf};
+pub use misc::{cbrtf, fmaf, hypotf, roundf};
 pub use pow::powf;
-pub use trig::{cos, sin, sin_cos, tan};
+pub use trig::{cosf, sincosf, sinf, tanf};
 
 // Internal helpers shared across this module's submodules (reached as `super::…`).
 pub use misc::{EXP_SHIFT, LN_2_HI, LN_2_LO, Magnitude, normalize, u32_sign_bit};

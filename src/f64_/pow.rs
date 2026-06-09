@@ -3,7 +3,7 @@
 //! The double-double `log₂`/`exp2` kernels here are shared with the f32
 //! [`powf`](crate::f32_::powf): they already run in f64 double-double, since even
 //! for an f32 result the error in `log₂x` is amplified by `y`.  This module hosts
-//! them (crate-visible) and adds the f64-output `exp2_dd`/`powf_core`.
+//! them (crate-visible) and adds the f64-output `exp2_dd`/`pow_core`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::EXP_SHIFT;
@@ -332,7 +332,7 @@ const LOG2_E: DoubleDouble = DoubleDouble {
     low: 2.0355273740931033e-17,
 };
 
-/// Ziv-gate unit for the [`powf`] fast path, scaled by `1 + |y|`.
+/// Ziv-gate unit for the [`pow`] fast path, scaled by `1 + |y|`.
 ///
 /// The fast mantissa's absolute error is `≲ (1 + |y|)·2⁻⁶⁷`: the lean table `exp2`
 /// contributes ≈1 unit, and the `×y` amplification of [`ln_fast`](super::ln_fast)'s
@@ -342,7 +342,7 @@ const LOG2_E: DoubleDouble = DoubleDouble {
 /// result in for the vast majority of inputs.
 const POWF_ZIV_UNIT: f64 = 5.421010862427522e-20; // 2^-64
 
-/// Fast path for [`powf_core`].
+/// Fast path for [`pow_core`].
 ///
 /// `2^(y·log₂x)` through the lean `ln_fast`→`log₂e`→table-`exp2` chain — the same
 /// kernels that make `log2` and `exp2` fast — accepted by a Ziv gate.  `slack`
@@ -351,7 +351,7 @@ const POWF_ZIV_UNIT: f64 = 5.421010862427522e-20; // 2^-64
 /// only the narrow boundary bands, the subnormal range, and the rare Ziv straddles
 /// return `None` for the accurate path.
 #[inline]
-fn powf_fast(x: f64, y: f64) -> Option<f64> {
+fn pow_fast(x: f64, y: f64) -> Option<f64> {
     // e = y·log₂x = y · (ln x · log₂e), with `ln_fast` good to ≈2⁻⁶⁸ absolute, so
     // `e`'s absolute error is below `slack`.
     let e = super::ln_fast(x) * LOG2_E * y;
@@ -384,13 +384,13 @@ fn powf_fast(x: f64, y: f64) -> Option<f64> {
 
 /// `xʸ` for finite positive `x ≠ 1`, correctly rounded to `f64`
 ///
-/// Fast path: [`powf_fast`], a lean `2^(y·log₂x)` accepted by a Ziv gate.  The rare
+/// Fast path: [`pow_fast`], a lean `2^(y·log₂x)` accepted by a Ziv gate.  The rare
 /// hard-to-round cases (and the over/underflow / subnormal edges) fall back to the
 /// double-double chain [`log2_dd`] → `×y` → [`exp2_dd`], good to ≈2⁻⁸⁴ after the
 /// `×y` amplification — the correctly-rounded reference.
 #[inline]
-fn powf_core(x: f64, y: f64) -> f64 {
-    if let Some(result) = powf_fast(x, y) {
+fn pow_core(x: f64, y: f64) -> f64 {
+    if let Some(result) = pow_fast(x, y) {
         return result;
     }
     exp2_dd(log2_dd(x) * y)
@@ -399,7 +399,7 @@ fn powf_core(x: f64, y: f64) -> f64 {
 /// Raise to a floating-point power
 #[must_use]
 #[inline]
-pub fn powf(x: f64, y: f64) -> f64 {
+pub fn pow(x: f64, y: f64) -> f64 {
     #[inline]
     fn magnitude(x: f64, y: f64) -> f64 {
         match x.classify() {
@@ -424,7 +424,7 @@ pub fn powf(x: f64, y: f64) -> f64 {
                     f64::NAN // negative base (complex result) or NaN exponent, x ≠ 1
                 } else {
                     // xʸ = 2^(y·log₂x), entirely in double-double.
-                    powf_core(x, y)
+                    pow_core(x, y)
                 }
             }
         }

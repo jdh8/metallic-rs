@@ -95,7 +95,7 @@ pub(super) fn finite_exp(x: f64) -> f64 {
 /// The exponential function
 #[must_use]
 #[inline]
-pub fn exp(x: f32) -> f32 {
+pub fn expf(x: f32) -> f32 {
     use core::f32::consts::LN_2;
 
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 * LN_2 {
@@ -112,7 +112,7 @@ pub fn exp(x: f32) -> f32 {
 /// Raise 2 to the power of `x`
 #[must_use]
 #[inline]
-pub fn exp2(x: f32) -> f32 {
+pub fn exp2f(x: f32) -> f32 {
     if x < (f32::MIN_EXP - f32::MANTISSA_DIGITS as i32 - 1) as f32 {
         return 0.0;
     }
@@ -149,7 +149,7 @@ pub fn exp2(x: f32) -> f32 {
 /// Raise 10 to the power of `x`
 #[must_use]
 #[inline]
-pub fn exp10(x: f32) -> f32 {
+pub fn exp10f(x: f32) -> f32 {
     use core::f32::consts::LOG10_2;
     const LOG10_2_HI: f64 = 0.301_029_995_664_066_5;
     const LOG10_2_LO: f64 = -8.532_344_317_057_107e-14;
@@ -203,7 +203,7 @@ pub fn exp10(x: f32) -> f32 {
 ///   so the cancellation a literal `exp(x) − 1` would suffer never arises.
 #[must_use]
 #[inline]
-pub fn exp_m1(x: f32) -> f32 {
+pub fn expm1f(x: f32) -> f32 {
     use core::f32::consts::LN_2;
 
     if x < (f32::MANTISSA_DIGITS + 1) as f32 * -LN_2 {
@@ -260,7 +260,7 @@ pub fn exp_m1(x: f32) -> f32 {
 /// Multiply `x` by 2 raised to the power of `n`
 #[must_use]
 #[inline]
-pub const fn ldexp(x: f32, n: i32) -> f32 {
+pub const fn ldexpf(x: f32, n: i32) -> f32 {
     const MIN_EXP: i32 = f64::MIN_EXP - 1;
     const MAX_EXP: i32 = f64::MAX_EXP;
 
@@ -282,7 +282,7 @@ pub const fn ldexp(x: f32, n: i32) -> f32 {
 /// [`f32::MAX_EXP`] and [`f32::MIN_EXP`] are defined.
 #[must_use]
 #[inline]
-pub const fn frexp(x: f32) -> (f32, i32) {
+pub const fn frexpf(x: f32) -> (f32, i32) {
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return (x, 0);
     };

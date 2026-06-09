@@ -17,13 +17,12 @@ mod trig;
 
 pub use atan::{acos, asin, atan, atan2};
 pub use erf::{erf, erfc};
-pub use exp::{exp, exp_m1, exp2, exp10};
+pub use exp::{exp, exp2, exp10, expm1};
 pub use gamma::{lgamma, tgamma};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
-pub use log::{ln, ln_1p, ln_dd, ln_fast, ln_fast_scaled, log2, log10};
+pub use log::{ln_dd, ln_fast, ln_fast_scaled, log, log1p, log2, log10};
 pub use misc::{cbrt, fma, frexp, hypot, ldexp, round};
-pub use pow::powf;
-pub use trig::{cos, sin, sin_cos, tan};
+pub use trig::{cos, sin, sincos, tan};
 
 // Internal primitives/helpers shared across this module's submodules and the
 // crate root (reached as `super::…` / `crate::…`).

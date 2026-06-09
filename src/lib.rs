@@ -10,26 +10,21 @@ mod f32_;
 mod f64_;
 
 // Flat libm-style public API: `f64` keeps the bare C name, `f32` gets the `f`
-// suffix.  The implementation modules keep Rust-flavoured names internally; the
-// C names live only on these crate-root re-exports.
+// suffix.  Implementation modules use the same names directly.
 pub use f64_::{
-    acos, acosh, asin, asinh, atan, atan2, atanh, cbrt, cos, cosh, erf, erfc, exp, exp_m1 as expm1,
-    exp2, exp10, frexp, hypot, ldexp, lgamma, ln as log, ln_1p as log1p, log2, log10, powf as pow,
-    round, sin, sin_cos as sincos, sinh, tan, tanh, tgamma,
+    acos, acosh, asin, asinh, atan, atan2, atanh, cbrt, cos, cosh, erf, erfc, exp, exp2, exp10,
+    expm1, fma, frexp, hypot, ldexp, lgamma, log, log1p, log2, log10, round, sin, sincos, sinh,
+    tan, tanh, tgamma,
 };
+
+/// To avoid name collisions with the module [`f64_::pow`].
+pub use f64_::pow::pow;
 
 pub use f32_::{
-    acos as acosf, acosh as acoshf, asin as asinf, asinh as asinhf, atan as atanf, atan2 as atan2f,
-    atanh as atanhf, cbrt as cbrtf, cos as cosf, cosh as coshf, erf as erff, erfc as erfcf,
-    exp as expf, exp_m1 as expm1f, exp2 as exp2f, exp10 as exp10f, frexp as frexpf,
-    hypot as hypotf, ldexp as ldexpf, lgamma as lgammaf, ln as logf, ln_1p as log1pf,
-    log2 as log2f, log10 as log10f, powf, round as roundf, sin as sinf, sin_cos as sincosf,
-    sinh as sinhf, tan as tanf, tanh as tanhf, tgamma as tgammaf,
+    acosf, acoshf, asinf, asinhf, atan2f, atanf, atanhf, cbrtf, cosf, coshf, erfcf, erff, exp2f,
+    exp10f, expf, expm1f, fmaf, frexpf, hypotf, ldexpf, lgammaf, log1pf, log2f, log10f, logf, powf,
+    roundf, sincosf, sinf, sinhf, tanf, tanhf, tgammaf,
 };
-
-// Correctly-rounded fused multiply-add, exposed under their C names.
-pub use f32_::fmaf;
-pub use f64_::fma;
 
 // Crate-internal `f64` primitives, reached as `crate::exp2i` / `crate::fast_mul_add`
 // from both precision trees (private re-export, like `poly` above).

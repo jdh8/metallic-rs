@@ -153,7 +153,7 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f32 {
 /// selected branchlessly so random inputs pay no misprediction penalty.
 #[must_use]
 #[inline]
-pub fn acos(x: f32) -> f32 {
+pub fn acosf(x: f32) -> f32 {
     let xf: f64 = x.into();
     let a = xf.abs();
 
@@ -187,7 +187,7 @@ pub fn acos(x: f32) -> f32 {
 /// kernel.  Both forms are evaluated and selected branchlessly.
 #[must_use]
 #[inline]
-pub fn asin(x: f32) -> f32 {
+pub fn asinf(x: f32) -> f32 {
     let xf: f64 = x.into();
     let a = xf.abs();
 
@@ -215,7 +215,7 @@ pub fn asin(x: f32) -> f32 {
 /// Arctangent
 #[must_use]
 #[inline]
-pub fn atan(x: f32) -> f32 {
+pub fn atanf(x: f32) -> f32 {
     #[inline]
     fn kernel(x: f64) -> f64 {
         fast_polynomial::rational_array(
@@ -259,7 +259,7 @@ pub fn atan(x: f32) -> f32 {
 /// point `(x, y)`, carrying the sign of `y`.
 #[must_use]
 #[inline]
-pub fn atan2(y: f32, x: f32) -> f32 {
+pub fn atan2f(y: f32, x: f32) -> f32 {
     use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI};
 
     /// Correctly-rounded `f32` of 3π/4
