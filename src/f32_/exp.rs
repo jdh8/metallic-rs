@@ -291,7 +291,7 @@ pub const fn frexp(x: f32) -> (f32, i32) {
     let significand = magnitude as u32 & mask | 0.5f32.to_bits();
 
     (
-        f32::from_bits(crate::u32_sign_bit(sign) | significand),
+        f32::from_bits(super::u32_sign_bit(sign) | significand),
         f32::MIN_EXP - 1 + (magnitude >> EXP_SHIFT),
     )
 }

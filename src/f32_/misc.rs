@@ -1,6 +1,7 @@
-use super::{Magnitude, normalize};
+use crate::Sign;
 use core::cmp::Ordering;
 use core::f32;
+use core::num::FpCategory;
 
 /// Rounds half-way cases away from zero
 #[must_use]
@@ -22,7 +23,7 @@ pub fn cbrt(x: f32) -> f32 {
 
     let magnitude = (0x2A51_2CE3 + magnitude / 3) as u32;
     let x: f64 = x.into();
-    let y: f64 = f32::from_bits(crate::u32_sign_bit(sign) | magnitude).into();
+    let y: f64 = f32::from_bits(u32_sign_bit(sign) | magnitude).into();
     let y = y * (0.5 + 1.5 * x / crate::fast_mul_add(2.0 * y, y * y, x));
     let y = y * (0.5 + 1.5 * x / crate::fast_mul_add(2.0 * y, y * y, x));
 
@@ -116,4 +117,112 @@ pub fn hypot(x: f32, y: f32) -> f32 {
         _ => bits,
     };
     f64::from_bits(bits) as f32
+}
+
+/// Higher part of ln(2) whose lowest 14 bits are zero
+pub const LN_2_HI: f64 = 0.693_147_180_560_117_7;
+
+/// Lower part of ln(2)
+///
+/// To be precise, this is the `f64` closest to ln(2) - [`LN_2_HI`].
+pub const LN_2_LO: f64 = -1.723_944_452_561_483_5e-13;
+
+const _: () = assert!(LN_2_HI + LN_2_LO == core::f64::consts::LN_2);
+
+/// Explicitly stored significand bits in [`prim@f32`]
+///
+/// This constant is usually used as a shift to access the exponent bits.
+pub const EXP_SHIFT: u32 = f32::MANTISSA_DIGITS - 1;
+
+/// Magnitude of `f32`
+///
+/// Nonzero subnormal numbers are normalized to have an implicit leading bit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Magnitude {
+    /// NaN, see [`FpCategory::Nan`]
+    Nan,
+
+    /// Infinity, see [`FpCategory::Infinite`]
+    Infinite,
+
+    /// Zero, see [`FpCategory::Zero`]
+    ///
+    /// Zero cannot be normalized.  A normalized magnitude has an implicit
+    /// leading bit.
+    Zero,
+
+    /// Normalized magnitude
+    ///
+    /// The layout of the bits is the same as a normal positive `f32`.  For
+    /// subnormal numbers, the stored exponent becomes zero or negative while
+    /// the significand is normalized to have an implicit leading bit.
+    Normalized(i32),
+}
+
+/// Break a `f32` into its sign and magnitude
+#[inline]
+pub const fn normalize(x: f32) -> (Sign, Magnitude) {
+    let sign = if x.is_sign_negative() {
+        Sign::Negative
+    } else {
+        Sign::Positive
+    };
+    let magnitude = x.abs().to_bits() as i32;
+
+    match x.classify() {
+        FpCategory::Nan => (sign, Magnitude::Nan),
+        FpCategory::Infinite => (sign, Magnitude::Infinite),
+        FpCategory::Zero => (sign, Magnitude::Zero),
+        FpCategory::Normal => (sign, Magnitude::Normalized(magnitude)),
+        FpCategory::Subnormal => {
+            const EXPONENT_DIGITS: u32 = 32 - f32::MANTISSA_DIGITS;
+            let shift = magnitude.leading_zeros() as i32 - EXPONENT_DIGITS as i32;
+            let magnitude = (magnitude << shift) - (shift << EXP_SHIFT);
+            (sign, Magnitude::Normalized(magnitude))
+        }
+    }
+}
+
+/// Sign bit of an `f32`, placed at bit 31
+pub const fn u32_sign_bit(sign: Sign) -> u32 {
+    match sign {
+        Sign::Positive => 0,
+        Sign::Negative => 1 << 31,
+    }
+}
+
+/// Correctly-rounded fused multiply-add (f32)
+///
+/// Always computes `x * y + a` as a single fused operation.  On `x86`/`x86_64`
+/// without a compile-time `+fma` target feature the FMA instruction is
+/// selected at runtime; on targets where the FMA instruction is unavailable
+/// it falls back to the platform's software `fmaf` implementation.
+///
+/// Use this instead of `x.mul_add(y, a)` for error-free transforms and
+/// residual tests on `f32` values.  For polynomial hot paths where a lost low
+/// bit is acceptable, prefer `fast_mul_add` (via `f64` promotion).
+// Not `const`: the hardware path calls the non-const `f32::mul_add`.
+#[must_use]
+#[allow(
+    unreachable_code,
+    clippy::missing_const_for_fn,
+    clippy::disallowed_methods
+)]
+#[inline]
+pub fn fmaf(x: f32, y: f32, a: f32) -> f32 {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(not(target_feature = "fma"))]
+    {
+        #[target_feature(enable = "fma")]
+        unsafe fn force_fma(x: f32, y: f32, a: f32) -> f32 {
+            x.mul_add(y, a)
+        }
+
+        if std::is_x86_feature_detected!("fma") {
+            // SAFETY: runtime check confirmed FMA is available on this CPU.
+            return unsafe { force_fma(x, y, a) };
+        }
+    }
+
+    x.mul_add(y, a)
 }

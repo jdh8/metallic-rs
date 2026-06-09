@@ -1,5 +1,6 @@
 use super::double::{DoubleDouble, fast_sum, round_general64};
-use super::{EXP_SHIFT, Magnitude, normalize};
+use crate::Sign;
+use core::num::FpCategory;
 
 /// Rounds half-way cases away from zero
 #[must_use]
@@ -39,7 +40,7 @@ pub fn cbrt(x: f64) -> f64 {
     };
 
     let magnitude = (0x2A9F_7AF1_96E8_E6E8 + magnitude / 3) as u64;
-    let y = f64::from_bits(crate::u64_sign_bit(sign) | magnitude);
+    let y = f64::from_bits(u64_sign_bit(sign) | magnitude);
     let y = crate::fast_mul_add(1.0 / 3.0, x / (y * y) - y, y);
     let y = crate::fast_mul_add(1.0 / 3.0, x / (y * y) - y, y);
     let y = y * (0.5 + 1.5 * x / crate::fast_mul_add(2.0 * y, y * y, x));
@@ -190,7 +191,195 @@ pub const fn frexp(x: f64) -> (f64, i32) {
 
     #[allow(clippy::cast_possible_truncation)]
     (
-        f64::from_bits(crate::u64_sign_bit(sign) | significand),
+        f64::from_bits(u64_sign_bit(sign) | significand),
         f64::MIN_EXP - 1 + (magnitude >> EXP_SHIFT) as i32,
     )
 }
+
+/// Explicitly stored significand bits in [`prim@f64`]
+///
+/// This constant is usually used as a shift to access the exponent bits.
+pub const EXP_SHIFT: u32 = f64::MANTISSA_DIGITS - 1;
+
+/// Magnitude of `f64`
+///
+/// Nonzero subnormal numbers are normalized to have an implicit leading bit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Magnitude {
+    /// NaN, see [`FpCategory::Nan`]
+    Nan,
+
+    /// Infinity, see [`FpCategory::Infinite`]
+    Infinite,
+
+    /// Zero, see [`FpCategory::Zero`]
+    ///
+    /// Zero cannot be normalized.  A normalized magnitude has an implicit
+    /// leading bit.
+    Zero,
+
+    /// Normalized magnitude
+    ///
+    /// The layout of the bits is the same as a normal positive `f64`.  For
+    /// subnormal numbers, the stored exponent becomes zero or negative while
+    /// the significand is normalized to have an implicit leading bit.
+    Normalized(i64),
+}
+
+/// Break a `f64` into its sign and magnitude
+#[inline]
+pub const fn normalize(x: f64) -> (Sign, Magnitude) {
+    let sign = if x.is_sign_negative() {
+        Sign::Negative
+    } else {
+        Sign::Positive
+    };
+    let magnitude = x.abs().to_bits() as i64;
+
+    match x.classify() {
+        FpCategory::Nan => (sign, Magnitude::Nan),
+        FpCategory::Infinite => (sign, Magnitude::Infinite),
+        FpCategory::Zero => (sign, Magnitude::Zero),
+        FpCategory::Normal => (sign, Magnitude::Normalized(magnitude)),
+        FpCategory::Subnormal => {
+            const EXPONENT_DIGITS: u32 = 64 - f64::MANTISSA_DIGITS;
+            let shift = magnitude.leading_zeros() as i64 - EXPONENT_DIGITS as i64;
+            let magnitude = (magnitude << shift) - (shift << EXP_SHIFT);
+            (sign, Magnitude::Normalized(magnitude))
+        }
+    }
+}
+
+/// Sign bit of an `f64`, placed at bit 63
+const fn u64_sign_bit(sign: Sign) -> u64 {
+    match sign {
+        Sign::Positive => 0,
+        Sign::Negative => 1 << 63,
+    }
+}
+
+/// Fast multiply-add
+///
+/// This function picks the faster way to compute `x * y + a` depending on the
+/// target architecture.  The FMA instruction is used if available.  Otherwise,
+/// it falls back to `x * y + a` that is faster but gives less accurate results
+/// than a true FMA.
+///
+/// # Not an error-free transform
+///
+/// Because the fallback path rounds the product *before* the addition, this
+/// helper is **not** fused on every target.  Do not use it where correctness
+/// depends on the single rounding of a true FMA — error-free transforms,
+/// residual tests, and high-precision compensation must use
+/// [`fma`].  Reserve this for hot polynomial-style spots where a lost low bit
+/// is absorbed by later rounding.
+// Not `const`: the hardware path calls the non-const `f64::mul_add`.
+#[allow(
+    unreachable_code,
+    clippy::missing_const_for_fn,
+    clippy::disallowed_methods
+)]
+#[inline]
+pub fn fast_mul_add(x: f64, y: f64, a: f64) -> f64 {
+    #[cfg(feature = "_no_fma")]
+    #[allow(clippy::suboptimal_flops)]
+    return x * y + a;
+
+    // x86/x86_64 without compile-time FMA: runtime dispatch.
+    // `is_x86_feature_detected!` caches via an AtomicU8 (one-time CPUID cost),
+    // so subsequent calls pay only an atomic load plus a branch the predictor
+    // always gets right.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(not(target_feature = "fma"))]
+    {
+        #[target_feature(enable = "fma")]
+        unsafe fn force_fma(x: f64, y: f64, a: f64) -> f64 {
+            x.mul_add(y, a)
+        }
+
+        if std::is_x86_feature_detected!("fma") {
+            // SAFETY: runtime check confirmed FMA is available on this CPU.
+            return unsafe { force_fma(x, y, a) };
+        }
+
+        #[allow(clippy::suboptimal_flops)]
+        return x * y + a;
+    }
+
+    // Every other target (compile-time FMA, aarch64 where fp-armv8 is
+    // baseline, wasm32, …): delegate to Rust's `mul_add`, which LLVM
+    // lowers correctly.
+    x.mul_add(y, a)
+}
+
+/// Correctly-rounded fused multiply-add (f64)
+///
+/// Always computes `x * y + a` as a single fused operation.  On `x86`/`x86_64`
+/// without a compile-time `+fma` target feature the FMA instruction is
+/// selected at runtime; on targets where the FMA instruction is unavailable
+/// it falls back to the platform's software `fma` implementation.
+///
+/// Use this instead of `x.mul_add(y, a)` for error-free transforms, residual
+/// tests, and double-double compensation, where the single rounding of a true
+/// FMA is required for correctness.  For polynomial hot paths where a lost low
+/// bit is acceptable, prefer `fast_mul_add`, which avoids the software `fma`
+/// fallback cost on old hardware.
+// Not `const`: the hardware path calls the non-const `f64::mul_add`.
+#[must_use]
+#[allow(
+    unreachable_code,
+    clippy::missing_const_for_fn,
+    clippy::disallowed_methods
+)]
+#[inline]
+pub fn fma(x: f64, y: f64, a: f64) -> f64 {
+    // x86/x86_64 without compile-time FMA: runtime dispatch to the hardware
+    // FMA instruction; fall back to the software `fma` for old CPUs.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(not(target_feature = "fma"))]
+    {
+        #[target_feature(enable = "fma")]
+        unsafe fn force_fma(x: f64, y: f64, a: f64) -> f64 {
+            x.mul_add(y, a)
+        }
+
+        if std::is_x86_feature_detected!("fma") {
+            // SAFETY: runtime check confirmed FMA is available on this CPU.
+            return unsafe { force_fma(x, y, a) };
+        }
+    }
+
+    x.mul_add(y, a)
+}
+
+/// Const evaluation of 2<sup>`n`</sup>
+#[inline]
+pub const fn exp2i(n: i64) -> f64 {
+    let bits = match n + 1023 {
+        2047.. => return f64::INFINITY,
+        s @ 1..=2046 => s << EXP_SHIFT,
+        s @ -63..=0 => 1 << (EXP_SHIFT - 1) >> -s,
+        _ => 0,
+    };
+    #[allow(clippy::cast_sign_loss)]
+    f64::from_bits(bits as u64)
+}
+
+#[allow(clippy::float_cmp)]
+const _: () = {
+    let (mut n, mut x) = (0, 1.0);
+
+    while n < 1100 {
+        assert!(exp2i(n) == x);
+        x *= 2.0;
+        n += 1;
+    }
+
+    (n, x) = (0, 1.0);
+
+    while n > -1100 {
+        assert!(exp2i(n) == x);
+        x *= 0.5;
+        n -= 1;
+    }
+};
