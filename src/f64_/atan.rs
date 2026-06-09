@@ -539,14 +539,14 @@ fn asin_b(r: f64, j: usize) -> DoubleDouble {
 fn asin_fast(a: f64) -> DoubleDouble {
     if a < 0.5 {
         let jf = (128.0 * (a * a)).round_ties_even();
-        let r = crate::correct_mul_add(a, a, -(jf * 0.0078125)); // a² − j/128, exact-product residual
+        let r = crate::fma(a, a, -(jf * 0.0078125)); // a² − j/128, exact-product residual
         asin_b(r, jf as usize) * a
     } else if a == 1.0 {
         FRAC_PI_2 // asin(1) = π/2 (and avoids √0 → 0/0 in the reflection)
     } else {
         let t = 2.0 * (1.0 - a); // 2 − 2a, exact (Sterbenz)
         let z = t.sqrt(); // √t = 2s
-        let zl = crate::correct_mul_add(z, z, -t) * ((-0.5 / t) * z); // √t low word, one division
+        let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z); // √t low word, one division
         let u = 0.25 * t; // exact, = (1−a)/2 = s²
         let jf = (128.0 * u).round_ties_even();
         let r = u - jf * 0.0078125; // exact
@@ -567,7 +567,7 @@ fn acos_fast(x: f64) -> DoubleDouble {
     let a = x.abs();
     if a < 0.5 {
         let jf = (128.0 * (x * x)).round_ties_even();
-        let r = crate::correct_mul_add(x, x, -(jf * 0.0078125));
+        let r = crate::fma(x, x, -(jf * 0.0078125));
         // acos(x) = π/2 − asin(x) = π/2 + (−x)·B(x²)
         add_ordered(FRAC_PI_2, asin_b(r, jf as usize) * (-x))
     } else if a == 1.0 {
@@ -583,7 +583,7 @@ fn acos_fast(x: f64) -> DoubleDouble {
     } else {
         let t = 2.0 * (1.0 - a); // 2 − 2a, exact (Sterbenz)
         let z = t.sqrt().copysign(x); // √t·sign(x) = ±2s
-        let zl = crate::correct_mul_add(z, z, -t) * ((-0.5 / t) * z);
+        let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
         let u = 0.25 * t;
         let jf = (128.0 * u).round_ties_even();
         let r = u - jf * 0.0078125;

@@ -463,8 +463,8 @@ fn exp_two_level_reduce(x: f64) -> (i64, f64) {
     // SAFETY: `|x| < 746`, so `|scaled| < 2^23`.
     let t = unsafe { scaled.to_int_unchecked::<i64>() };
 
-    let a = crate::correct_mul_add(scaled, -LN2_OVER_4096_HI, x);
-    let dx = crate::correct_mul_add(scaled, -LN2_OVER_4096_LO, a);
+    let a = crate::fma(scaled, -LN2_OVER_4096_HI, x);
+    let dx = crate::fma(scaled, -LN2_OVER_4096_LO, a);
     (t, dx)
 }
 
@@ -497,7 +497,7 @@ fn exp_two_level_fold(t: i64, dx: f64) -> (f64, f64, i64) {
     // Dropping the `tl·(exp(dx) − 1) ≈ 2⁻⁶⁶` cross term keeps the leg under its
     // Ziv budget thanks to the finer table.
     let p = crate::poly(dx, &EXP_FAST3_COEFFS);
-    let fl = crate::correct_mul_add(table.high * dx, p, table.low);
+    let fl = crate::fma(table.high * dx, p, table.low);
     (table.high, fl, q)
 }
 
@@ -539,7 +539,7 @@ pub(super) fn exp2_reduce_dd(e: DoubleDouble) -> (usize, i64, DoubleDouble) {
     // the integer `scaled`, so the high word is exact (Sterbenz); `e.low·N` is also
     // exact, and 2Sum normalizes the pair regardless of their relative size.
     let sigma = DoubleDouble::from_sum(
-        crate::correct_mul_add(e.high, EXP_N as f64, -scaled),
+        crate::fma(e.high, EXP_N as f64, -scaled),
         e.low * EXP_N as f64,
     );
 
@@ -597,7 +597,7 @@ fn exp_reduce(x: f64) -> (usize, i64, DoubleDouble) {
 
     // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
     // word has 17 trailing zero bits, and the low word recovers the tail.
-    let a = crate::correct_mul_add(scaled, -LN2_OVER_N_HI, x);
+    let a = crate::fma(scaled, -LN2_OVER_N_HI, x);
     (j, q, DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO))
 }
 
@@ -623,8 +623,8 @@ pub(super) fn exp_reduce_dd(w: DoubleDouble) -> (usize, i64, DoubleDouble) {
     // r = W − scaled·ln2/N as a double-double.  `scaled · LN2_OVER_N_HI` is exact
     // (the high word has 17 trailing zero bits), giving the high residual; the low
     // residual gathers `W.low` and the `LN2_OVER_N_LO` correction.
-    let a = crate::correct_mul_add(scaled, -LN2_OVER_N_HI, w.high);
-    let b = crate::correct_mul_add(scaled, -LN2_OVER_N_LO, w.low);
+    let a = crate::fma(scaled, -LN2_OVER_N_HI, w.high);
+    let b = crate::fma(scaled, -LN2_OVER_N_LO, w.low);
     (j, q, DoubleDouble::from_sum(a, b))
 }
 
@@ -726,8 +726,8 @@ pub fn exp2(x: f64) -> f64 {
     let scaled4 = (x * 4096.0).round_ties_even();
     // SAFETY: `|x| < 1075`, so `|scaled4| < 2^22`.
     let t = unsafe { scaled4.to_int_unchecked::<i64>() };
-    let sigma4 = crate::correct_mul_add(x, 4096.0, -scaled4);
-    let dx = crate::correct_mul_add(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
+    let sigma4 = crate::fma(x, 4096.0, -scaled4);
+    let dx = crate::fma(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
     let (product, qf) = exp_two_level_mantissa(t, dx);
     if qf >= -1021 {
         let lo = product.high + (product.low - EXP_TWO_LEVEL_ZIV_EPS);
@@ -747,11 +747,11 @@ pub fn exp2(x: f64) -> f64 {
     let j = (m & (EXP_N - 1)) as usize;
     let q = m >> 7;
 
-    let sigma = crate::correct_mul_add(x, EXP_N as f64, -scaled);
+    let sigma = crate::fma(x, EXP_N as f64, -scaled);
     let product = DoubleDouble::from_product(sigma, LN2_OVER_N_HI);
     let r = DoubleDouble {
         high: product.high,
-        low: crate::correct_mul_add(sigma, LN2_OVER_N_LO, product.low),
+        low: crate::fma(sigma, LN2_OVER_N_LO, product.low),
     };
 
     exp_reconstruct(j, q, r)
@@ -787,12 +787,12 @@ pub fn exp10(x: f64) -> f64 {
     let x_ln10 = DoubleDouble::from_product(x, LN10_HI);
     let x_ln10 = DoubleDouble {
         high: x_ln10.high,
-        low: crate::correct_mul_add(x, LN10_LO, x_ln10.low),
+        low: crate::fma(x, LN10_LO, x_ln10.low),
     };
     let n_ln2 = DoubleDouble::from_product(scaled, LN2_OVER_N_HI);
     let n_ln2 = DoubleDouble {
         high: -n_ln2.high,
-        low: crate::correct_mul_add(scaled, -LN2_OVER_N_LO, -n_ln2.low),
+        low: crate::fma(scaled, -LN2_OVER_N_LO, -n_ln2.low),
     };
 
     exp_reconstruct(j, q, x_ln10 + n_ln2)
@@ -865,7 +865,7 @@ pub fn exp_m1(x: f64) -> f64 {
     // Accurate path: the N=128 reduction and double-double mantissa.
     let j = (n & (EXP_N - 1)) as usize;
     let q0 = n >> 7;
-    let a = crate::correct_mul_add(scaled, -LN2_OVER_N_HI, x);
+    let a = crate::fma(scaled, -LN2_OVER_N_HI, x);
     let r = DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO);
     let (mantissa, q) = exp_mantissa(j, q0, r);
     let result = mantissa * crate::exp2i(q) + neg_one;

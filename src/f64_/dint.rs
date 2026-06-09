@@ -329,7 +329,7 @@ mod tests {
 
         // Dense sweep near 1, where cancellation stresses the accurate path.
         for k in -1_000_000i64..1_000_000 {
-            let x = crate::correct_mul_add(k as f64, f64::from_bits(0x3cb0_0000_0000_0000), 1.0); // ~2^-52
+            let x = crate::fma(k as f64, f64::from_bits(0x3cb0_0000_0000_0000), 1.0); // ~2^-52
             if x <= 0.0 {
                 continue;
             }

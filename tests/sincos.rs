@@ -3,8 +3,7 @@ mod common;
 #[test]
 fn test_sin_cos() {
     // No f64 core-math `sincos`; check each component against `sin`/`cos`.
-    let dense =
-        (0..=2_000_000).map(|i| metallic::correct_mul_add(f64::from(i), 20.0 / 2_000_000.0, -10.0));
+    let dense = (0..=2_000_000).map(|i| metallic::fma(f64::from(i), 20.0 / 2_000_000.0, -10.0));
     let bits = (0..=u64::MAX).step_by((1 << 39) - 1337).map(f64::from_bits);
     common::test_univariate_cases(
         |x| metallic::sincos(x).0,

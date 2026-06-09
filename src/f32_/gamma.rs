@@ -184,9 +184,9 @@ fn abs_sinpi(x: f32) -> f64 {
 /// quadrant `q`, where `sin(πx)` is one of `±sin(πr)`, `±cos(πr)`.
 #[inline]
 fn sinpi(x: f32) -> f64 {
-    let x = crate::correct_mul_add(2.0, -(0.5f32 * x).round_ties_even() as f64, x as f64) as f32;
+    let x = crate::fma(2.0, -(0.5f32 * x).round_ties_even() as f64, x as f64) as f32;
     let q = (2.0 * x).round_ties_even();
-    let r = crate::correct_mul_add(0.5, -(q as f64), x as f64);
+    let r = crate::fma(0.5, -(q as f64), x as f64);
     let r2 = r * r;
 
     let sin = r * crate::poly(

@@ -6,8 +6,8 @@ fn test_atan2() {
     // ∞/0/sign special cases.
     let grid = (0..2500u64).flat_map(|i| {
         (0..2500u64).map(move |j| {
-            let y = metallic::correct_mul_add(f64::from(i as u32), 10.0 / 2500.0, -5.0);
-            let x = metallic::correct_mul_add(f64::from(j as u32), 10.0 / 2500.0, -5.0);
+            let y = metallic::fma(f64::from(i as u32), 10.0 / 2500.0, -5.0);
+            let x = metallic::fma(f64::from(j as u32), 10.0 / 2500.0, -5.0);
             [y, x]
         })
     });

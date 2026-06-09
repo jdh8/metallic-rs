@@ -72,7 +72,7 @@ pub fn hypot(x: f32, y: f32) -> f32 {
     // via a single FMA correctly rounds throughout that range without ever
     // taking a sqrt.
     if small < big * SMALL_RATIO {
-        return crate::correct_mul_add(
+        return crate::fma(
             f64::from(HALF_ULP_F32),
             f64::from(small_f32),
             f64::from(big_f32),
@@ -98,13 +98,13 @@ pub fn hypot(x: f32, y: f32) -> f32 {
 
     // Residual test: if `candidate² == big² + small²` exactly, we're done.
     let candidate_f64 = f64::from(candidate);
-    if crate::correct_mul_add(candidate_f64, candidate_f64, -big2) - small2 == 0.0 {
+    if crate::fma(candidate_f64, candidate_f64, -big2) - small2 == 0.0 {
         return candidate;
     }
 
     // One-step Newton correction in f64, then round-to-odd via the sign of the
     // low part of the (r_hi, r_lo) double-double.
-    let residual = (big2 - r2) + small2 - crate::correct_mul_add(r, r, -r2);
+    let residual = (big2 - r2) + small2 - crate::fma(r, r, -r2);
     let correction = r * (0.5 / r2) * residual;
     let r_hi = r + correction;
     let r_lo = correction + (r - r_hi);

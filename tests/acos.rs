@@ -2,8 +2,7 @@ mod common;
 
 #[test]
 fn test_acos() {
-    let dense =
-        (0..=4_000_000).map(|i| metallic::correct_mul_add(f64::from(i), 2.0 / 4_000_000.0, -1.0));
+    let dense = (0..=4_000_000).map(|i| metallic::fma(f64::from(i), 2.0 / 4_000_000.0, -1.0));
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     // CORE-MATH's published hard-to-round acos arguments — the dense/bit sweeps
     // do not hit these exact patterns, and the worst (~2⁻¹¹¹ from a midpoint) is

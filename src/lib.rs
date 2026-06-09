@@ -241,8 +241,8 @@ const fn u64_sign_bit(sign: Sign) -> u64 {
 /// helper is **not** fused on every target.  Do not use it where correctness
 /// depends on the single rounding of a true FMA — error-free transforms,
 /// residual tests, and high-precision compensation must use
-/// [`correct_mul_add`].  Reserve this for hot polynomial-style spots where a
-/// lost low bit is absorbed by later rounding.
+/// [`fma`].  Reserve this for hot polynomial-style spots where a lost low bit
+/// is absorbed by later rounding.
 // Not `const`: the hardware path calls the non-const `f64::mul_add`.
 #[allow(
     unreachable_code,
@@ -282,7 +282,7 @@ fn fast_mul_add(x: f64, y: f64, a: f64) -> f64 {
     x.mul_add(y, a)
 }
 
-/// Correctly-rounded multiply-add with runtime FMA dispatch
+/// Correctly-rounded fused multiply-add (f64)
 ///
 /// Always computes `x * y + a` as a single fused operation.  On `x86`/`x86_64`
 /// without a compile-time `+fma` target feature the FMA instruction is
@@ -302,7 +302,7 @@ fn fast_mul_add(x: f64, y: f64, a: f64) -> f64 {
     clippy::disallowed_methods
 )]
 #[inline]
-pub fn correct_mul_add(x: f64, y: f64, a: f64) -> f64 {
+pub fn fma(x: f64, y: f64, a: f64) -> f64 {
     // x86/x86_64 without compile-time FMA: runtime dispatch to the hardware
     // FMA instruction; fall back to the software `fma` for old CPUs.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -310,6 +310,42 @@ pub fn correct_mul_add(x: f64, y: f64, a: f64) -> f64 {
     {
         #[target_feature(enable = "fma")]
         unsafe fn force_fma(x: f64, y: f64, a: f64) -> f64 {
+            x.mul_add(y, a)
+        }
+
+        if std::is_x86_feature_detected!("fma") {
+            // SAFETY: runtime check confirmed FMA is available on this CPU.
+            return unsafe { force_fma(x, y, a) };
+        }
+    }
+
+    x.mul_add(y, a)
+}
+
+/// Correctly-rounded fused multiply-add (f32)
+///
+/// Always computes `x * y + a` as a single fused operation.  On `x86`/`x86_64`
+/// without a compile-time `+fma` target feature the FMA instruction is
+/// selected at runtime; on targets where the FMA instruction is unavailable
+/// it falls back to the platform's software `fmaf` implementation.
+///
+/// Use this instead of `x.mul_add(y, a)` for error-free transforms and
+/// residual tests on `f32` values.  For polynomial hot paths where a lost low
+/// bit is acceptable, prefer `fast_mul_add` (via `f64` promotion).
+// Not `const`: the hardware path calls the non-const `f32::mul_add`.
+#[must_use]
+#[allow(
+    unreachable_code,
+    clippy::missing_const_for_fn,
+    clippy::disallowed_methods
+)]
+#[inline]
+pub fn fmaf(x: f32, y: f32, a: f32) -> f32 {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(not(target_feature = "fma"))]
+    {
+        #[target_feature(enable = "fma")]
+        unsafe fn force_fma(x: f32, y: f32, a: f32) -> f32 {
             x.mul_add(y, a)
         }
 
