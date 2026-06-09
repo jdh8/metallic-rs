@@ -84,18 +84,26 @@ const LARGE_IHYP: f64 = 134_217_728.0;
 /// the correct negligible value, subsuming the old `ln(2x)`-only branch.
 #[inline]
 fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
-    let corr = DoubleDouble {
-        high: correction,
-        low: 0.0,
-    };
-    let DoubleDouble { high, low } = ln_fast(s) + LN2 + corr;
+    // Fast leg: `ln_fast(s) + LN2` as a double-double, then fold `correction` into
+    // the low word.  Since `s > 2²⁷`, the result is `≥ ln(2²⁸) ≈ 19` while
+    // `|correction| = 0.25/s² ≤ 2⁻⁵⁶`, far below `ulp(high) ≥ 2⁻⁴⁸`, so it only
+    // perturbs the low word — a single `f64` add instead of a second
+    // double-double add.
+    let DoubleDouble { high, low } = ln_fast(s) + LN2;
+    let low = low + correction;
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
     if lo == hi {
         return lo;
     }
 
-    let r = ln_dd(s) + LN2 + corr;
+    // Accurate leg unchanged: the full double-double `ln_dd(s) + LN2 + correction`.
+    let r = ln_dd(s)
+        + LN2
+        + DoubleDouble {
+            high: correction,
+            low: 0.0,
+        };
     r.high + r.low
 }
 
