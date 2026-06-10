@@ -162,6 +162,10 @@ const LN10_HI: f64 = 2.302585092994046;
 const LN10_LO: f64 = -2.1707562233822494e-16;
 const N_LOG2_10: f64 = 425.20679614558236;
 
+/// `4096 · log2(10)`, the scale mapping `x` to `exp10`'s two-level reduction
+/// index `t = round(4096·x·log2(10))`.  Equals `32 · N_LOG2_10` exactly.
+const N_LOG2_10_4096: f64 = 13606.617476658635;
+
 const EXPM1_S_COEFFS: [(f64, f64); 10] = [
     (1.0, 0.0),
     (0.5, 0.0),
@@ -773,10 +777,49 @@ pub fn exp10(x: f64) -> f64 {
         return 0.0;
     }
 
-    // 10^x = exp(x·ln10) = 2^q · 2^(j/N) · exp(r), with the reduction index
-    // n = round(N·x·log2(10)) and r = x·ln10 − n·ln2/N carried as a double-double.
-    // (exp10 stays on the N=128 reduction: its cost is the double-double `x·ln10`
-    // reduction, not the table fold, so the two-level lean leg buys little here.)
+    // 10^x = exp(x·ln10).  Two-level reduce the base-`e` exponent `w = x·ln10`:
+    // `t = round(4096·x·log2(10))`, residual `dx = w − t·ln2/4096`, `|dx| ≤ ln2/8192`.
+    // Unlike `exp`/`exp2`, `w` is not exact, so it is carried as a double-double to
+    // form `dx`; the cheap two-level fold (degree-3 f64 tail, no dd × dd) then
+    // replaces the N=128 `dd × dd` table-fold the old reduction routed through.
+    let scaled = (x * N_LOG2_10_4096).round_ties_even();
+
+    // SAFETY: `|x| < 324`, so `|scaled| < 2^22`.
+    let t = unsafe { scaled.to_int_unchecked::<i64>() };
+
+    // `w = x·ln10` as a double-double (`from_product` gives the exact `x·LN10_HI`
+    // tail; `LN10_LO` finishes the low word).
+    let w = DoubleDouble::from_product(x, LN10_HI);
+    let wl = crate::fma(x, LN10_LO, w.low);
+
+    // `dx = (w.high − scaled·HI) + (wl − scaled·LO)` as one f64.  `scaled·HI` is
+    // exact (`HI` has 24 trailing zero bits, `|scaled| < 2²²`) and cancels against
+    // `w.high` down to `|dx|` scale (Sterbenz), so the FMA is exact.
+    let hi = crate::fma(-scaled, LN2_OVER_4096_HI, w.high);
+    let dx = hi + crate::fma(-scaled, LN2_OVER_4096_LO, wl);
+
+    // Fast path: the two-level lean fold, gated like `exp`.  `q ≥ −1021` keeps the
+    // subnormal transition (where the mantissa's normalization can shift `q`) on the
+    // accurate path.
+    let (th, fl, q) = exp_two_level_fold(t, dx);
+    if q >= -1021 {
+        let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
+        let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);
+        if lo == hi {
+            return fast_ldexp(lo, q);
+        }
+    }
+
+    exp10_accurate(x)
+}
+
+/// Correctly-rounded `10ˣ` via the N=128 double-double reduction — [`exp10`]'s
+/// rare fallback when the lean two-level leg straddles a rounding boundary or
+/// nears the subnormal range.  Kept `#[cold]` and out-of-line so it does not bloat
+/// the hot path.
+#[cold]
+#[inline(never)]
+fn exp10_accurate(x: f64) -> f64 {
     let scaled = (x * N_LOG2_10).round_ties_even();
 
     // SAFETY: `|x| < 324`, so `|scaled| < 2^18`.
