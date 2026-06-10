@@ -21,9 +21,6 @@ Cargo.lock
 #.idea/
 
 # Claude and AI context
-/.claude/settings.local.json
-/.claude/backups/
-/.claude/history/
-/.claude/worktrees/
-/.claude/scheduled_tasks.lock
+/.claude/*
+!/.claude/skills/
 *.local.md
