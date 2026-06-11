@@ -1192,6 +1192,17 @@ pub fn tgamma(z: f64) -> f64 {
         }
     }
 
+    tgamma_accurate(z, i, d)
+}
+
+/// The accurate double-double leg of [`tgamma`], reached only when the table
+/// leg's Ziv test fails to certify a correctly-rounded result.  Outlined as
+/// `#[cold] #[inline(never)]` — the 32-term [`TGAMMA_DD`] evaluation through
+/// [`poly_dd`] is bulky and almost never taken, so inlining it would only bloat
+/// the hot path (mirrors `exp_accurate` and the f32 `tgamma_dd`).
+#[cold]
+#[inline(never)]
+fn tgamma_accurate(z: f64, i: f64, d: DoubleDouble) -> f64 {
     let (value, e2) = tgamma_recurrence(z, i, poly_dd(d, &TGAMMA_DD));
     round_general_signed64(value, e2)
 }
@@ -1445,8 +1456,13 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     (lgamma_stirling_fast(z, tail), LGAMMA_FAST_ERR)
 }
 
-/// `ln|Γ(z)|` as a double-double via the accurate path, the Ziv fallback
-#[inline]
+/// `ln|Γ(z)|` as a double-double via the accurate path, the Ziv fallback.
+///
+/// `#[cold] #[inline(never)]` for the same reason as the f32 `lgamma_dd`: it is
+/// the rarely-taken accurate leg, so keeping it out of line stops it from
+/// bloating [`lgamma`]'s hot body.
+#[cold]
+#[inline(never)]
 fn lgamma_dd(z: f64) -> DoubleDouble {
     if z < 0.5 {
         // Reflection ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z); `1 − z` is exact.
