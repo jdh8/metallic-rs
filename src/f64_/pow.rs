@@ -202,8 +202,8 @@ pub const EXP2_FAST: [f64; 11] = [
 /// the dependency chain — not the operation count — is what speeds them up.
 #[inline]
 pub fn poly_dd(u: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
-    /// Scratch capacity; the largest caller (the `erfc` `Q` segments) has 25 terms.
-    const CAP: usize = 32;
+    /// Scratch capacity; the largest caller (`erfc_far_eval` accurate path) has 35 terms.
+    const CAP: usize = 36;
     const ZERO: DoubleDouble = DoubleDouble {
         high: 0.0,
         low: 0.0,
