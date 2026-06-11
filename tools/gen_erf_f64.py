@@ -164,36 +164,39 @@ for i, fcoeffs in enumerate(seg_fcoeffs):
                    f"Fast double-double Q(t) for erfc segment {i}, in v = t − ERFC_ANCHORS[{i}]")
 
 # --- erf table (direct, table-driven fast leg for x ∈ [0.4375, 6.25]) -------
-# Per cell i (xi = i/8) a degree-TABLE_DEG minimax of erf(xi + h) in
-# h ∈ [−1/16, 1/16].  erf(x) = P_i(x − xi) needs no exp, unlike the erfc bridge;
+# Per cell i (xi = i/16) a degree-TABLE_DEG minimax of erf(xi + h) in
+# h ∈ [−1/32, 1/32].  erf(x) = P_i(x − xi) needs no exp, unlike the erfc bridge;
 # it is Ziv-gated against that bridge (the accurate, correctly-rounded path).
-# c0/c1/c2 are stored double-double, c3.. as a plain-f64 tail (those terms are
-# ≲2⁻¹⁷ of erf, so f64 lands them near 2⁻⁶⁷).  The `ErfCell` struct is hand-
-# written in erf.rs; this emits only the `ERF_TABLE` array.
-TABLE_W = mpf(1) / 16          # half-width: cells of width 1/8
-TABLE_DEG = 11                 # c0..c11; c3..c11 form the f64 tail
-TABLE_ILO, TABLE_IHI = 4, 50   # xi = i/8, covering [0.5, 6.25] (cell 4 reaches 0.4375)
+# Only c0/c1 are stored double-double, c2.. as a plain-f64 tail: the finer 1/16
+# cell (|h| ≤ 1/32) shrinks the tail terms enough that f64 lands them well inside
+# the 2⁻⁶² Ziv gate (mirrors CORE-MATH's erf table — one fewer dd fold than a 1/8
+# cell would need).  The `ErfCell` struct is hand-written in erf.rs; this emits
+# only the `ERF_TABLE` array.
+NDD = 2                        # number of leading double-double coefficients
+TABLE_W = mpf(1) / 32          # half-width: cells of width 1/16
+TABLE_DEG = 10                 # c0..c10; c2..c10 form the f64 tail
+TABLE_ILO, TABLE_IHI = 7, 100  # xi = i/16, covering [0.4375, 6.25]
 
 table_rows = []
 table_worst = -mp.inf
 for i in range(TABLE_ILO, TABLE_IHI + 1):
-    xi = mpf(i) / 8
+    xi = mpf(i) / 16
     coeffs, err = chebyfit(lambda h, xi=xi: erf(xi + h), [-TABLE_W, TABLE_W],
                            TABLE_DEG + 1, error=True)
     table_rows.append(list(reversed(coeffs)))
     table_worst = max(table_worst, mp.log(err, 2))
 
 print(f"\n/// Fast-path table for `erf` on `x ∈ [0.4375, 6.25]`: per-cell minimax of")
-print(f"/// `erf(i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8, `i ∈ [{TABLE_ILO}, {TABLE_IHI}]`.")
-print(f"/// Degree {TABLE_DEG} (`c0`/`c1`/`c2` double-double, `c3..c{TABLE_DEG}` plain `f64`); worst-cell")
+print(f"/// `erf(i/16 + h)` in `h ∈ [−1/32, 1/32]`, cells of width 1/16, `i ∈ [{TABLE_ILO}, {TABLE_IHI}]`.")
+print(f"/// Degree {TABLE_DEG} (`c0`/`c1` double-double, `c2..c{TABLE_DEG}` plain `f64`); worst-cell")
 print(f"/// minimax error 2^{float(table_worst):.0f}.  From `tools/gen_erf_f64.py`.")
 print(f"const ERF_TABLE: [ErfCell; {TABLE_IHI - TABLE_ILO + 1}] = [")
 for coeffs in table_rows:
     print("    ErfCell {")
-    for k in range(3):
+    for k in range(NDD):
         hi, lo = dd(coeffs[k])
         print(f"        c{k}: DoubleDouble {{ high: {hexf(hi)}, low: {hexf(lo)} }},")
-    tail = ", ".join(hexf(f64(c)) for c in coeffs[3:])
+    tail = ", ".join(hexf(f64(c)) for c in coeffs[NDD:])
     print(f"        tail: [{tail}],")
     print("    },")
 print("];")
