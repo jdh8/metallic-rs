@@ -15,7 +15,7 @@
 //! Do not edit by hand; re-run the generator instead.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{DoubleDouble, fast_ldexp, round_general64};
+use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_general64};
 use super::exp::{exp_dd_of_dd, exp_dd_of_dd_fast};
 use super::pow::poly_dd;
 
@@ -3265,11 +3265,39 @@ const fn scale_dd(value: DoubleDouble, q: i64) -> DoubleDouble {
 ///
 /// The first `SPLIT` coefficients are kept in double-double; the rest become a
 /// plain-`f64` tail.  A power of two so [`poly_dd_split`] reaches `vᵏ` by repeated
-/// squaring.  `|v| ≤ 0.154` here, so the first dropped term `c·v^SPLIT` is ≲2⁻¹⁰
+/// squaring.  `|v| ≤ 0.192` here, so the first dropped term `c·v^SPLIT` is ≲2⁻¹⁰
 /// of `Q` and the whole tail's `f64` slip stays well under the fast leg's 2⁻⁶²
 /// Ziv budget — confirmed by the fast-leg fallback rate being unchanged from the
 /// all-double-double evaluation.
 const SPLIT: usize = 4;
+
+/// `a + b` as an unrenormalized double-double, Fast2Sum on the high words.
+///
+/// Requires `exponent(a.high) ≥ exponent(b.high)` — guaranteed here by
+/// `|a.high| ≥ |b.high|`, which the callers' coefficient tables establish with
+/// at least 2× margin (asserted in `fold_ordering` below).  Skipping the full
+/// `Add`'s 2Sum and renormalizing `fast_sum` shortens the serial chain of the
+/// Ziv-gated fast legs; the consumers (double-double `Mul`, `Add`, the Ziv
+/// gates' `high + (low ± eps)`) all accept the unrenormalized form.
+#[inline]
+fn add_ordered(a: DoubleDouble, b: DoubleDouble) -> DoubleDouble {
+    let s = fast_sum(a.high, b.high);
+    DoubleDouble {
+        high: s.high,
+        low: s.low + (a.low + b.low),
+    }
+}
+
+/// `a + b` as an unrenormalized double-double, 2Sum on the high words (any
+/// magnitudes) — [`add_ordered`] without the ordering precondition.
+#[inline]
+fn add_loose(a: DoubleDouble, b: DoubleDouble) -> DoubleDouble {
+    let s = DoubleDouble::from_sum(a.high, b.high);
+    DoubleDouble {
+        high: s.high,
+        low: s.low + (a.low + b.low),
+    }
+}
 
 /// Fast-leg `Q(v) = Σ coeffs[k]·vᵏ` with the high-degree tail in plain `f64`.
 ///
@@ -3277,7 +3305,10 @@ const SPLIT: usize = 4;
 /// so evaluating them in `f64` instead of double-double costs no extra Ziv
 /// fallbacks while doing roughly half the double-double work.  The double-double
 /// prefix, the `f64` tail, and `vᵏ` are independent, so the critical path is
-/// shallow.
+/// shallow.  The prefix folds with [`add_ordered`] where the magnitude ordering
+/// holds for every fast-leg table (`fold_ordering` test): `|v·c1| ≤ ~½|c0|` and
+/// the later addends only shrink.  `c2 + v·c3` is the one exception (`|v·c3|`
+/// can exceed `|c2|`, e.g. segment 0) and uses [`add_loose`].
 ///
 /// Only for the Ziv-gated *fast* legs; the accurate path stays full double-double
 /// (it is what guarantees correct rounding).  `coeffs.len()` must exceed `SPLIT`.
@@ -3292,12 +3323,10 @@ fn poly_dd_split(v: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
     let v2 = v * v;
     let vk = v2 * v2;
 
-    // 4-term DD Estrin prefix: (c0 + v·c1) + v²·(c2 + v·c3), without the
-    // poly_dd scratch buffer.  Three pairs share v² with the vk computation above.
-    let p01 = coeffs[0] + v * coeffs[1];
-    let p23 = coeffs[2] + v * coeffs[3];
-
-    p01 + v2 * p23 + vk * tail
+    // Q = (c0 ⊕ v·c1) ⊕ (v²·(c2 + v·c3) ⊕ v⁴·tail); all four leaves independent.
+    let s01 = add_ordered(coeffs[0], v * coeffs[1]);
+    let s23 = add_loose(coeffs[2], v * coeffs[3]);
+    add_ordered(s01, add_ordered(v2 * s23, vk * tail))
 }
 
 /// `erf(x) = x·P(x²)` as a double-double for `|x| < 0.4375`
@@ -3320,10 +3349,14 @@ fn erf_small_eval(x: f64, coeffs: &[DoubleDouble], split: bool) -> DoubleDouble 
 /// `erf(ax)` as a double-double for `ax ∈ [0.4375, 6.25]`, straight from
 /// [`ERF_TABLE`] — the fast leg that sidesteps the `erfc` bridge's `exp`.
 ///
-/// `i = round(8·ax)` picks the cell (`xi = i/8`); `h = ax − xi` is exact
-/// (Sterbenz, `|h| ≤ 1/16`).  The `c3..c11` tail is summed in `f64`, then the
-/// `c2`/`c1`/`c0` leads fold in double-double — a few double-double FMAs versus
-/// the bridge's reciprocal + `Q` polynomial + `exp`.
+/// `i = round(16·ax)` picks the cell (`xi = i/16`); `h = ax − xi` is exact
+/// (Sterbenz, `|h| ≤ 1/32`).  The `c2..c10` tail is summed in `f64`, then the
+/// `c1`/`c0` leads fold as `cₖ + h·acc`: an exact product, a Fast2Sum on the
+/// high words (valid: `|h·acc|` stays under half the lead coefficient in every
+/// cell — see `fold_ordering`), and an `f64` low-word carry.  These two folds
+/// are the table leg's whole serial chain, so the cheap Fast2Sum beats a full
+/// renormalizing double-double `Add` (same error class: both leave
+/// ≈2⁻¹⁰⁵-scale residue, far under the leg's ≈2⁻⁶⁷ budget).
 #[inline]
 fn erf_table_eval(ax: f64) -> DoubleDouble {
     let fi = (ax * 16.0).round_ties_even();
@@ -3335,12 +3368,14 @@ fn erf_table_eval(ax: f64) -> DoubleDouble {
     // cell (|h| ≤ 1/32) keeps the `c2..` tail accurate enough in plain `f64` to
     // need only two double-double folds (`c1`, `c0`) — one fewer than the 1/8 table.
     let tail = crate::poly(h, &cell.tail);
-    let acc = cell.c1
-        + DoubleDouble {
-            high: h * tail,
-            low: 0.0,
-        };
-    cell.c0 + acc * h
+    let s1 = fast_sum(cell.c1.high, h * tail);
+    let l1 = s1.low + cell.c1.low;
+    let p0 = DoubleDouble::from_product(h, s1.high);
+    let s0 = fast_sum(cell.c0.high, p0.high);
+    DoubleDouble {
+        high: s0.high,
+        low: s0.low + (cell.c0.low + crate::fma(h, l1, p0.low)),
+    }
 }
 
 /// Select the `erfc` segment for `x ≥ 0.4375`: its anchor `t`, the accurate `Q`
@@ -3399,13 +3434,25 @@ fn erfc_eval(x: f64, anchor: f64, coeffs: &[DoubleDouble], fast: bool) -> (Doubl
     } else {
         d.recip() * 2.0
     };
-    let v = t + DoubleDouble {
-        high: -anchor,
-        low: 0.0,
-    };
     let q = if fast {
-        poly_dd_split(v, coeffs)
+        // `t ≥ anchor` within a segment (`t` decreases in `x` and the anchor is
+        // the segment's smallest `t`, attained at its upper break — rounding of
+        // `th` cannot cross below: at the break `2/(2+x)` rounds upward onto the
+        // anchor or above), so `exponent(t.high) ≥ exponent(anchor)` and the
+        // Fast2Sum is exact; fold `t`'s low word in instead of a full `Add`.
+        let s = fast_sum(t.high, -anchor);
+        poly_dd_split(
+            DoubleDouble {
+                high: s.high,
+                low: s.low + t.low,
+            },
+            coeffs,
+        )
     } else {
+        let v = t + DoubleDouble {
+            high: -anchor,
+            low: 0.0,
+        };
         poly_dd(v, coeffs)
     };
 
@@ -3608,9 +3655,10 @@ pub fn erfc(x: f64) -> f64 {
         round_general64(m, q)
     } else {
         // erfc(−|x|) = 1 + erf(|x|) ∈ [1.46, 2): the table fast leg gives erf
-        // directly, no `exp`, and `1 +` cannot cancel.  Ziv-gated against the
-        // accurate erfc bridge (`2 − erfc(|x|)`).
-        let e = ONE + erf_table_eval(ax);
+        // directly, no `exp`, and `1 +` cannot cancel (and `erf < 1` makes the
+        // ordered fold valid).  Ziv-gated against the accurate erfc bridge
+        // (`2 − erfc(|x|)`).
+        let e = add_ordered(ONE, erf_table_eval(ax));
         let eps = e.high.abs() * ERF_TABLE_ZIV_EPS;
         let lo = e.high + (e.low - eps);
         let hi = e.high + (e.low + eps);
@@ -3621,5 +3669,80 @@ pub fn erfc(x: f64) -> f64 {
         let (m, q) = erfc_eval(ax, anchor, accurate, false);
         let r = TWO + neg(scale_dd(m, q));
         r.high + r.low
+    }
+}
+
+/// The Fast2Sum-based folds above need `|a| ≥ |b|`; prove the orderings hold
+/// with at least 2× margin from coefficient-magnitude bounds, so float rounding
+/// slack can never flip them.
+#[cfg(test)]
+mod fold_ordering {
+    use super::*;
+
+    /// Upper bound of `|Σ coeffs[k]·vᵏ|` over `|v| ≤ vmax`.
+    fn poly_mag(coeffs: &[DoubleDouble], vmax: f64) -> f64 {
+        coeffs
+            .iter()
+            .rev()
+            .fold(0.0, |acc, c| crate::fast_mul_add(acc, vmax, c.high.abs()))
+    }
+
+    /// [`poly_mag`] for a plain-`f64` tail.
+    fn tail_mag(tail: &[f64], vmax: f64) -> f64 {
+        tail.iter()
+            .rev()
+            .fold(0.0, |acc, c| crate::fast_mul_add(acc, vmax, c.abs()))
+    }
+
+    /// `erf_table_eval`: each fold `cₖ ⊕ h·acc` needs `|h·acc| ≤ |cₖ|`.
+    #[test]
+    fn erf_table() {
+        const HMAX: f64 = 0.03125;
+        for cell in &ERF_TABLE {
+            let t = HMAX * tail_mag(&cell.tail, HMAX);
+            assert!(t <= 0.5 * cell.c1.high.abs());
+            let s1 = cell.c1.high.abs() + t;
+            assert!(HMAX * s1 <= 0.5 * cell.c0.high.abs());
+        }
+    }
+
+    /// `poly_dd_split`: `|v·c1| ≤ ½|c0|`, the inner fold's pointwise
+    /// `|v²·(c2 + v·c3)| ≥ |v⁴·tail|` (via `min |c2 + v·c3|` over the range —
+    /// no zero crossing — against `vmax²·max |tail|`), and the outer
+    /// `|c0 ⊕ v·c1| ≥ |v²·(c2 + v·c3) + v⁴·tail|`.  Covers every fast-leg
+    /// caller: the small-`erf` kernel, `erfc` segments 0–2 (segments 3–4 ride
+    /// the far path), and the 1/x² far table (`u = 1/x² < 1/16` for `x > 4`).
+    #[test]
+    fn q_fast() {
+        /// Largest `v = t − anchor` of an `erfc` segment: `t` at its lower break.
+        fn erfc_vmax(i: usize) -> f64 {
+            let lo = [0.4375, 1.0, 2.0][i];
+            2.0 / (2.0 + lo) - ERFC_ANCHORS[i]
+        }
+
+        let cases: [(&[DoubleDouble], f64); 5] = [
+            (&ERF_SMALL_FAST, 0.4375 * 0.4375),
+            (&ERFC_QF0, erfc_vmax(0)),
+            (&ERFC_QF1, erfc_vmax(1)),
+            (&ERFC_QF2, erfc_vmax(2)),
+            (&ERFC_FAR_FAST, 0.0625),
+        ];
+        for (coeffs, vmax) in cases {
+            // Slack: `v.high` may exceed the analytic vmax by rounding of `t`.
+            let vmax = vmax * 1.0001;
+            let m1 = vmax * (coeffs[1].high.abs() + coeffs[1].low.abs());
+            assert!(m1 <= 0.5 * coeffs[0].high.abs());
+            let (c2, c3) = (coeffs[2].high, coeffs[3].high);
+            let s23_min = if (c2 * c3).is_sign_positive() {
+                c2.abs()
+            } else {
+                c2.abs() - vmax * c3.abs()
+            };
+            let s23_mag = c2.abs() + vmax * c3.abs();
+            let tmag = poly_mag(&coeffs[SPLIT..], vmax);
+            assert!(vmax * vmax * tmag <= 0.5 * s23_min);
+            let inner = crate::fast_mul_add(vmax * vmax, s23_mag, vmax.powi(4) * tmag);
+            assert!(inner <= 0.5 * (coeffs[0].high.abs() - m1));
+        }
     }
 }
