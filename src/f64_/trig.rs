@@ -220,6 +220,14 @@ const FRAC_1_120: DoubleDouble = DoubleDouble {
     low: 1.1564823173178714e-19,
 };
 
+/// `−1/6` as a double-double — the exact `u` coefficient peeled from
+/// `sin(r)/r`, carried as a constant so the term is one double-double multiply
+/// instead of `Div<f64>`'s two serial divisions.  See [`FRAC_1_120`].
+const NEG_FRAC_1_6: DoubleDouble = DoubleDouble {
+    high: -0.16666666666666666,
+    low: -9.25185853854297e-18,
+};
+
 /// `1/24` as a double-double — the exact `u²` coefficient peeled from `cos(r)`.
 /// See [`FRAC_1_120`].
 const FRAC_1_24: DoubleDouble = DoubleDouble {
@@ -412,13 +420,17 @@ fn fast_squares(r: DoubleDouble) -> (DoubleDouble, DoubleDouble, f64) {
 /// comes out to ≈2⁻⁶⁰ for a fraction of [`sin_kernel`]'s cost.
 #[inline]
 fn sin_part_fast(r: DoubleDouble, uu: DoubleDouble, u2: DoubleDouble, u3: f64) -> DoubleDouble {
-    // sin(r)/r = 1 − u/6 + u²/120 + u³·SIN_TAIL(u)
-    let sin_lead = ONE + uu / -6.0 + u2 * FRAC_1_120;
-    let sin_over_r = sin_lead
-        + DoubleDouble {
-            high: u3 * crate::poly(uu.high, &SIN_TAIL),
-            low: 0.0,
-        };
+    // sin(r)/r = 1 − u/6 + u²/120 + u³·SIN_TAIL(u); every addend stays under
+    // half its lead at the octant edge (`fold_ordering` below), so the folds
+    // are ordered Fast2Sums, and `−u/6` is a multiply by the double-double
+    // constant rather than `Div<f64>`'s two serial divisions.
+    let sin_lead = ONE
+        .add_ordered(uu * NEG_FRAC_1_6)
+        .add_ordered(u2 * FRAC_1_120);
+    let sin_over_r = sin_lead.add_ordered(DoubleDouble {
+        high: u3 * crate::poly(uu.high, &SIN_TAIL),
+        low: 0.0,
+    });
     r * sin_over_r
 }
 
@@ -426,13 +438,13 @@ fn sin_part_fast(r: DoubleDouble, uu: DoubleDouble, u2: DoubleDouble, u3: f64) -
 /// [`sin_part_fast`]; the `u³` tail is [`COS_TAIL`].
 #[inline]
 fn cos_part_fast(uu: DoubleDouble, u2: DoubleDouble, u3: f64) -> DoubleDouble {
-    // cos(r) = 1 − u/2 + u²/24 + u³·COS_TAIL(u)
-    let cos_lead = ONE + uu * -0.5 + u2 * FRAC_1_24;
-    cos_lead
-        + DoubleDouble {
-            high: u3 * crate::poly(uu.high, &COS_TAIL),
-            low: 0.0,
-        }
+    // cos(r) = 1 − u/2 + u²/24 + u³·COS_TAIL(u); ordered Fast2Sum folds as in
+    // [`sin_part_fast`] (`|u/2| ≤ 0.309` is the tightest — see `fold_ordering`).
+    let cos_lead = ONE.add_ordered(uu * -0.5).add_ordered(u2 * FRAC_1_24);
+    cos_lead.add_ordered(DoubleDouble {
+        high: u3 * crate::poly(uu.high, &COS_TAIL),
+        low: 0.0,
+    })
 }
 
 /// `sin(r)` for `r ∈ [-π/4, π/4]`, the fast path — only the `sin` half.
@@ -709,6 +721,35 @@ pub fn tan(x: f64) -> f64 {
 #[cfg(test)]
 mod fold_ordering {
     use super::*;
+
+    /// `sin_part_fast` / `cos_part_fast`: `1 ⊕ u·c₁ ⊕ u²·c₂ ⊕ u³·tail` with
+    /// `u = r² ≤ (π/4)²`.
+    #[test]
+    fn sin_cos_leads() {
+        let umax = core::f64::consts::FRAC_PI_4.powi(2) * 1.0001;
+        let u2max = umax * umax;
+        let u3max = umax.powi(3);
+        let tail_mag = |tail: &[f64]| {
+            tail.iter()
+                .rev()
+                .fold(0.0, |acc, c| crate::fast_mul_add(acc, umax, c.abs()))
+        };
+
+        for (c1, c2, tail) in [
+            (
+                NEG_FRAC_1_6.high.abs() + NEG_FRAC_1_6.low.abs(),
+                FRAC_1_120.high + FRAC_1_120.low.abs(),
+                &SIN_TAIL,
+            ),
+            (0.5, FRAC_1_24.high + FRAC_1_24.low.abs(), &COS_TAIL),
+        ] {
+            assert!(umax * c1 <= 0.5);
+            let lead_min = 1.0 - umax * c1;
+            assert!(u2max * c2 <= 0.5 * lead_min);
+            let lead2_min = lead_min - u2max * c2;
+            assert!(u3max * tail_mag(tail) <= 0.5 * lead2_min);
+        }
+    }
 
     #[test]
     fn tan_leads() {
