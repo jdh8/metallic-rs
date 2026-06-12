@@ -450,8 +450,16 @@ fn atan_dd_fast(q: DoubleDouble) -> DoubleDouble {
     let c = k * 0.125;
     let table = ATAN_TABLE[k as usize];
 
-    let denom = q * c + ONE;
-    let u = (q + DoubleDouble { high: -c, low: 0.0 }) * denom.recip();
+    // `q.high − c` is Sterbenz-exact: `k = round(8·q.high)` puts `q.high` in
+    // `[c − 1/16, c + 1/16] ⊂ [c/2, 2c]` (for `k ≥ 1`; ties-even keeps
+    // `q.high > 1/16` whenever `k ≥ 1`, and `k = 0` means `c = 0`).  `1 ≥ q·c`
+    // orders the denominator fold, and the lean quotient replaces
+    // `denom.recip()`'s Newton step plus a double-double multiply.
+    let num = DoubleDouble {
+        high: q.high - c,
+        low: q.low,
+    };
+    let u = num.div_fast(ONE.add_ordered(q * c));
 
     atan_cell_fast(table, u)
 }
@@ -466,12 +474,17 @@ fn atan_cell_fast(table: DoubleDouble, u: DoubleDouble) -> DoubleDouble {
     let wh = w.high;
     let w2 = wh * wh;
     // 1 − w/3 in double-double (ATAN_COEFFS[1] = −1/3); tail w²·(1/5 − w/7 + …).
-    let bracket = (ONE + w * ATAN_COEFFS[1])
-        + DoubleDouble {
+    // Ordered Fast2Sum folds: `|w| ≤ 2⁻⁸` keeps every addend far under its lead,
+    // and the final `table ⊕ u·bracket` orders for `k ≥ 1` (`atan(1/8) ≥ 2·…`,
+    // see `fold_ordering`) while `k = 0` makes `table` zero, where Fast2Sum is
+    // exact regardless.
+    let bracket = ONE
+        .add_ordered(w * ATAN_COEFFS[1])
+        .add_ordered(DoubleDouble {
             high: w2 * crate::poly(wh, &ATAN_TAIL),
             low: 0.0,
-        };
-    table + u * bracket
+        });
+    table.add_ordered(u * bracket)
 }
 
 /// `atan(1/a)` for `a > 1`, the fast path's reflection leg, without ever forming
@@ -501,10 +514,17 @@ fn atan_recip_fast(a: f64) -> DoubleDouble {
     let c = k * 0.125;
     let table = ATAN_TABLE[k as usize];
 
-    // u = (1 − a·c)/(a + c).  `1 − a·c` is exact and `a + c` is a normalized pair.
-    let num = ONE + neg(DoubleDouble::from_product(a, c));
+    // u = (1 − a·c)/(a + c).  `a·c ∈ (2/3, 2 + ε)` inside a cell (`k ≥ 1`; `k = 0`
+    // makes the product zero), so `1 − p.high` is exact (`x − 1` is exact for any
+    // `x ∈ [0.5, 4]`) — no double-double `Add` needed — and the lean quotient
+    // replaces `den.recip()`'s Newton step plus a double-double multiply.
+    let p = DoubleDouble::from_product(a, c);
+    let num = DoubleDouble {
+        high: 1.0 - p.high,
+        low: -p.low,
+    };
     let den = DoubleDouble::from_sum(a, c);
-    let u = num * den.recip();
+    let u = num.div_fast(den);
 
     atan_cell_fast(table, u)
 }
@@ -978,4 +998,36 @@ pub fn atan2(y: f64, x: f64) -> f64 {
     }
 
     atan2_mag(x.abs(), y.abs(), x.is_sign_negative()).copysign(y)
+}
+
+/// The Fast2Sum-based folds of [`atan_cell_fast`] need `|a| ≥ |b|`; prove the
+/// orderings from coefficient-magnitude bounds at the cell edge `|u| ≤ 1/16`
+/// (cf. the same-named modules in `erf.rs` and `trig.rs`).
+#[cfg(test)]
+mod fold_ordering {
+    use super::*;
+
+    #[test]
+    fn atan_cell() {
+        // Slack for the rounding of u (one lean division) and w = u·u.
+        let umax = 0.0625 * 1.0001;
+        let wmax = umax * umax;
+        let tail_mag = ATAN_TAIL
+            .iter()
+            .rev()
+            .fold(0.0, |acc, c| crate::fast_mul_add(acc, wmax, c.abs()));
+
+        // bracket = 1 ⊕ w·(−1/3) ⊕ w²·tail
+        let c1_mag = ATAN_COEFFS[1].high.abs() + ATAN_COEFFS[1].low.abs();
+        assert!(wmax * c1_mag <= 0.5);
+        let lead_min = 1.0 - wmax * c1_mag;
+        assert!(wmax * wmax * tail_mag <= 0.5 * lead_min);
+
+        // table ⊕ u·bracket for k ≥ 1 (k = 0 has table = 0, where Fast2Sum is
+        // exact by itself); the k = 1 cell is the tightest at 0.504.
+        let bracket_mag = crate::fast_mul_add(wmax * wmax, tail_mag, 1.0 + wmax * c1_mag);
+        for cell in &ATAN_TABLE[1..] {
+            assert!(umax * bracket_mag <= 0.55 * cell.high.abs());
+        }
+    }
 }

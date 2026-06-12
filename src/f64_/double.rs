@@ -83,6 +83,26 @@ impl DoubleDouble {
             * y
     }
 
+    /// `self / other` to ≈2⁻¹⁰³ relative, for Ziv-gated fast paths
+    ///
+    /// One `f64` division: seed `y = 1/other.high`, take `h = self.high·y`,
+    /// and fold the fused residual `r = self − h·other` (both words of each
+    /// operand) into the low word `r·y`.  Versus `other.recip()` (whose Newton
+    /// step is a serial double-double multiply, add, and multiply after the
+    /// divide) followed by a double-double multiply, this halves the serial
+    /// chain; the dropped second-order terms are ≈2⁻¹⁰³ relative — far below
+    /// every fast-leg Ziv budget.  The accurate paths keep `recip`.
+    #[inline]
+    pub fn div_fast(self, other: Self) -> Self {
+        let y = 1.0 / other.high;
+        let h = self.high * y;
+        let r = crate::fma(h, -other.low, crate::fma(h, -other.high, self.high)) + self.low;
+        Self {
+            high: h,
+            low: r * y,
+        }
+    }
+
     /// `self + other` without renormalization, Fast2Sum on the high words
     ///
     /// Requires `exponent(self.high) ≥ exponent(other.high)` (e.g.
