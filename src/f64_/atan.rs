@@ -433,7 +433,9 @@ fn atan_dd_fast(q: DoubleDouble) -> DoubleDouble {
 
     let k = (q.high * 8.0).round_ties_even();
     let c = k * 0.125;
-    let table = ATAN_TABLE[k as usize];
+    // SAFETY: q ∈ [0, 1] puts k in 0..=8; a plain `as` cast would pay a
+    // saturation cmov chain right in front of the table load.
+    let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
 
     // `q.high − c` is Sterbenz-exact: `k = round(8·q.high)` puts `q.high` in
     // `[c − 1/16, c + 1/16] ⊂ [c/2, 2c]` (for `k ≥ 1`; ties-even keeps
@@ -497,7 +499,8 @@ fn atan_recip_fast(a: f64) -> DoubleDouble {
 
     let k = (inv * 8.0).round_ties_even();
     let c = k * 0.125;
-    let table = ATAN_TABLE[k as usize];
+    // SAFETY: inv ∈ (0, 1] puts k in 0..=8 (see `atan_dd_fast`).
+    let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
 
     // u = (1 − a·c)/(a + c).  `a·c ∈ (2/3, 2 + ε)` inside a cell (`k ≥ 1`; `k = 0`
     // makes the product zero), so `1 − p.high` is exact (`x − 1` is exact for any
@@ -951,7 +954,8 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
             // exact), so `u` is at least as accurate, and `|u| ≤ 1/16` as before.
             let k = (q * 8.0).round_ties_even();
             let c = k * 0.125;
-            let table = ATAN_TABLE[k as usize];
+            // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
+            let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
 
             let num = DoubleDouble {
                 high: small,
