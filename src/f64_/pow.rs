@@ -334,12 +334,14 @@ const LOG2_E: DoubleDouble = DoubleDouble {
 
 /// Ziv-gate unit for the [`pow`] fast path, scaled by `1 + |y|`.
 ///
-/// The fast mantissa's absolute error is `≲ (1 + |y|)·2⁻⁶⁷`: the lean table `exp2`
-/// contributes ≈1 unit, and the `×y` amplification of [`ln_fast`](super::ln_fast)'s
-/// ≈2⁻⁶⁸ absolute slip in `log₂x` contributes `|y|` units — the `log₂e` and `ln2`
-/// factors cancel exactly across the `log₂ → ×y → exp2` round trip, leaving a bare
-/// `|y|`.  `2⁻⁶⁴` keeps an ≈8× margin over that bound while still gating the fast
-/// result in for the vast majority of inputs.
+/// The fast mantissa's absolute error is `≲ (1 + |y|)·2⁻⁶⁵·⁵`: the lean table
+/// `exp2` contributes ≈2⁻⁶⁷, and the `×y` amplification of
+/// [`ln_fast`](super::ln_fast)'s <2⁻⁶⁶ absolute slip in `log₂x` contributes
+/// `log₂e·2⁻⁶⁶·|y| ≈ 2⁻⁶⁵·⁵·|y|` — the `log₂e` and `ln2` factors cancel exactly
+/// across the `log₂ → ×y → exp2` round trip.  `2⁻⁶⁴` keeps a ≈2.8× margin over
+/// that worst-case bound (the `ln_fast` term is the worst cell with every
+/// rounding aligned) while still gating the fast result in for the vast
+/// majority of inputs.
 const POWF_ZIV_UNIT: f64 = 5.421010862427522e-20; // 2^-64
 
 /// Fast path for [`pow_core`].
@@ -352,7 +354,7 @@ const POWF_ZIV_UNIT: f64 = 5.421010862427522e-20; // 2^-64
 /// return `None` for the accurate path.
 #[inline]
 fn pow_fast(x: f64, y: f64) -> Option<f64> {
-    // e = y·log₂x = y · (ln x · log₂e), with `ln_fast` good to ≈2⁻⁶⁸ absolute, so
+    // e = y·log₂x = y · (ln x · log₂e), with `ln_fast` good to <2⁻⁶⁶ absolute, so
     // `e`'s absolute error is below `slack`.
     let e = super::ln_fast(x) * LOG2_E * y;
     let slack = (1.0 + y.abs()) * POWF_ZIV_UNIT;

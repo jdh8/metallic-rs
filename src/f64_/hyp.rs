@@ -28,7 +28,7 @@ fn ln_sum(s: DoubleDouble) -> DoubleDouble {
         }
 }
 
-/// Lean variant of [`ln_sum`] using the fast [`ln_fast`] kernel (≈2⁻⁶⁸ absolute
+/// Lean variant of [`ln_sum`] using the fast [`ln_fast`] kernel (<2⁻⁶⁶ absolute
 /// instead of ≈2⁻⁸⁷).  Only the leading `ln(s.high)` is leaner; the linear
 /// correction `s.low/s.high` is identical, so it cancels in the Ziv comparison.
 #[inline]
@@ -43,10 +43,11 @@ fn ln_sum_fast(s: DoubleDouble) -> DoubleDouble {
 /// Ziv gate for the inverse-hyperbolic fast path, as an absolute bound on the
 /// result (`scale · ln(u)`).
 ///
-/// `ln_fast` differs from the accurate `ln_dd` by ≈2⁻⁶⁸ *absolute* whatever the
-/// result's magnitude — the `e·ln2 + L[i]` terms are double-double and shared, so
-/// only the `ln(1+r)` tail (≤ 1/256) carries the lean kernel's error — and `½·ln`
-/// (atanh) only halves it.  `2⁻⁶³` keeps a ~30× margin.  Being absolute, the gate
+/// `ln_fast` differs from the accurate `ln_dd` by <2⁻⁶⁶ *absolute* whatever the
+/// result's magnitude — its exact-`z` reduction commits no error, so only the
+/// plain-`f64` `ln(1+z)` tail carries the lean leg's error (see `LN_ZIV_EPS` in
+/// `log.rs`) — and `½·ln` (atanh) only halves it.  `2⁻⁶³` keeps an 8× margin.
+/// Being absolute, the gate
 /// forces the accurate fallback only when `|result| ≲ 2⁻¹⁰`, where the lean kernel
 /// cannot round correctly anyway.
 const IHYP_ZIV_EPS: f64 = 1.084_202_172_485_504_4e-19; // 2^-63

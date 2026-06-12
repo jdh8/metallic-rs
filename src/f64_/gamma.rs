@@ -971,8 +971,8 @@ const LGAMMA_TAIL_F64_FAR: [f64; 6] = [
 /// Absolute error bound for the Stirling [`lgamma_fast`] Ziv leg (`|z| ≥ 8`)
 ///
 /// The leg's sub-double-double slack is the `f64` tail (≲2⁻⁶⁰ absolute) plus
-/// `ln_fast`'s ≈2⁻⁶⁸-absolute error scaled by the largest log multiplier `t − ½`.
-/// Keeping `|z|` below [`LGAMMA_FAST_BOUND`] keeps `t ≲ 1024`, so that scaled term
+/// `ln_fast`'s <2⁻⁶⁶-absolute error scaled by the largest log multiplier `t − ½`.
+/// Keeping `|z|` below [`LGAMMA_FAST_BOUND`] keeps `t ≲ 256`, so that scaled term
 /// stays ≲2⁻⁵⁸ and the total below `2⁻⁵⁶` with a comfortable margin.  Being
 /// absolute, the gate also forces the accurate fallback whenever the result
 /// cancels toward zero (lgamma's zeros at `z = 1, 2` and on `z < 0`), where `2⁻⁵⁶`
@@ -984,8 +984,8 @@ const LGAMMA_FAST_ERR: f64 = 1.3877787807814457e-17; // 2^-56
 ///
 /// The table leg has no Stirling tail: it is the per-cell minimax (worst 2⁻⁷⁸, the
 /// `f64` cell tail and dropped `h.low` landing ≈2⁻⁶⁹) plus one `ln_fast` of the
-/// ≤ 5 recurrence factors (≈2⁻⁶⁸), so ≈2⁻⁶⁷ overall — far tighter than the Stirling
-/// leg.  `2⁻⁶²` certifies it with ≈5 bits of margin, and being ~16× tighter than
+/// ≤ 5 recurrence factors (<2⁻⁶⁶), so ≈2⁻⁶⁵·⁷ overall — far tighter than the
+/// Stirling leg.  `2⁻⁶²` certifies it with a ~14× margin, and being ~16× tighter than
 /// [`LGAMMA_FAST_ERR`] it straddles (defers) far less where `ln Γ` is O(1), which is
 /// exactly this moderate band.
 const LGAMMA_TABLE_ERR: f64 = 2.168404344971009e-19; // 2^-62
@@ -995,7 +995,9 @@ const LGAMMA_TABLE_ERR: f64 = 2.168404344971009e-19; // 2^-62
 /// Above it the largest log multiplier `t` would push `ln_fast`'s absolute slack
 /// past [`LGAMMA_FAST_ERR`], so the gate could no longer certify the leg; such
 /// `z` (rare, and far outside any benchmark) go straight to the accurate path.
-const LGAMMA_FAST_BOUND: f64 = 1024.0;
+/// (1024 under the old double-double reduction; the exact-`z` `ln_fast` trades
+/// its looser <2⁻⁶⁶ bound for speed, so the certifiable band is `t·2⁻⁶⁶ ≤ 2⁻⁵⁸`.)
+const LGAMMA_FAST_BOUND: f64 = 256.0;
 
 /// Keep the divisor product's high word below this (rescale by `2⁵¹²`, tracking a
 /// binary exponent) so the long negative-`z` product never overflows `f64`.
@@ -1219,7 +1221,7 @@ fn ln_sum(s: DoubleDouble) -> DoubleDouble {
         }
 }
 
-/// [`ln_sum`] with the lean `ln_fast` (≈2⁻⁶⁸ absolute) — the Ziv fast leg's log.
+/// [`ln_sum`] with the lean `ln_fast` (<2⁻⁶⁶ absolute) — the Ziv fast leg's log.
 #[inline]
 fn ln_fast_sum(s: DoubleDouble) -> DoubleDouble {
     crate::f64_::ln_fast(s.high)
@@ -1435,7 +1437,7 @@ fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
 ///
 /// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½` (the gate comes from
 /// the [`lgamma_pos_fast`] leg that handles `1−z`; the double-double `|sin πz|` and
-/// its `ln_fast` add only ≈2⁻⁶⁸, well inside that gate).  `[½, 8)` reads the central
+/// its `ln_fast` add only <2⁻⁶⁶, well inside that gate).  `[½, 8)` reads the central
 /// table; `[8, ∞)` takes the lean direct [`lgamma_stirling_fast`] with the ten-term
 /// [`LGAMMA_TAIL_F64`] up to [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term
 /// [`LGAMMA_TAIL_F64_FAR`] on the hot `z ≥ 40` tail.  The caller restricts `|z|` to
@@ -1524,11 +1526,12 @@ mod fold_ordering {
     /// The three `add_ordered` folds of [`lgamma_stirling_fast`] each require the
     /// running sum to dominate the term being folded in.  The Stirling lead
     /// `(z−½)·ln z` and every partial sum grow monotonically for `z ≥ 8`, so the
-    /// tightest case is the cutoff `z = 8`; sweeping `[8, LGAMMA_FAST_BOUND]`
-    /// confirms it on the real arithmetic (`ln_fast`, the `f64` tail, the folds).
+    /// tightest case is the cutoff `z = 8`; sweeping `[8, 1024]` (a superset of
+    /// the `[8, LGAMMA_FAST_BOUND]` fast-leg band) confirms it on the real
+    /// arithmetic (`ln_fast`, the `f64` tail, the folds).
     #[test]
     fn lgamma_stirling() {
-        // z = 8, 8.125, …, 1024 (8128 steps of 1/8 spanning the fast-leg band).
+        // z = 8, 8.125, …, 1024 (8128 steps of 1/8 covering the fast-leg band).
         for k in 0..=8128 {
             let z = crate::fast_mul_add(f64::from(k), 0.125, LGAMMA_FAST_CUTOFF);
             let inv = 1.0 / z;
