@@ -366,16 +366,6 @@ fn neg(v: DoubleDouble) -> DoubleDouble {
     }
 }
 
-/// `big + small` as a double-double when `|big.high| ≥ |small.high|`, via
-/// Fast2Sum on the high words — leaner than the general [`DoubleDouble`] `Add`
-/// (no 2Sum).  Used for the inverse-trig fast-path offsets (`π/2`, `π`), which
-/// always dominate the kernel term `√t·B ≤ π/3`.
-#[inline]
-fn add_ordered(big: DoubleDouble, small: DoubleDouble) -> DoubleDouble {
-    let s = fast_sum(big.high, small.high);
-    fast_sum(s.high, s.low + (big.low + small.low))
-}
-
 /// Ziv gate: round `v` to `f64` when both ends of its `±eps_rel·|v|` (relative)
 /// error interval agree, else `None` to fall back to the accurate kernel.
 #[inline]
@@ -570,10 +560,11 @@ fn asin_fast(a: f64) -> DoubleDouble {
         let u = 0.25 * t; // exact, = (1−a)/2 = s²
         let jf = (128.0 * u).round_ties_even();
         let r = u - jf * 0.0078125; // exact
-        add_ordered(
-            FRAC_PI_2,
-            neg(asin_b(r, jf as usize) * DoubleDouble { high: z, low: zl }),
-        )
+        // The π/2 offset dominates the kernel term `√t·B ≤ π/3`, and the Ziv
+        // gate accepts the unrenormalized ordered fold.
+        FRAC_PI_2.add_ordered(neg(
+            asin_b(r, jf as usize) * DoubleDouble { high: z, low: zl }
+        ))
     }
 }
 
@@ -589,7 +580,7 @@ fn acos_fast(x: f64) -> DoubleDouble {
         let jf = (128.0 * (x * x)).round_ties_even();
         let r = crate::fma(x, x, -(jf * 0.0078125));
         // acos(x) = π/2 − asin(x) = π/2 + (−x)·B(x²)
-        add_ordered(FRAC_PI_2, asin_b(r, jf as usize) * (-x))
+        FRAC_PI_2.add_ordered(asin_b(r, jf as usize) * (-x))
     } else if a == 1.0 {
         // acos(1) = 0, acos(−1) = π (and avoids √0 → 0/0 in the reflection).
         if x.is_sign_negative() {
@@ -609,7 +600,7 @@ fn acos_fast(x: f64) -> DoubleDouble {
         let r = u - jf * 0.0078125;
         let p = asin_b(r, jf as usize) * DoubleDouble { high: z, low: zl };
         if x.is_sign_negative() {
-            add_ordered(PI, p)
+            PI.add_ordered(p)
         } else {
             p
         }
