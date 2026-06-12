@@ -13,6 +13,7 @@ fn test_acos() {
         "0x1.fd737be914578p-11",
         "0x1.ffffffffffdc0p-1",
         "0x1.fffffffffff70p-1",
+        "0x1.390e6939cd1a6p-5",
         "-0x1.011c543f23a17p-2",
         "-0x1.4510ee8eb4e67p-1",
         "-0x1.771164bfd1f84p-3",
