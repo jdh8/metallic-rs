@@ -3271,44 +3271,17 @@ const fn scale_dd(value: DoubleDouble, q: i64) -> DoubleDouble {
 /// all-double-double evaluation.
 const SPLIT: usize = 4;
 
-/// `a + b` as an unrenormalized double-double, Fast2Sum on the high words.
-///
-/// Requires `exponent(a.high) ≥ exponent(b.high)` — guaranteed here by
-/// `|a.high| ≥ |b.high|`, which the callers' coefficient tables establish with
-/// at least 2× margin (asserted in `fold_ordering` below).  Skipping the full
-/// `Add`'s 2Sum and renormalizing `fast_sum` shortens the serial chain of the
-/// Ziv-gated fast legs; the consumers (double-double `Mul`, `Add`, the Ziv
-/// gates' `high + (low ± eps)`) all accept the unrenormalized form.
-#[inline]
-fn add_ordered(a: DoubleDouble, b: DoubleDouble) -> DoubleDouble {
-    let s = fast_sum(a.high, b.high);
-    DoubleDouble {
-        high: s.high,
-        low: s.low + (a.low + b.low),
-    }
-}
-
-/// `a + b` as an unrenormalized double-double, 2Sum on the high words (any
-/// magnitudes) — [`add_ordered`] without the ordering precondition.
-#[inline]
-fn add_loose(a: DoubleDouble, b: DoubleDouble) -> DoubleDouble {
-    let s = DoubleDouble::from_sum(a.high, b.high);
-    DoubleDouble {
-        high: s.high,
-        low: s.low + (a.low + b.low),
-    }
-}
-
 /// Fast-leg `Q(v) = Σ coeffs[k]·vᵏ` with the high-degree tail in plain `f64`.
 ///
 /// The tail terms (degree `≥ SPLIT`) are a small fraction of `Q` (see [`SPLIT`]),
 /// so evaluating them in `f64` instead of double-double costs no extra Ziv
 /// fallbacks while doing roughly half the double-double work.  The double-double
 /// prefix, the `f64` tail, and `vᵏ` are independent, so the critical path is
-/// shallow.  The prefix folds with [`add_ordered`] where the magnitude ordering
-/// holds for every fast-leg table (`fold_ordering` test): `|v·c1| ≤ ~½|c0|` and
-/// the later addends only shrink.  `c2 + v·c3` is the one exception (`|v·c3|`
-/// can exceed `|c2|`, e.g. segment 0) and uses [`add_loose`].
+/// shallow.  The prefix folds with [`DoubleDouble::add_ordered`] where the
+/// magnitude ordering holds for every fast-leg table (`fold_ordering` test):
+/// `|v·c1| ≤ ~½|c0|` and the later addends only shrink.  `c2 + v·c3` is the one
+/// exception (`|v·c3|` can exceed `|c2|`, e.g. segment 0) and uses
+/// [`DoubleDouble::add_loose`].
 ///
 /// Only for the Ziv-gated *fast* legs; the accurate path stays full double-double
 /// (it is what guarantees correct rounding).  `coeffs.len()` must exceed `SPLIT`.
@@ -3324,9 +3297,9 @@ fn poly_dd_split(v: DoubleDouble, coeffs: &[DoubleDouble]) -> DoubleDouble {
     let vk = v2 * v2;
 
     // Q = (c0 ⊕ v·c1) ⊕ (v²·(c2 + v·c3) ⊕ v⁴·tail); all four leaves independent.
-    let s01 = add_ordered(coeffs[0], v * coeffs[1]);
-    let s23 = add_loose(coeffs[2], v * coeffs[3]);
-    add_ordered(s01, add_ordered(v2 * s23, vk * tail))
+    let s01 = coeffs[0].add_ordered(v * coeffs[1]);
+    let s23 = coeffs[2].add_loose(v * coeffs[3]);
+    s01.add_ordered((v2 * s23).add_ordered(vk * tail))
 }
 
 /// `erf(x) = x·P(x²)` as a double-double for `|x| < 0.4375`
@@ -3658,7 +3631,7 @@ pub fn erfc(x: f64) -> f64 {
         // directly, no `exp`, and `1 +` cannot cancel (and `erf < 1` makes the
         // ordered fold valid).  Ziv-gated against the accurate erfc bridge
         // (`2 − erfc(|x|)`).
-        let e = add_ordered(ONE, erf_table_eval(ax));
+        let e = ONE.add_ordered(erf_table_eval(ax));
         let eps = e.high.abs() * ERF_TABLE_ZIV_EPS;
         let lo = e.high + (e.low - eps);
         let hi = e.high + (e.low + eps);

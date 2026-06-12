@@ -82,6 +82,35 @@ impl DoubleDouble {
             })
             * y
     }
+
+    /// `self + other` without renormalization, Fast2Sum on the high words
+    ///
+    /// Requires `exponent(self.high) ≥ exponent(other.high)` (e.g.
+    /// `|self.high| ≥ |other.high|`).  The polynomial folds on Ziv-gated fast
+    /// paths use this when their coefficient tables guarantee the ordering
+    /// (each caller asserts so in a `fold_ordering` test): it skips the full
+    /// `Add`'s 2Sum and renormalizing `fast_sum`, halving the fold's serial
+    /// chain.  The result's `low` may grow to a few ulps of `high`; `Mul`,
+    /// `Add`, and the Ziv gates' `high + (low ± eps)` all accept that form.
+    #[inline]
+    pub fn add_ordered(self, other: Self) -> Self {
+        let s = fast_sum(self.high, other.high);
+        Self {
+            high: s.high,
+            low: s.low + (self.low + other.low),
+        }
+    }
+
+    /// `self + other` without renormalization, 2Sum on the high words (any
+    /// magnitudes) — [`Self::add_ordered`] without the precondition.
+    #[inline]
+    pub fn add_loose(self, other: Self) -> Self {
+        let s = Self::from_sum(self.high, other.high);
+        Self {
+            high: s.high,
+            low: s.low + (self.low + other.low),
+        }
+    }
 }
 
 /// Fast multiplication that breaks normality

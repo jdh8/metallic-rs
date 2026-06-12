@@ -460,6 +460,10 @@ fn sin_cos_kernel_fast(r: DoubleDouble) -> (DoubleDouble, DoubleDouble) {
 /// `tan(r) = r·T(r²)`.  The 6 leading terms of `T` are carried in double-double
 /// ([`TAN_LEADS`], 2-way Estrin) and the `v⁶` remainder ([`TAN_TAIL`]) in plain
 /// `f64`.  One kernel — versus the sin/cos pair plus a reciprocal — feeds [`tan`].
+///
+/// Every fold uses [`DoubleDouble::add_ordered`]: `tan`'s series coefficients
+/// decay fast enough that each addend stays under half its lead even at
+/// `v = (π/4)²` (asserted in `fold_ordering` below).
 #[inline]
 fn tan_kernel_fast(r: DoubleDouble) -> DoubleDouble {
     let w = r * r; // v = r²
@@ -467,14 +471,15 @@ fn tan_kernel_fast(r: DoubleDouble) -> DoubleDouble {
     let v2 = v * v;
     let v6 = v2 * v2 * v2;
     let w2 = w * w;
-    let p0 = TAN_LEADS[0] + w * TAN_LEADS[1];
-    let p1 = TAN_LEADS[2] + w * TAN_LEADS[3];
-    let p2 = TAN_LEADS[4] + w * TAN_LEADS[5];
-    let t = (p0 + w2 * (p1 + w2 * p2))
-        + DoubleDouble {
+    let p0 = TAN_LEADS[0].add_ordered(w * TAN_LEADS[1]);
+    let p1 = TAN_LEADS[2].add_ordered(w * TAN_LEADS[3]);
+    let p2 = TAN_LEADS[4].add_ordered(w * TAN_LEADS[5]);
+    let t = p0
+        .add_ordered(w2 * p1.add_ordered(w2 * p2))
+        .add_ordered(DoubleDouble {
             high: v6 * crate::poly(v, &TAN_TAIL),
             low: 0.0,
-        };
+        });
     r * t
 }
 
@@ -669,7 +674,21 @@ pub fn tan(x: f64) -> f64 {
     // tan has period π, so tan(|x|) = tan(r) for even quadrants and −cot(r) =
     // −1/tan(r) for odd ones — one kernel, a reciprocal only half the time.
     let t = tan_kernel_fast(r);
-    let fast = if q & 1 == 0 { t } else { neg(t.recip()) };
+    let fast = if q & 1 == 0 {
+        t
+    } else {
+        // −1/t leanly: seed `y = −1/t.high` (the inner FMA's cancellation is
+        // exact), fold `t.low` into the residual `e = 1 + y·t`, and take
+        // `y·(1 + e)` — dropping `y·e²` ≈ 2⁻¹⁰⁴ relative, noise to the 2⁻⁵⁹
+        // gate.  The full Newton `recip` (a double-double multiply, add, and
+        // multiply on top of the divide) buys accuracy the gate cannot use.
+        let y = -1.0 / t.high;
+        let e = crate::fma(y, t.low, crate::fma(y, t.high, 1.0));
+        DoubleDouble {
+            high: y,
+            low: y * e,
+        }
+    };
     let magnitude = ziv(fast).unwrap_or_else(|| {
         // Accurate fallback: the sin/cos pair ratio (the correctly-rounded oracle).
         let (s, c) = sin_cos_kernel(r);
@@ -681,5 +700,40 @@ pub fn tan(x: f64) -> f64 {
         -magnitude
     } else {
         magnitude
+    }
+}
+
+/// The Fast2Sum-based folds of [`tan_kernel_fast`] need `|a| ≥ |b|`; prove the
+/// orderings from coefficient-magnitude bounds at `v = w = (π/4)²`, the
+/// octant's edge, with 2× margin (cf. the same-named module in `erf.rs`).
+#[cfg(test)]
+mod fold_ordering {
+    use super::*;
+
+    #[test]
+    fn tan_leads() {
+        // Slack for the rounding of r and w = r·r at the octant edge.
+        let wmax = core::f64::consts::FRAC_PI_4.powi(2) * 1.0001;
+        let mag = |c: DoubleDouble| c.high.abs() + c.low.abs();
+
+        // p0/p1/p2 = L₂ₖ ⊕ w·L₂ₖ₊₁
+        for pair in TAN_LEADS.chunks(2) {
+            assert!(wmax * mag(pair[1]) <= 0.5 * pair[0].high.abs());
+        }
+
+        // inner = p1 ⊕ w²·p2, outer = p0 ⊕ w²·inner, t = outer ⊕ v⁶·tail
+        let w2max = wmax * wmax;
+        let p2_mag = mag(TAN_LEADS[4]) + wmax * mag(TAN_LEADS[5]);
+        let p1_min = TAN_LEADS[2].high - wmax * mag(TAN_LEADS[3]);
+        assert!(w2max * p2_mag <= 0.5 * p1_min);
+        let inner_mag = mag(TAN_LEADS[2]) + wmax * mag(TAN_LEADS[3]) + w2max * p2_mag;
+        let p0_min = TAN_LEADS[0].high - wmax * mag(TAN_LEADS[1]);
+        assert!(w2max * inner_mag <= 0.5 * p0_min);
+        let tail_mag = TAN_TAIL
+            .iter()
+            .rev()
+            .fold(0.0, |acc, c| crate::fast_mul_add(acc, wmax, c.abs()));
+        let outer_min = p0_min - w2max * inner_mag;
+        assert!(wmax.powi(3) * tail_mag <= 0.5 * outer_min);
     }
 }
