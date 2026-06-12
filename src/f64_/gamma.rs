@@ -1413,15 +1413,22 @@ fn lgamma_pos_fast(y: DoubleDouble) -> (DoubleDouble, f64) {
 /// The lean leg: `z` (hence `z − ½`) is an exact `f64`, so the big term is a plain
 /// `ln_fast(z) · (z − ½)` — a double-double × scalar, no double-double argument add.
 /// The caller picks the tail length by `z` (see [`lgamma_fast`]).
+///
+/// The three closing folds are ordered Fast2Sums ([`DoubleDouble::add_ordered`]):
+/// for `z ≥ 8` the lead `(z−½)·ln z ≥ 15.6` dominates each later term (`−z`,
+/// `½ln(2π)`, `tail`), and the running sum stays above the next term too — proven
+/// in `fold_ordering::lgamma_stirling`.  Skipping the renormalizing `Add` shortens
+/// the serial chain that follows `ln_fast` on this hot (`z ≥ 8`) path, where its
+/// `≈2⁻¹⁰⁵` slack is far inside the [`LGAMMA_FAST_ERR`] gate.
 #[inline]
 fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
-    crate::f64_::ln_fast(z) * (z - 0.5)
-        + neg(DoubleDouble { high: z, low: 0.0 })
-        + HALF_LN_2PI
-        + DoubleDouble {
+    (crate::f64_::ln_fast(z) * (z - 0.5))
+        .add_ordered(DoubleDouble { high: -z, low: 0.0 })
+        .add_ordered(HALF_LN_2PI)
+        .add_ordered(DoubleDouble {
             high: tail,
             low: 0.0,
-        }
+        })
 }
 
 /// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg, with its error bound
@@ -1508,4 +1515,36 @@ pub fn lgamma(z: f64) -> f64 {
 
     let value = lgamma_dd(z);
     value.high + value.low
+}
+
+#[cfg(test)]
+mod fold_ordering {
+    use super::*;
+
+    /// The three `add_ordered` folds of [`lgamma_stirling_fast`] each require the
+    /// running sum to dominate the term being folded in.  The Stirling lead
+    /// `(z−½)·ln z` and every partial sum grow monotonically for `z ≥ 8`, so the
+    /// tightest case is the cutoff `z = 8`; sweeping `[8, LGAMMA_FAST_BOUND]`
+    /// confirms it on the real arithmetic (`ln_fast`, the `f64` tail, the folds).
+    #[test]
+    fn lgamma_stirling() {
+        // z = 8, 8.125, …, 1024 (8128 steps of 1/8 spanning the fast-leg band).
+        for k in 0..=8128 {
+            let z = crate::fast_mul_add(f64::from(k), 0.125, LGAMMA_FAST_CUTOFF);
+            let inv = 1.0 / z;
+            let tail = crate::poly(inv * inv, &LGAMMA_TAIL_F64) * inv;
+
+            // Fold 1: lead ⊕ (−z) needs |lead.high| ≥ |z|.
+            let lead = crate::f64_::ln_fast(z) * (z - 0.5);
+            assert!(lead.high.abs() >= z, "fold 1 at z = {z}");
+
+            // Fold 2: (lead − z) ⊕ ½ln(2π) needs |·| ≥ |½ln(2π)|.
+            let a1 = lead.add_ordered(DoubleDouble { high: -z, low: 0.0 });
+            assert!(a1.high.abs() >= HALF_LN_2PI.high.abs(), "fold 2 at z = {z}");
+
+            // Fold 3: (… + ½ln(2π)) ⊕ tail needs |·| ≥ |tail|.
+            let a2 = a1.add_ordered(HALF_LN_2PI);
+            assert!(a2.high.abs() >= tail.abs(), "fold 3 at z = {z}");
+        }
+    }
 }
