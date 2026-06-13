@@ -69,11 +69,23 @@ impl Dint {
 
         if a.ex > b.ex {
             let sh = a.ex - b.ex;
-            // Round to nearest before discarding the shifted-out bits.
+            // Round to nearest before discarding the shifted-out bits.  The
+            // round increment can carry out of bit 127 when `small` is all ones
+            // (a value just below the next binade — e.g. `2 − x` with `x` a hair
+            // under 1, which the Newton reciprocal hits); the rounded magnitude
+            // is then exactly `2¹²⁸`, so the shifted result is `2^(128−sh)`.
             if sh <= 128 {
-                small = small.wrapping_add(1 & (small >> (sh - 1)));
+                let (rounded, carry) = small.overflowing_add(1 & (small >> (sh - 1)));
+                small = if carry {
+                    1u128 << (128 - sh)
+                } else if sh < 128 {
+                    rounded >> sh
+                } else {
+                    0
+                };
+            } else {
+                small = 0;
             }
-            small = if sh < 128 { small >> sh } else { 0 };
         }
 
         let sgn = a.sgn;

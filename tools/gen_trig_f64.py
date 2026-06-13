@@ -92,22 +92,29 @@ for name, value in [("FRAC_1_120", mpf(1) / 120), ("FRAC_1_24", mpf(1) / 24)]:
     print(f"const {name}: DoubleDouble = DoubleDouble {{ high: {hi!r}, low: {lo!r} }};")
 print()
 
-# --- pi/2 in three words, each with low 21 mantissa bits cleared so that
-# q * word is exact for |q| < 2^21 (medium range |x| < 2^20). ---
+# --- pi/2 in FIVE words; PIO2_1..PIO2_4 each have low 21 mantissa bits cleared
+# so q * word is exact for |q| < 2^21 (medium range |x| < 2^20); PIO2_5 carries
+# the full remainder.  The 5-word split reaches ~199 bits, well past the ~117-bit
+# ceiling of a 3-word split, so the reduced angle stays relative-accurate
+# (~2^-100) even within ~2^-60 of a multiple of pi/2 — which keeps the relative
+# Ziv gate sound there. ---
 def clear_low(x, bits):
     b = struct.unpack('<Q', struct.pack('<d', f64(x)))[0]
     b &= ~((1 << bits) - 1)
     return struct.unpack('<d', struct.pack('<Q', b))[0]
 
 half_pi = pi / 2
-p1 = clear_low(half_pi, 21)
-p2 = clear_low(half_pi - p1, 21)
-p3 = f64(half_pi - mpf(p1) - mpf(p2))
-print(f"const PIO2_1: f64 = {p1!r};")
-print(f"const PIO2_2: f64 = {p2!r};")
-print(f"const PIO2_3: f64 = {p3!r};")
-err = mp.log(abs(half_pi - mpf(p1) - mpf(p2) - mpf(p3)) / half_pi, 2)
-print(f"// PIO2_1+2+3 represents pi/2 to ~{err} bits relative\n")
+words = []
+rem = mpf(half_pi)
+for _ in range(4):
+    w = clear_low(rem, 21)
+    words.append(w)
+    rem = rem - mpf(w)
+words.append(f64(rem))  # PIO2_5: full remainder
+for k, w in enumerate(words, 1):
+    print(f"const PIO2_{k}: f64 = {w!r};")
+err = mp.log(abs(half_pi - sum(mpf(w) for w in words)) / half_pi, 2)
+print(f"// PIO2_1..5 represents pi/2 to ~{err} bits relative\n")
 
 # --- 2/pi as little-endian u64 words for Payne-Hanek (enough for f64). ---
 # We need bits of 2/pi covering exponent (up to ~1024) + 53 + ~128 guard.
