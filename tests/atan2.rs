@@ -31,3 +31,30 @@ fn test_atan2_worst_cases() {
 fn test_atan2_worst_faithful() {
     common::test_worst_faithful_bivariate("atan2", metallic::atan2, core_math::atan2, 1);
 }
+
+/// Independent confirmation of correct rounding against MPFR.  Run with
+/// `cargo test --release --features mpfr`.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_atan2_vs_mpfr() {
+    let cr = |y: f64, x: f64| {
+        rug::Float::with_val(200, y)
+            .atan2(&rug::Float::with_val(200, x))
+            .to_f64()
+    };
+    common::mpfr_sweep_bivariate(
+        metallic::atan2,
+        cr,
+        // Independent value-uniform `(y, x)` over a wide magnitude band and all
+        // four sign quadrants, so the sweep exercises every quadrant fold and the
+        // `|y| ≷ |x|` swap.
+        |i| {
+            let y = common::uniform(common::mix64(i), -1.0, 1.0)
+                * (2.0f64).powi((common::mix64(i ^ 0x1234_5678) % 200) as i32 - 100);
+            let x = common::uniform(common::mix64(i ^ 0x9e37_79b9), -1.0, 1.0)
+                * (2.0f64).powi((common::mix64(i ^ 0xdead_beef) % 200) as i32 - 100);
+            [y, x]
+        },
+        2_000_000,
+    );
+}

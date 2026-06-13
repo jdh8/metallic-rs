@@ -19,3 +19,23 @@ fn test_atan_worst_cases() {
 fn test_atan_worst_faithful() {
     common::test_worst_faithful("atan", metallic::atan, core_math::atan, 1);
 }
+
+/// Independent confirmation of correct rounding against MPFR.  Run with
+/// `cargo test --release --features mpfr`.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_atan_vs_mpfr() {
+    let cr = |x: f64| rug::Float::with_val(200, x).atan().to_f64();
+    common::mpfr_sweep_univariate(
+        metallic::atan,
+        cr,
+        // A value-uniform spread over a wide magnitude band (both signs), so the
+        // sweep exercises the direct cell kernel, the |x| > 1 reflection, and the
+        // tiny-x fast return alike.
+        |i| {
+            let u = common::uniform(common::mix64(i), -1.0, 1.0);
+            u * (2.0f64).powi((common::mix64(i ^ 0x5bd1_e995) % 200) as i32 - 100)
+        },
+        2_000_000,
+    );
+}
