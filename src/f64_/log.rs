@@ -1034,11 +1034,9 @@ fn ln_1p_kernel(r: DoubleDouble) -> DoubleDouble {
 /// — the [`LN1P_P_COEFFS`] series shifted down past its leading `1`.  Evaluating
 /// only the correction `c = x²·Q(x)` as a double-double keeps its ≈2⁻¹⁰⁴ relative
 /// error on the *tiny* `c` (≲2⁻⁹·|x|), so adding the **exact** `x` leaves an
-/// absolute error far under ½ ulp of the result.  The hardest corpus cases land
-/// `x + c.high` exactly on a midpoint (`from_sum` residual = ½ ulp); a
-/// round-to-odd of the combined residual then breaks the tie by the sign of the
-/// `2⁻¹⁷ᵒ` sticky tail `c.low`, exactly as [`super::double::round`] does for the
-/// `f32` cast.
+/// absolute error far under ½ ulp of the result.  [`super::double::round_anchored`]
+/// then breaks the hardest corpus ties (where `x + c.high` lands on a midpoint) by
+/// the sign of the exact sticky tail `c.low`.
 #[inline]
 fn log1p_small_accurate(x: f64) -> f64 {
     let xd = DoubleDouble { high: x, low: 0.0 };
@@ -1052,20 +1050,8 @@ fn log1p_small_accurate(x: f64) -> f64 {
     }
     let c = (xd * xd) * q;
 
-    // result = round(x + c), `x` exact.  Combine the two residuals exactly
-    // (`x + c.high = s`, then `s.low + c.low = w`), round `w` to odd in the
-    // direction of its sticky tail `we`, then one final round-to-nearest add.
-    let s = DoubleDouble::from_sum(x, c.high);
-    let DoubleDouble { high: w, low: we } = DoubleDouble::from_sum(s.low, c.low);
-    let w = if we == 0.0 || w.to_bits() & 1 == 1 {
-        w
-    } else if we.is_sign_positive() == w.is_sign_positive() {
-        // Step `w` away from zero (toward `we`): magnitudes share a sign.
-        f64::from_bits(w.to_bits() + 1)
-    } else {
-        f64::from_bits(w.to_bits() - 1)
-    };
-    s.high + w
+    // result = round(x + c) with `x` exact: the result-anchored finisher.
+    super::double::round_anchored(x, c)
 }
 
 /// Decompose a finite positive `x` into `(e, cell, z)` for the exact-`z` fast

@@ -215,6 +215,35 @@ pub fn round(value: DoubleDouble) -> f32 {
     odd as f32
 }
 
+/// Correctly round `x + c`, where `x` is an **exact** `f64` and `c` a
+/// double-double correction with `|c| ≤ |x|` (so `x` is the leading term).
+///
+/// This is the *result-anchored* finisher shared by the small-`|x|` legs of
+/// `log1p`, `atanh`, and `asinh`: each computes only the tiny correction
+/// `c = f(x) − x` to double-double precision (its relative error rides the
+/// small `c`, not the result), then adds the exact `x` back here.
+///
+/// The two residuals combine exactly — `x + c.high = s` (2Sum), then
+/// `s.low + c.low = w` (2Sum) with an exact sticky tail `we` — so `w` is
+/// rounded to odd in the direction of `we` before the final round-to-nearest
+/// add `s.high + w`.  Because `we` is the *exact* remainder, the round-to-odd
+/// breaks every ½-ulp tie by the true sign of the sub-ulp tail (Boldo–Melquiond),
+/// exactly as [`round`] does for the `f32` cast.
+#[inline]
+pub fn round_anchored(x: f64, c: DoubleDouble) -> f64 {
+    let s = DoubleDouble::from_sum(x, c.high);
+    let DoubleDouble { high: w, low: we } = DoubleDouble::from_sum(s.low, c.low);
+    let w = if we == 0.0 || w.to_bits() & 1 == 1 {
+        w
+    } else if we.is_sign_positive() == w.is_sign_positive() {
+        // Step `w` away from zero (toward `we`): magnitudes share a sign.
+        f64::from_bits(w.to_bits() + 1)
+    } else {
+        f64::from_bits(w.to_bits() - 1)
+    };
+    s.high + w
+}
+
 /// Round a non-negative double-double to the nearest `f32`, safe across the
 /// subnormal range and overflow
 ///
