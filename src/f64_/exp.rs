@@ -177,17 +177,36 @@ const LOG10_2_OVER_4096_HI: f64 = 7.349365125719487e-05;
 const LOG10_2_OVER_4096_MID: f64 = -2.795678930181113e-14;
 const LOG10_2_OVER_4096_LO: f64 = -6.5950754538526695e-31;
 
-const EXPM1_S_COEFFS: [(f64, f64); 10] = [
-    (1.0, 0.0),
+/// Double-double coefficients of `U(x) = (eˣ − 1 − x)/x² = ∑ xᵏ/(k+2)!`,
+/// low-degree first (`Uₖ = 1/(k+2)!`).  The small-`|x|` *result-anchored* leg
+/// evaluates the correction `c = expm1(x) − x = x²·U(x)` with this — anchoring at
+/// `x²/2` keeps the tie-breaking cubic-and-up terms that the old
+/// `x·(S(x) − 1)` form (which routes them through `S ≈ 1`) dropped.  Degree 19
+/// over `|x| < ¼`: the `x²⁰/22!` truncation is ≈2⁻¹¹², below the double-double
+/// Horner's own ≈2⁻¹⁰⁴ floor, so the leg is evaluation-limited (not
+/// truncation-limited) across the whole branch.
+#[rustfmt::skip]
+const EXPM1_U_COEFFS: [(f64, f64); 20] = [
     (0.5, 0.0),
     (0.16666666666666666, 9.25185853854297e-18),
     (0.041666666666666664, 2.3129646346357427e-18),
     (0.008333333333333333, 1.1564823173178714e-19),
     (0.001388888888888889, -5.300543954373577e-20),
     (0.0001984126984126984, 1.7209558293420705e-22),
-    (2.48015873015873e-05, 2.1511947866775882e-23),
-    (2.7557319223985893e-06, -1.858393274046472e-22),
-    (2.755731922398589e-07, 2.3767714622250297e-23),
+    (2.48015873015873e-5, 2.1511947866775882e-23),
+    (2.7557319223985893e-6, -1.858393274046472e-22),
+    (2.755731922398589e-7, 2.3767714622250297e-23),
+    (2.505210838544172e-8, -1.448814070935912e-24),
+    (2.08767569878681e-9, -1.20734505911326e-25),
+    (1.6059043836821613e-10, 1.2585294588752098e-26),
+    (1.1470745597729725e-11, 2.0655512752830745e-28),
+    (7.647163731819816e-13, 7.03872877733453e-30),
+    (4.779477332387385e-14, 4.399205485834081e-31),
+    (2.8114572543455206e-15, 1.6508842730861433e-31),
+    (1.5619206968586225e-16, 1.1910679660273754e-32),
+    (8.22063524662433e-18, 2.2141894119604265e-34),
+    (4.110317623312165e-19, 1.4412973378659527e-36),
+    (1.9572941063391263e-20, -1.3643503830087908e-36),
 ];
 
 /// Plain-`f64` tail of `exp(r)`: `(exp(z) − 1 − z)/z² = ∑ zᵏ/(k+2)!`, low-degree
@@ -1102,9 +1121,6 @@ fn exp10_accurate(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn expm1(x: f64) -> f64 {
-    /// `N / ln(2)`, the scale that maps `x` to the reduction index
-    const N_OVER_LN2: f64 = 184.664_965_233_787_3;
-
     if x.is_nan() || x == 0.0 {
         // Preserve the sign of zero: expm1(±0) = ±0.
         return x;
@@ -1115,44 +1131,27 @@ pub fn expm1(x: f64) -> f64 {
     }
 
     // Below this `exp(x) < 2^-54`, so `exp(x) − 1` rounds to exactly −1.  This also
-    // keeps the reconstruction below in the normal range (`q ≥ −1022`).
+    // keeps the general reconstruction in the normal range (`ie ≥ −1023`).
     if x <= -708.0 {
         return -1.0;
     }
 
-    // Same reduction as `exp`: n = round(N·x / ln2), r = x − n·ln2/N.
-    let scaled = (x * N_OVER_LN2).round_ties_even();
-
-    // SAFETY: `|x| < 710`, so `|scaled| < 2^18`.
-    let n = unsafe { scaled.to_int_unchecked::<i64>() };
-
-    if n == 0 {
-        // |x| < ln2/2N ≈ 0.0027.  Computing exp(x) − 1 here would lose the small
-        // result in the double-double's floor relative to 1, so evaluate
-        // expm1(x) = x · S(x) with S(x) = (exp(x) − 1)/x = ∑ xᵏ/(k+1)!.  S is built
-        // by double-double Horner so the result keeps full *relative* accuracy.
-        let (high, low) = EXPM1_S_COEFFS[EXPM1_S_COEFFS.len() - 1];
-        let mut s = DoubleDouble { high, low };
-
-        for &(high, low) in EXPM1_S_COEFFS[..EXPM1_S_COEFFS.len() - 1].iter().rev() {
-            s = s * x + DoubleDouble { high, low };
-        }
-
-        let result = s * x;
-        return result.high + result.low;
+    // |x| < ¼: forming `eˣ − 1` here would lose the result's leading bits to the
+    // catastrophic cancellation against 1, so go *result-anchored* (the
+    // log1p/atanh template) — see [`expm1_small`].
+    if x.to_bits() & (!0u64 >> 1) < 0x3fd0_0000_0000_0000 {
+        return expm1_small(x);
     }
 
-    // exp(x) = 2^q · mantissa; form `2^q · mantissa − 1` as a double-double.  The
-    // scaling stays normal (`q ∈ [−1022, 1023]`), and the double-double subtraction
-    // absorbs the cancellation that plain `exp(x) − 1` would suffer near zero.
+    // General path: `expm1(x) = 2^q · mantissa − 1` as a double-double.  `|x| ≥ ¼`,
+    // so the `− 1` cancels at most ~2 bits and the double-double carries the result.
+    // Fast leg: the two-level lean mantissa, accepted by a Ziv test.  Its error is
+    // ≈2⁻⁶⁴ on the [1, 2) mantissa, so on the result it is bounded by
+    // `2^q · EXP_TWO_LEVEL_ZIV_EPS`.
     let neg_one = DoubleDouble {
         high: -1.0,
         low: 0.0,
     };
-
-    // Fast path: the two-level lean mantissa, accepted by a Ziv test.  Its error is
-    // ≈2⁻⁶⁴ on the [1, 2) mantissa, so on the result it is bounded by
-    // `2^q · EXP_TWO_LEVEL_ZIV_EPS`.
     let (mantissa, qf) = exp_two_level_fast(x);
     let result = mantissa * crate::exp2i(qf) + neg_one;
     let eps = crate::exp2i(qf) * EXP_TWO_LEVEL_ZIV_EPS;
@@ -1162,12 +1161,131 @@ pub fn expm1(x: f64) -> f64 {
         return lo;
     }
 
-    // Accurate path: the N=128 reduction and double-double mantissa.
-    let j = (n & (EXP_N - 1)) as usize;
-    let q0 = n >> 7;
-    let a = crate::fma(scaled, -LN2_OVER_N_HI, x);
-    let r = DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO);
-    let (mantissa, q) = exp_mantissa(j, q0, r);
-    let result = mantissa * crate::exp2i(q) + neg_one;
-    result.high + result.low
+    expm1_general(x)
+}
+
+/// Correctly-rounded `eˣ − 1` for `|x| < ¼` via the *result-anchored* leg.
+///
+/// `expm1(x) = x + c` with the correction `c = expm1(x) − x = x²·U(x)`,
+/// `U(x) = (eˣ − 1 − x)/x² = ∑ xᵏ/(k+2)!` ([`EXPM1_U_COEFFS`], double-double
+/// Horner).  Evaluating `c` *anchored at `x²/2`* (rather than the old
+/// `x·(S(x) − 1)` form, which routes the small terms through `S ≈ 1` and drops
+/// the tie-breaking cubic) keeps `c`'s error riding the tiny `c` itself, far
+/// below the result; adding back the exact `x` and rounding-to-odd the combined
+/// residual ([`round_anchored`](super::double::round_anchored)) then breaks the
+/// ½-ulp ties.  The double-double `U` resolves every case down to ≈2⁻¹⁰⁴ from a
+/// midpoint; the sub-2⁻¹⁰⁴ near-ties are caught by [`expm1_database`].
+#[inline]
+fn expm1_small(x: f64) -> f64 {
+    if let Some(r) = expm1_database(x) {
+        return r;
+    }
+
+    let (high, low) = EXPM1_U_COEFFS[EXPM1_U_COEFFS.len() - 1];
+    let mut u = DoubleDouble { high, low };
+    for &(high, low) in EXPM1_U_COEFFS[..EXPM1_U_COEFFS.len() - 1].iter().rev() {
+        u = u * x + DoubleDouble { high, low };
+    }
+
+    // c = x²·U(x) = expm1(x) − x; `from_product(x, x)` is the exact x², so c is
+    // anchored at x²/2 and `|c| ≤ |x|` (the round_anchored precondition).
+    let c = DoubleDouble::from_product(x, x) * u;
+    super::double::round_anchored(x, c)
+}
+
+/// Hard-to-round database for [`expm1_small`] and [`expm1_general`]: inputs whose
+/// `eˣ − 1` lies within the double-double accurate paths' reach of an `f64`
+/// midpoint — closer than the double-double can resolve — mapped (by bit pattern)
+/// to their correctly-rounded results.  These are the residuals metallic's
+/// double-double paths leave on the `expm1.wc` corpus; the corpus is the complete
+/// enumeration of inputs ≥ 40 hard-to-round bits, and the double-double error
+/// (≤ 2⁻⁹⁵ relative everywhere on the finite domain) resolves everything below
+/// that threshold, so the corpus residuals are exactly the inputs the paths
+/// cannot round — making this database sound for the *whole* domain, not just the
+/// corpus.  Each result is independently confirmed correctly rounded by a 200-bit
+/// MPFR `expm1`.  `(input_bits, result_bits)`, sorted for binary search.
+#[rustfmt::skip]
+const EXPM1_HARD: [(u64, u64); 7] = [
+    (0x3fd1707e20050893, 0x3fd40bfcc397ed59), (0x3fd8172a0e02f90e, 0x3fdd404e97601d65),
+    (0x3fd8bbe2fb45c151, 0x3fde3186ba9d4d49), (0x3ffaca7ae8da5a7b, 0x401157d4acd7e557),
+    (0x401273c188aa7b14, 0x4058f295a96ec6eb), (0xbfd789d025948efa, 0xbfd3b1ee1f952dcd),
+    (0xbfd82b5dfaf59b4c, 0xbfd4213802eb28ff),
+];
+
+/// Look `x` up in [`EXPM1_HARD`], returning its correctly-rounded `eˣ − 1` when
+/// present.
+#[inline]
+fn expm1_database(x: f64) -> Option<f64> {
+    let key = x.to_bits();
+    EXPM1_HARD
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(EXPM1_HARD[i].1))
+}
+
+/// Correctly-rounded `eˣ − 1` for `|x| ≥ ¼` via the two-level 4096-grid
+/// double-double path — [`expm1`]'s fallback when the lean leg straddles a
+/// rounding boundary.
+///
+/// Idiomatic port of CORE-MATH's `as_expm1_accurate` (general branch): the same
+/// two-level grid as [`exp_accurate`] builds the `eˣ` mantissa `2^(j/4096)·exp(dx)`
+/// as a double-double (three-word `ln2/4096`, [`L2H`]/`L2L`/`L2LL`; degree-7
+/// [`exp_poly_dd`]), then subtracts `1` in *mantissa space*: `eˣ − 1 =
+/// 2^ie·(mantissa − 2^(−ie))`, with `off = −2^(−ie)` built by bit pattern and the
+/// `|off|`-vs-`|mantissa|` ordering picking the Fast2Sum operand order.  `|x| ≥ ¼`
+/// bounds the `− 1` cancellation to ~2 bits, so the double-double resolves every
+/// case down to ≈2⁻¹⁰⁵ from a midpoint; the sub-2⁻¹⁰⁵ near-ties are caught by
+/// [`expm1_database`].  Kept `#[cold]`/out-of-line so it does not bloat `expm1`'s
+/// hot path.
+#[cold]
+#[inline(never)]
+fn expm1_general(x: f64) -> f64 {
+    if let Some(r) = expm1_database(x) {
+        return r;
+    }
+
+    let tf = (x * N_OVER_LN2_4096).round_ties_even();
+    // SAFETY: |x| < 710, so |tf| < 2²³.
+    let jt = unsafe { tf.to_int_unchecked::<i64>() };
+    let i0 = ((jt >> 6) & 63) as usize;
+    let i1 = (jt & 63) as usize;
+    let ie = jt >> 12;
+
+    // dx = x − t·ln2/4096 as a double-double.  `tf·L2H` is exact, so `x − tf·L2H`
+    // is exact (Sterbenz); `L2L`, `L2LL` carry the rest.
+    let dxh0 = crate::fma(tf, -L2H, x);
+    let dxl = tf * L2L;
+    let dxll = crate::fma(tf, L2LL, crate::fma(tf, L2L, -dxl));
+    let dxh = dxh0 + dxl;
+    let dx = DoubleDouble {
+        high: dxh,
+        low: (dxh0 - dxh) + dxl + dxll,
+    };
+
+    // eˣ mantissa = 2^(j/4096)·exp(dx) as a double-double, `2^(j/4096) =
+    // EXP2_T0[i0]·EXP2_T1[i1]` (one `dd × dd`), `exp(dx) − 1 = dx·exp_poly_dd(dx)`.
+    let (t0h, t0l) = EXP2_T0[i0];
+    let (t1h, t1l) = EXP2_T1[i1];
+    let table = DoubleDouble {
+        high: t0h,
+        low: t0l,
+    } * DoubleDouble {
+        high: t1h,
+        low: t1l,
+    };
+    let mant = table.add_ordered((dx * exp_poly_dd(dx)) * table);
+
+    // expm1 = 2^ie·(mantissa − 2^(−ie)).  `off = −2^(−ie)` by bit pattern: the field
+    // `2048 + 1023 − ie` sets the sign bit and the biased exponent `1023 − ie`.
+    // `|x| < 710` keeps `ie ≤ 1023`, and the −708 clamp keeps `ie ≥ −1023`, so `off`
+    // is finite.  For `ie < 53`, `|off| ≳ |mantissa|`, so Fast2Sum takes `off` first
+    // (CORE-MATH's `as_expm1_accurate`); above that `off` is the smaller term.
+    let off = f64::from_bits(((2048 + 1023 - ie) as u64) << 52);
+    let s = if ie < 53 {
+        fast_sum(off, mant.high)
+    } else {
+        fast_sum(mant.high, off)
+    };
+    let fh = fast_sum(s.high, mant.low + s.low).high;
+    fast_ldexp(fh, ie)
 }
