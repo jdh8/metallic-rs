@@ -1212,8 +1212,7 @@ pub fn log2(x: f64) -> f64 {
         return left;
     }
 
-    let result = ln_dd(x) * log2e;
-    result.high + result.low
+    super::dint::log2_accurate(x)
 }
 
 /// The base-10 logarithm
@@ -1245,8 +1244,7 @@ pub fn log10(x: f64) -> f64 {
         return left;
     }
 
-    let result = ln_dd(x) * log10e;
-    result.high + result.low
+    super::dint::log10_accurate(x)
 }
 
 /// Compute `ln(1 + x)` accurately, especially for small `x`
@@ -1297,8 +1295,9 @@ pub fn log1p(x: f64) -> f64 {
             return lo;
         }
 
-        let result = ln_1p_kernel(DoubleDouble { high: x, low: 0.0 });
-        return result.high + result.low;
+        // `x` is exact and `|x| < 1/256`, so `1 + x` fits in the 128-bit
+        // accumulator exactly: `ln(1+x)` via the correctly-rounded `dint` log.
+        return super::dint::log1p_accurate(1.0, x);
     }
 
     // Otherwise carry 1 + x exactly as `s + c` (Fast2Sum), so the bits of `x` lost
@@ -1332,19 +1331,8 @@ pub fn log1p(x: f64) -> f64 {
         return lo;
     }
 
-    // Accurate fallback, unchanged from the table path it always used: reduce
-    // with the double-double `r = m·inv − 1`, fold δ·inv exactly, and run the
-    // full double-double kernel.
-    let (e, i, r) = log_reduce(s);
-    let inv = INV_TABLE[i];
-    let r = r + DoubleDouble::from_product(delta, inv);
-
-    let e = e as f64;
-    let e_ln2 = DoubleDouble {
-        high: e * LN2_HI,
-        low: e * LN2_LO,
-    };
-    let (high, low) = L_TABLE[i];
-    let result = e_ln2 + DoubleDouble { high, low } + ln_1p_kernel(r);
-    result.high + result.low
+    // Accurate fallback: `1 + x = s + c` exactly, so feed that exact sum to the
+    // correctly-rounded 128-bit `dint` log (the same path `ln`/`log2`/`log10`
+    // use).  This resolves the hard-to-round cases the double-double kernel mis-rounds.
+    super::dint::log1p_accurate(s, c)
 }

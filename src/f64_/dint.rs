@@ -7,7 +7,7 @@
 //! CORE-MATH stores the significand as two `u64` words `{hi, lo}`; here they are
 //! packed as `m = (hi << 64) | lo`.
 
-use super::dint_consts::{INVERSE_2, LOG_INV_2, LOG2, M_ONE, P_2, ZERO};
+use super::dint_consts::{INVERSE_2, LOG_INV_2, LOG2, LOG2E, LOG10E, M_ONE, ONE, P_2, ZERO};
 
 /// 128-bit fixed-point number used by the accurate logarithm path.
 ///
@@ -295,6 +295,41 @@ pub fn ln_accurate(x: f64) -> f64 {
         return 0.0;
     }
     log_2(&Dint::from_f64(x)).to_f64()
+}
+
+/// Correctly-rounded accurate-path base-2 logarithm: `ln(x)·log₂(e)` in 128-bit
+/// fixed point, rounded once.
+#[inline]
+pub fn log2_accurate(x: f64) -> f64 {
+    if x == 1.0 {
+        return 0.0;
+    }
+    log_2(&Dint::from_f64(x)).mul(&LOG2E).to_f64()
+}
+
+/// Correctly-rounded accurate-path base-10 logarithm: `ln(x)·log₁₀(e)` in 128-bit
+/// fixed point, rounded once.
+#[inline]
+pub fn log10_accurate(x: f64) -> f64 {
+    if x == 1.0 {
+        return 0.0;
+    }
+    log_2(&Dint::from_f64(x)).mul(&LOG10E).to_f64()
+}
+
+/// Correctly-rounded accurate-path `ln(1 + x)`.
+///
+/// `1 + x = s + c` exactly (the caller's Fast2Sum split), so the 128-bit log
+/// argument is the exact sum of the two `Dint`s — preserving the bits of `x`
+/// that `1 + x` drops as an `f64`, which is what lets the reduction capture the
+/// cancellation when `ln(1+x) ≈ x`.
+#[inline]
+pub fn log1p_accurate(s: f64, c: f64) -> f64 {
+    let arg = Dint::from_f64(s).add(&Dint::from_f64(c));
+    if arg.m == ONE.m && arg.ex == 0 && !arg.sgn {
+        return 0.0;
+    }
+    log_2(&arg).to_f64()
 }
 
 #[cfg(test)]

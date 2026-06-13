@@ -2487,10 +2487,17 @@ pub static LOG2: Dint = Dint {
     ex: -1,
     m: 0xb17217f7d1cf79abc9e3b39803f2f6af,
 };
-pub static LOG2_INV: Dint = Dint {
+/// `log₂(e) = 1/ln(2)`, for the accurate `log2` (`ln(x)·log₂e`).
+pub static LOG2E: Dint = Dint {
     sgn: false,
-    ex: 12,
+    ex: 0,
     m: 0xb8aa3b295c17f0bbbe87fed0691d3e89,
+};
+/// `log₁₀(e) = 1/ln(10)`, for the accurate `log10` (`ln(x)·log₁₀e`).
+pub static LOG10E: Dint = Dint {
+    sgn: false,
+    ex: -2,
+    m: 0xde5bd8a937287195355baaafad33dc32,
 };
 pub static ONE: Dint = Dint {
     sgn: false,
