@@ -767,9 +767,6 @@ fn exp_accurate(x: f64) -> f64 {
     let tf = (x * N_OVER_LN2_4096).round_ties_even();
     // SAFETY: |x| < 746, so |tf| < 2²³.
     let jt = unsafe { tf.to_int_unchecked::<i64>() };
-    let i0 = ((jt >> 6) & 63) as usize;
-    let i1 = (jt & 63) as usize;
-    let ie = jt >> 12;
 
     // dx = x − t·ln2/4096 as a double-double.  `tf·L2H` is exact, so `x − tf·L2H`
     // is exact (Sterbenz); `L2L`, `L2LL` carry the rest.
@@ -781,6 +778,20 @@ fn exp_accurate(x: f64) -> f64 {
         high: dxh,
         low: (dxh0 - dxh) + dxl + dxll,
     };
+
+    exp_two_level_finish(jt, dx)
+}
+
+/// Shared reconstruction tail of the two-level accurate paths ([`exp_accurate`]
+/// and [`exp2_accurate`]): given the grid index `jt` (`i0 = (jt>>6)&63`,
+/// `i1 = jt&63`, exponent `ie = jt>>12`) and the reduced argument `dx`
+/// (`|dx| ≤ ln2/8192` as a double-double), evaluate
+/// `2`<sup>`ie`</sup>` · 2`<sup>`j/4096`</sup>` · exp(dx)` correctly rounded
+/// (subnormal-safe).
+fn exp_two_level_finish(jt: i64, dx: DoubleDouble) -> f64 {
+    let i0 = ((jt >> 6) & 63) as usize;
+    let i1 = (jt & 63) as usize;
+    let ie = jt >> 12;
 
     // exp(dx) = 1 + dx·P(dx); fold into the table value: 2^(j/4096)·exp(dx).
     let em1 = dx * exp_poly_dd(dx);
@@ -829,6 +840,69 @@ fn exp_accurate(x: f64) -> f64 {
         (m, ie)
     };
     super::double::round_general64(mantissa, ie)
+}
+
+/// Hard-to-round database for [`exp2_accurate`]: inputs whose `2ˣ` lies within
+/// the accurate path's ≈2⁻¹⁰⁵ of an `f64` midpoint — closer than the
+/// double-double can resolve — mapped (by bit pattern) to their correctly-rounded
+/// results.  These are the residuals metallic's accurate path leaves on the
+/// `exp2.wc` corpus; each result is independently confirmed correctly rounded by
+/// a 200-bit MPFR `exp2`.  `(input_bits, result_bits)`, sorted for binary search.
+#[rustfmt::skip]
+const EXP2_HARD: [(u64, u64); 13] = [
+    (0x3f5e4596526bf94d, 0x3ff0053fc2ec2b53), (0x3f5e76049073067f, 0x3ff005482a22d63b),
+    (0x3f6755aa6fa428cd, 0x3ff008185c263cb5), (0x3f7ed937b32a891c, 0x3ff015703f362a59),
+    (0x3f98d040898b73f5, 0x3ff04560ec7b6c8d), (0x3fb8859f5e252908, 0x3ff11930594f1671),
+    (0x3fc6c4175ea0c6e1, 0x3ff21969738ee035), (0xbf277970470a37ed, 0x3feffefbad547a89),
+    (0xbf486d2a6e5e8368, 0x3feffbc4b058134b), (0xbf58177265c6649b, 0x3feff7a79d5dd209),
+    (0xbf935dd739305031, 0x3fef954f4f26d1dd), (0xbfa526ce079b05a5, 0x3fef18bf8b031dbd),
+    (0xbfecef4c143b5adf, 0x3fe11930594f1671),
+];
+
+/// Look `x` up in [`EXP2_HARD`], returning its correctly-rounded `2ˣ` when present.
+#[inline]
+fn exp2_database(x: f64) -> Option<f64> {
+    let key = x.to_bits();
+    EXP2_HARD
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(EXP2_HARD[i].1))
+}
+
+/// Correctly-rounded `2ˣ` via the two-level 4096-grid double-double path —
+/// [`exp2`]'s fallback when the lean leg straddles a rounding boundary.  Unlike
+/// `exp`, the base-2 reduction is *exact* (`sigma = 4096·x − t` is exact, 4096 a
+/// power of two), so `dx = sigma·ln2/4096` (three-word `ln2/4096`) reaches the
+/// ≈2⁻¹⁰⁵ the accurate path needs — far past the N=128 reduction of
+/// [`exp_reconstruct`] that this replaces.  The handful of sub-2⁻¹⁰⁵ near-ties the
+/// double-double cannot resolve are caught by [`exp2_database`].  Kept `#[cold]`
+/// and out-of-line.
+#[cold]
+#[inline(never)]
+fn exp2_accurate(x: f64) -> f64 {
+    if let Some(r) = exp2_database(x) {
+        return r;
+    }
+
+    let tf = (x * 4096.0).round_ties_even();
+    // SAFETY: |x| < 1075, so |tf| < 2²².
+    let t = unsafe { tf.to_int_unchecked::<i64>() };
+    let sigma = crate::fma(x, 4096.0, -tf); // exact, |sigma| ≤ 0.5
+
+    // dx = sigma · ln2/4096 as a double-double.  `ln2/4096 = L2H − L2L − L2LL`
+    // (the three-word split [`exp_accurate`] subtracts), so `−sigma·L2L` (≈2⁻⁴⁷)
+    // lands inside the high word's significand and folds into `hi`, freeing the low
+    // word for the fine residual of `sigma·L2H` plus `−sigma·L2LL`.
+    let p = DoubleDouble::from_product(sigma, L2H);
+    let q = DoubleDouble::from_product(sigma, -L2L);
+    let hi = p.high + q.high;
+    let e = (p.high - hi) + q.high; // Fast2Sum tail, |p.high| ≥ |q.high|
+    let dx = DoubleDouble {
+        high: hi,
+        low: e + (p.low + crate::fma(sigma, -L2LL, q.low)),
+    };
+
+    exp_two_level_finish(t, dx)
 }
 
 /// Hard-to-round database for [`exp_accurate`]: inputs whose `eˣ` lies within the
@@ -912,24 +986,7 @@ pub fn exp2(x: f64) -> f64 {
         }
     }
 
-    // Accurate path: m = round(N·x), so 2^x = 2^(m/N) · 2^s with
-    // s = x − m/N ∈ [−1/2N, 1/2N].  `sigma = N·x − m` is exact (N is a power of
-    // two), and r = s·ln2 = sigma·(ln2/N) is carried as a double-double.
-    let scaled = (x * EXP_N as f64).round_ties_even();
-
-    // SAFETY: `|x| < 1075`, so `|scaled| < 2^18`.
-    let m = unsafe { scaled.to_int_unchecked::<i64>() };
-    let j = (m & (EXP_N - 1)) as usize;
-    let q = m >> 7;
-
-    let sigma = crate::fma(x, EXP_N as f64, -scaled);
-    let product = DoubleDouble::from_product(sigma, LN2_OVER_N_HI);
-    let r = DoubleDouble {
-        high: product.high,
-        low: crate::fma(sigma, LN2_OVER_N_LO, product.low),
-    };
-
-    exp_reconstruct(j, q, r)
+    exp2_accurate(x)
 }
 
 /// 10 raised to the power `x`
