@@ -163,8 +163,14 @@ pub fn parse_f32(s: &str) -> Result<f32, hexf_parse::ParseHexfError> {
     fn fallback(s: &str) -> Option<f32> {
         match s {
             "snan" => Some(f32::from_bits(f32::NAN.to_bits() | 1)),
-            #[allow(clippy::cast_precision_loss)]
-            s if s.starts_with("0x") => u32::from_str_radix(&s[2..], 16).ok().map(|x| x as f32),
+            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+            s if s.starts_with("0x") => u32::from_str_radix(&s[2..], 16)
+                .ok()
+                .map(|x| x as f32)
+                // Hex floats beyond f32's range or precision (CORE-MATH `.wc`
+                // files contain e.g. `0x1p-1022`): parse exactly as f64, then
+                // round once to f32, matching C's `strtof`.
+                .or_else(|| hexf_parse::parse_hexf64(s, true).ok().map(|x| x as f32)),
             _ => None,
         }
     }

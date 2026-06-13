@@ -30,11 +30,13 @@ fn test_tgamma_exact() {
 
 /// Regression guard over the frozen hard-to-round corpus.
 ///
-/// `core-math` has no `tgamma` for `f64` (only `tgammaf`), so the correctly-rounded
-/// oracle is MPFR.  `tests/cases/f64_tgamma.wc` holds the inputs most likely to
-/// mis-round (results near an `f64` midpoint) with their correctly-rounded results;
-/// verifying against those frozen answers needs no oracle, so this runs in the
-/// default `cargo test`.  Regenerate (and re-verify on 800M fresh inputs) with
+/// The frozen answers come from MPFR, keeping this guard independent of
+/// CORE-MATH (whose `f64::tgamma` only appeared in 1.1.1 — see
+/// [`test_tgamma_worst_cases`] for that comparison).  `tests/cases/f64_tgamma.wc`
+/// holds the inputs most likely to mis-round (results near an `f64` midpoint)
+/// with their correctly-rounded results; verifying against frozen answers needs
+/// no oracle, so this runs in the default `cargo test`.  Regenerate (and
+/// re-verify on 800M fresh inputs) with
 /// `cargo run --release --features mpfr --example gen_f64_tgamma_cases`.
 #[test]
 fn test_tgamma_corpus() {
@@ -54,6 +56,25 @@ fn test_tgamma_corpus() {
 
 /// Size of `tests/cases/f64_tgamma.wc` (kept in sync with the generator).
 const CORPUS_LEN: usize = 1990;
+
+/// Sweep CORE-MATH's official worst cases against the `core-math` oracle.
+///
+/// `tests/cases/huge/` holds CORE-MATH's full BaCSeL corpora; at ~12 MB the
+/// `tgamma` file is too large to commit (it is git-ignored) or publish
+/// (`Cargo.toml` excludes it), so it is generated locally with
+/// `cp ~/src/core-math-sys/vendor/src/binary64/tgamma/tgamma.wc tests/cases/huge/`.
+/// When the file is absent the iterator is empty and this passes vacuously;
+/// when present it is a hard correct-rounding gate (currently RED — `tgamma`
+/// mis-rounds ~312 near-ties by 1 ulp; see issue #5).
+#[test]
+fn test_tgamma_worst_cases() {
+    let cases: Vec<f64> = common::parse_case_file("huge/tgamma.wc", common::parse_f64).collect();
+    assert!(
+        cases.is_empty() || cases.len() == 545_521,
+        "corpus size changed; update this count"
+    );
+    common::test_univariate_cases(metallic::tgamma, core_math::tgamma, cases.into_iter());
+}
 
 /// Broad correct-rounding sweep against MPFR (gated behind `mpfr`, like the
 /// corpus generator, so the default test stays dependency-light).  Run with

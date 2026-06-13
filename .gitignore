@@ -24,3 +24,8 @@ Cargo.lock
 /.claude/*
 !/.claude/skills/
 *.local.md
+
+# CORE-MATH's full BaCSeL worst-case corpora (tens of MB each).  Kept local for
+# correct-rounding sweeps; regenerate by copying from a core-math-sys checkout.
+# The committed tests treat them as optional (vacuous when absent).
+/tests/cases/huge/

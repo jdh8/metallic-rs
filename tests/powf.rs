@@ -2,7 +2,7 @@ mod common;
 
 #[test]
 fn test_parser() {
-    assert!(common::parse_case_file("powf.wc", common::parse_f32_pair).count() == 133_216);
+    assert!(common::parse_case_file("powf.wc", common::parse_f32_pair).count() == 404_160);
 }
 
 #[test]

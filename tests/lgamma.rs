@@ -26,11 +26,13 @@ fn test_lgamma_exact() {
 
 /// Regression guard over the frozen hard-to-round corpus.
 ///
-/// `core-math` has no `lgamma` for `f64` (only `lgammaf`), so the correctly-rounded
-/// oracle is MPFR.  `tests/cases/f64_lgamma.wc` holds the inputs most likely to
-/// mis-round; verifying against those frozen answers needs no oracle, so this runs
-/// in the default `cargo test`.  Regenerate (and re-verify on 800M fresh inputs)
-/// with `cargo run --release --features mpfr --example gen_f64_lgamma_cases`.
+/// The frozen answers come from MPFR, keeping this guard independent of
+/// CORE-MATH (whose `f64::lgamma` only appeared in 1.1.1 — see
+/// [`test_lgamma_worst_cases`] for that comparison).  `tests/cases/f64_lgamma.wc`
+/// holds the inputs most likely to mis-round; verifying against frozen answers
+/// needs no oracle, so this runs in the default `cargo test`.  Regenerate (and
+/// re-verify on 800M fresh inputs) with
+/// `cargo run --release --features mpfr --example gen_f64_lgamma_cases`.
 #[test]
 fn test_lgamma_corpus() {
     let cases: Vec<[f64; 2]> =
@@ -49,6 +51,25 @@ fn test_lgamma_corpus() {
 
 /// Size of `tests/cases/f64_lgamma.wc` (kept in sync with the generator).
 const CORPUS_LEN: usize = 2142;
+
+/// Sweep CORE-MATH's official worst cases against the `core-math` oracle.
+///
+/// `tests/cases/huge/` holds CORE-MATH's full BaCSeL corpora; at ~37 MB the
+/// `lgamma` file is too large to commit (it is git-ignored) or publish
+/// (`Cargo.toml` excludes it), so it is generated locally with
+/// `cp ~/src/core-math-sys/vendor/src/binary64/lgamma/lgamma.wc tests/cases/huge/`.
+/// When the file is absent the iterator is empty and this passes vacuously;
+/// when present it is a hard correct-rounding gate (currently RED — `lgamma`
+/// mis-rounds ~268 k near-ties by 1 ulp; see issue #5).
+#[test]
+fn test_lgamma_worst_cases() {
+    let cases: Vec<f64> = common::parse_case_file("huge/lgamma.wc", common::parse_f64).collect();
+    assert!(
+        cases.is_empty() || cases.len() == 1_618_129,
+        "corpus size changed; update this count"
+    );
+    common::test_univariate_cases(metallic::lgamma, core_math::lgamma, cases.into_iter());
+}
 
 /// Broad correct-rounding sweep against MPFR (gated behind `mpfr`).  Run with
 /// `cargo test --release --features mpfr`.
