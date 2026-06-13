@@ -940,8 +940,12 @@ pub fn exp10(x: f64) -> f64 {
         return x;
     }
 
-    // `log10(f64::MAX)` and the threshold below which `exp10` rounds to zero
-    if x >= 308.254_715_559_916_7 {
+    // Overflow threshold, exact to the ulp: `exp10` is finite at
+    // x = 0x1.34413509f79fep+8 (→ ≈f64::MAX) and overflows at the next input up,
+    // 0x1.34413509f79ffp+8.  Using the rounded decimal `308.2547155559…7` with
+    // `>=` clipped the last finite input to ∞ (~1119 ulp early), so gate on the
+    // exact first overflowing bit pattern instead.
+    if x >= f64::from_bits(0x4073_4413_509f_79ff) {
         return f64::INFINITY;
     }
     if x <= -323.607_245_338_779_8 {

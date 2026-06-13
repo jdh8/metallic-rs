@@ -873,6 +873,16 @@ const LGAMMA_TABLE: [GammaCell; 9] = [
     },
 ];
 
+/// `ln Γ(z)` overflows `f64::MAX` at and above this `z`
+///
+/// Exact to the ulp: `ln Γ(0x1.754d9278b51a7p+1014) = f64::MAX` (the last finite
+/// result) and the next input up, `0x1.754d9278b51a8p+1014 ≈ 2.56e305`, rounds to
+/// `+∞`.  Past it even the overflow-safe `(t−½)·(ln t − 1)` lead exceeds `f64::MAX`,
+/// so the double-double Stirling product would produce `NaN`; bail to `+∞` first.
+/// (Only large *positive* `z` overflows: for `z → −∞` the reflection drives
+/// `ln|Γ| → −∞`.)
+const LGAMMA_OVERFLOW: f64 = f64::from_bits(0x7f57_54d9_278b_51a8);
+
 /// `ln π` as a double-double, the additive constant of the lgamma reflection
 ///
 /// Precomputed so the reflection never pays a logarithm for the constant `π`.
@@ -884,6 +894,14 @@ const LN_PI: DoubleDouble = DoubleDouble {
 /// `½·ln(2π)`, the additive Stirling constant
 const HALF_LN_2PI: DoubleDouble = DoubleDouble {
     high: 0.9189385332046728,
+    low: -3.8782941580672414e-17,
+};
+
+/// `½·ln(2π) − ½`, the additive Stirling constant once `−t` is folded into the
+/// lead as `(t−½)·(ln t − 1)` (see [`lgamma_pos_dd`]).  `0.9189… − 0.5` is
+/// Sterbenz-exact, so the low word is unchanged from [`HALF_LN_2PI`].
+const HALF_LN_2PI_M_HALF: DoubleDouble = DoubleDouble {
+    high: 0.4189385332046728,
     low: -3.8782941580672414e-17,
 };
 // lgamma Stirling tail: 10 double-double coeffs, residual at t=40 is 2^-108.0, max|c|=1.39e+00
@@ -1152,8 +1170,11 @@ pub fn tgamma(z: f64) -> f64 {
         return f64::INFINITY;
     }
 
-    // Γ(±0) = ±∞, and Γ(z) ≈ 1/z overflows for |z| below `TGAMMA_TINY`.
-    if z.abs() < TGAMMA_TINY {
+    // Γ(±0) = ±∞, and Γ(z) ≈ 1/z overflows for |z| at or below `TGAMMA_TINY`
+    // (= 2⁻¹⁰²⁴): Γ(±2⁻¹⁰²⁴) ≈ 2¹⁰²⁴ rounds to ±∞, while the next subnormal up is
+    // finite (≈f64::MAX).  Must be `<=`, not `<`: the boundary itself overflows,
+    // and falling through to the recurrence there returned a bogus `2.0`.
+    if z.abs() <= TGAMMA_TINY {
         return f64::INFINITY.copysign(z);
     }
 
@@ -1379,13 +1400,20 @@ fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
     let u = inv_t * inv_t;
     let tail = poly_dd(u, &LGAMMA_TAIL_DD) * inv_t;
 
-    let stirling = ln_sum(t)
+    // lnΓ(t) = (t−½)·(ln t − 1) − ½ + ½ln(2π) + tail.  Folding the `−t` term into
+    // the lead as `(t−½)·(ln t − 1)` keeps the dominant product at the *result*
+    // magnitude; the separate `(t−½)·ln t ≈ result + t` would exceed `f64::MAX`
+    // (→ ∞, then ∞−∞ = NaN) for `z ≳ 2.56e305`, even though lnΓ(z) is still finite.
+    let stirling = (ln_sum(t)
+        + DoubleDouble {
+            high: -1.0,
+            low: 0.0,
+        })
         * (t + DoubleDouble {
             high: -0.5,
             low: 0.0,
         })
-        + neg(t)
-        + HALF_LN_2PI
+        + HALF_LN_2PI_M_HALF
         + tail;
 
     if steps > 0 {
@@ -1485,7 +1513,7 @@ fn lgamma_dd(z: f64) -> DoubleDouble {
 #[must_use]
 #[inline]
 pub fn lgamma(z: f64) -> f64 {
-    if z == 0.0 || z == f64::INFINITY {
+    if z == 0.0 || z >= LGAMMA_OVERFLOW {
         return f64::INFINITY;
     }
     if z.is_nan() {

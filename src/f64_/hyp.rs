@@ -168,8 +168,12 @@ pub fn cosh(x: f64) -> f64 {
 
     let x = x.abs();
 
-    // `ln(2·f64::MAX)`: above this `cosh = eˣ/2` overflows.
-    if x > 710.475_860_073_944 {
+    // `ln(2·f64::MAX)` rounded up to the first overflowing input: at and above
+    // this `cosh = eˣ/2` rounds to ∞ (`0x1.633ce8fb9f87ep+9`; the value just
+    // below it, `…87dp+9`, still rounds to a finite ≈`f64::MAX`).  Must be `>=`,
+    // not `>`: the boundary input itself overflows, and letting it fall through
+    // to the `eˣ` path yields `NaN` from the `2^q` reconstruction.
+    if x >= 710.475_860_073_944 {
         return f64::INFINITY;
     }
 
@@ -198,7 +202,9 @@ pub fn sinh(x: f64) -> f64 {
 
     let s = x.abs();
 
-    if s > 710.475_860_073_944 {
+    // See `cosh`: `>=`, not `>` — the boundary input `0x1.633ce8fb9f87ep+9`
+    // overflows to ∞, and the `eˣ` path would otherwise return `NaN` there.
+    if s >= 710.475_860_073_944 {
         return f64::INFINITY.copysign(x);
     }
 
