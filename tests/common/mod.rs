@@ -70,6 +70,29 @@ pub fn ulp_error_f32(a: f32, b: f32) -> u64 {
     (ordered_f32(a) - ordered_f32(b)).unsigned_abs()
 }
 
+/// Signed-magnitude ordering of an `f64`, so that adjacent floats differ by one
+fn ordered_f64(x: f64) -> i128 {
+    let magnitude = i128::from(x.to_bits() & 0x7fff_ffff_ffff_ffff);
+    if x.is_sign_negative() {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
+/// ulp error between two `f64`s.  NaN must match NaN exactly (else `u64::MAX`);
+/// ∞ is treated as the ordinary code point just past `MAX`, so the overflow
+/// boundary `MAX`↔∞ counts as 1 ulp — the right metric for a faithful floor.
+pub fn ulp_error_f64(a: f64, b: f64) -> u64 {
+    if a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()) {
+        return 0;
+    }
+    if a.is_nan() || b.is_nan() {
+        return u64::MAX;
+    }
+    u64::try_from((ordered_f64(a) - ordered_f64(b)).unsigned_abs()).unwrap_or(u64::MAX)
+}
+
 /// Like [`test_univariate_cases`] but tolerant up to `tol` ulps
 ///
 /// This is for faithfully-rounded (≤ 1 ulp) functions that are not yet
@@ -126,6 +149,112 @@ pub fn test_bivariate_cases<In: Copy + LowerExp, Out: Identity + Debug>(
         let f = f(x, y);
         let g = g(x, y);
         (!f.is(&g)).then(|| println!("{x:e}, {y:e}: {f:?} != {g:?}"))
+    }));
+}
+
+/// CORE-MATH worst-case gate: check `f` bit-exact against `oracle` on the
+/// hard-to-round corpus `tests/cases/<name>.wc`.  This reproduces CORE-MATH's
+/// `--worst` step in round-to-nearest.  Passes vacuously when the corpus file is
+/// absent, so a checkout without the corpora still builds.
+pub fn test_worst_univariate<Out: Identity + Debug>(
+    name: &str,
+    f: impl Fn(f64) -> Out,
+    oracle: impl Fn(f64) -> Out,
+) {
+    test_univariate_cases(f, oracle, parse_case_file(format!("{name}.wc"), parse_f64));
+}
+
+/// Bivariate [`test_worst_univariate`], for `atan2`, `hypot`, `pow`.
+pub fn test_worst_bivariate<Out: Identity + Debug>(
+    name: &str,
+    f: impl Fn(f64, f64) -> Out,
+    oracle: impl Fn(f64, f64) -> Out,
+) {
+    test_bivariate_cases(
+        f,
+        oracle,
+        parse_case_file(format!("{name}.wc"), parse_f64_pair),
+    );
+}
+
+/// Like [`test_worst_univariate`] but tolerant up to `tol` ulps: the blocking
+/// floor for functions that are faithfully rounded (≤ 1 ulp) but not yet
+/// correctly rounded (their strict gate is `#[ignore]`d pending the CR push).
+pub fn test_worst_faithful(
+    name: &str,
+    f: impl Fn(f64) -> f64,
+    oracle: impl Fn(f64) -> f64,
+    tol: u64,
+) {
+    truncate_errors(
+        parse_case_file(format!("{name}.wc"), parse_f64).filter_map(|x| {
+            let (a, b) = (f(x), oracle(x));
+            let error = ulp_error_f64(a, b);
+            (error > tol).then(|| println!("{x:e}: {a:e} != {b:e} ({error} ulp)"))
+        }),
+    );
+}
+
+/// Bivariate [`test_worst_faithful`].
+pub fn test_worst_faithful_bivariate(
+    name: &str,
+    f: impl Fn(f64, f64) -> f64,
+    oracle: impl Fn(f64, f64) -> f64,
+    tol: u64,
+) {
+    truncate_errors(
+        parse_case_file(format!("{name}.wc"), parse_f64_pair).filter_map(|[x, y]| {
+            let (a, b) = (f(x, y), oracle(x, y));
+            let error = ulp_error_f64(a, b);
+            (error > tol).then(|| println!("{x:e}, {y:e}: {a:e} != {b:e} ({error} ulp)"))
+        }),
+    );
+}
+
+/// SplitMix64 hash — deterministic pseudo-random `u64` for sampling.
+pub fn mix64(i: u64) -> u64 {
+    let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Value-uniform `f64` in `[lo, hi]` drawn from a 64-bit hash.
+pub fn uniform(hash: u64, lo: f64, hi: f64) -> f64 {
+    let unit = (hash >> 11) as f64 / (1u64 << 53) as f64; // [0, 1)
+    metallic::fma(unit, hi - lo, lo)
+}
+
+/// Independent gold-standard cross-check (CORE-MATH uses MPFR as its reference):
+/// bit-exact `f` vs a correctly-rounded MPFR result `cr` over `n` samples drawn
+/// by `sampler`.  Strict round-to-nearest, so it is RED for functions that are
+/// only faithfully rounded — run deliberately with `--features mpfr`.
+#[cfg(feature = "mpfr")]
+pub fn mpfr_sweep_univariate(
+    f: impl Fn(f64) -> f64,
+    cr: impl Fn(f64) -> f64,
+    sampler: impl Fn(u64) -> f64,
+    n: u64,
+) {
+    truncate_errors((0..n).filter_map(|i| {
+        let x = sampler(i);
+        let (got, want) = (f(x), cr(x));
+        (!got.is(&want)).then(|| println!("{x:e}: {got:e} != {want:e} (correct)"))
+    }));
+}
+
+/// Bivariate [`mpfr_sweep_univariate`].
+#[cfg(feature = "mpfr")]
+pub fn mpfr_sweep_bivariate(
+    f: impl Fn(f64, f64) -> f64,
+    cr: impl Fn(f64, f64) -> f64,
+    sampler: impl Fn(u64) -> [f64; 2],
+    n: u64,
+) {
+    truncate_errors((0..n).filter_map(|i| {
+        let [x, y] = sampler(i);
+        let (got, want) = (f(x, y), cr(x, y));
+        (!got.is(&want)).then(|| println!("{x:e}, {y:e}: {got:e} != {want:e} (correct)"))
     }));
 }
 

@@ -11,3 +11,17 @@ fn log_inputs() -> impl Iterator<Item = f64> {
 fn test_log2() {
     common::test_univariate_cases(metallic::log2, core_math::log2, log_inputs());
 }
+
+/// Correct-rounding gate on CORE-MATH's hard-to-round corpus (RED until log2 is
+/// correctly rounded — issue #6).
+#[test]
+#[ignore = "faithful but not yet correctly rounded; tracked in issue #6"]
+fn test_log2_worst_cases() {
+    common::test_worst_univariate("log2", metallic::log2, core_math::log2);
+}
+
+/// Faithful-rounding floor (≤ 1 ulp) on that same corpus.
+#[test]
+fn test_log2_worst_faithful() {
+    common::test_worst_faithful("log2", metallic::log2, core_math::log2, 1);
+}

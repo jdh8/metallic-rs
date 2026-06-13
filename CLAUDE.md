@@ -14,6 +14,35 @@ Note: do **not** run tests with `--all-features`.  The `_no_fma` feature
 disables FMA usage and would cause tests to exercise a different code path than
 the default build, producing misleading results.
 
+## Verification (reproducing CORE-MATH's checks)
+
+Every f64 function reproduces CORE-MATH's per-function check discipline, in
+**round-to-nearest only** (metallic's functions are pure RNDN; directed rounding
+is out of scope).  Each `tests/<fn>.rs` carries, beyond its dense + full-range
+bit-stepping sweep:
+
+- `test_<fn>_worst_cases` — CORE-MATH's `--worst` step: bit-exact vs the
+  `core-math` oracle on CORE-MATH's hard-to-round corpus `tests/cases/<fn>.wc`.
+  This is the strict correct-rounding gate.  For functions that are not yet
+  correctly rounded it is `#[ignore]`d (run with `cargo test -- --ignored`) and
+  paired with an active `test_<fn>_worst_faithful` (≤ 1 ulp floor).
+- `test_<fn>_vs_mpfr` (`#[cfg(feature = "mpfr")]`) — the independent gold-standard
+  cross-check CORE-MATH itself uses, guarding against a shared CORE-MATH bug.
+  Run with `cargo test --release --features mpfr`.
+
+Shared helpers live in `tests/common/mod.rs` (`test_worst_univariate`,
+`test_worst_bivariate`, `test_worst_faithful`, `mpfr_sweep_univariate`, …).
+
+**Corpora.** `tests/cases/*.wc` are CORE-MATH's worst-case files, committed to
+git but excluded from the published crate via `exclude = ["/tests/cases"]` in
+`Cargo.toml` (big repo, small dependency).  Refresh them from a `core-math-sys`
+checkout with `tools/sync-worst-cases.sh`.
+
+**Correctness status** is tracked in **issue #6** (not #5, which is performance):
+the strict gates that are RED, plus the handful of functions that fail even the
+faithful floor (genuine bugs at overflow/underflow extremes).  Default
+`cargo test` is therefore RED until those are fixed — that is by design.
+
 ## Fused multiply-add
 
 Never call `f32::mul_add` / `f64::mul_add` directly (clippy-denied), and never

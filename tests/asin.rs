@@ -51,3 +51,22 @@ fn test_asin() {
         dense.chain(bits).chain(hard),
     );
 }
+
+#[test]
+fn test_asin_worst_cases() {
+    common::test_worst_univariate("asin", metallic::asin, core_math::asin);
+}
+
+/// Independent confirmation of correct rounding against MPFR.  Run with
+/// `cargo test --release --features mpfr`.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_asin_vs_mpfr() {
+    let cr = |x: f64| rug::Float::with_val(200, x).asin().to_f64();
+    common::mpfr_sweep_univariate(
+        metallic::asin,
+        cr,
+        |i| common::uniform(common::mix64(i), -1.0, 1.0),
+        2_000_000,
+    );
+}

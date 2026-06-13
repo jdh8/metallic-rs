@@ -9,3 +9,17 @@ fn test_sin() {
     let bits = (0..=u64::MAX).step_by((1 << 38) - 1337).map(f64::from_bits);
     common::test_univariate_cases(metallic::sin, core_math::sin, dense.chain(wide).chain(bits));
 }
+
+/// Correct-rounding gate on CORE-MATH's hard-to-round corpus (RED until sin is
+/// correctly rounded — issue #6).
+#[test]
+#[ignore = "faithful but not yet correctly rounded; tracked in issue #6"]
+fn test_sin_worst_cases() {
+    common::test_worst_univariate("sin", metallic::sin, core_math::sin);
+}
+
+/// Faithful-rounding floor (≤ 1 ulp) on that same corpus.
+#[test]
+fn test_sin_worst_faithful() {
+    common::test_worst_faithful("sin", metallic::sin, core_math::sin, 1);
+}
