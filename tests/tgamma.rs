@@ -64,7 +64,6 @@ const CORPUS_LEN: usize = 1990;
 /// is correctly rounded (it mis-rounds ~312 near-ties by 1 ulp; see issue #6);
 /// [`test_tgamma_worst_faithful`] is the active ≤1-ulp floor.
 #[test]
-#[ignore = "faithful but not yet correctly rounded; tracked in issue #6"]
 fn test_tgamma_worst_cases() {
     let cases: Vec<f64> = common::parse_case_file("tgamma.wc", common::parse_f64).collect();
     assert!(

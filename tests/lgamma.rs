@@ -59,7 +59,6 @@ const CORPUS_LEN: usize = 2142;
 /// is correctly rounded (it mis-rounds ~268 k near-ties by 1 ulp; see issue #6);
 /// [`test_lgamma_worst_faithful`] is the active ≤1-ulp floor.
 #[test]
-#[ignore = "faithful but not yet correctly rounded; tracked in issue #6"]
 fn test_lgamma_worst_cases() {
     let cases: Vec<f64> = common::parse_case_file("lgamma.wc", common::parse_f64).collect();
     assert!(
