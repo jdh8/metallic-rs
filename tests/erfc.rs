@@ -23,3 +23,21 @@ fn test_erfc_worst_cases() {
 fn test_erfc_worst_faithful() {
     common::test_worst_faithful("erfc", metallic::erfc, core_math::erfc, 1);
 }
+
+/// Independent confirmation of correct rounding against MPFR — the gold-standard
+/// oracle CORE-MATH itself checks against (guards against a shared CORE-MATH
+/// bug).  Run with `cargo test --release --features mpfr`.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_erfc_vs_mpfr() {
+    let cr = |x: f64| rug::Float::with_val(200, x).erfc().to_f64();
+    // Value-uniform over [−6.25, 27.226]: the negative `2 − erfc` reflection, the
+    // 1 − erf small region, the t-bridge, and the full positive tail down to the
+    // underflow threshold (subnormal results included).
+    common::mpfr_sweep_univariate(
+        metallic::erfc,
+        cr,
+        |i| common::uniform(common::mix64(i), -6.25, 27.226_017_111_108_362),
+        4_000_000,
+    );
+}

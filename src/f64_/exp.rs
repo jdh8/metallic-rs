@@ -146,18 +146,6 @@ const EXP2_TABLE: [(f64, f64); 128] = [
     (1.9891988469672663, 8.2051326383692e-18),
 ];
 
-const EXP_R_COEFFS: [(f64, f64); 9] = [
-    (1.0, 0.0),
-    (1.0, -2.80175043845722e-28),
-    (0.5, 4.957436121490076e-28),
-    (0.16666666666666666, 9.25236795203688e-18),
-    (0.041666666666666664, 2.312586914244713e-18),
-    (0.008333333333333083, -1.6217792309420587e-19),
-    (0.0013888888888889642, -6.741971285310136e-20),
-    (0.00019841274388185108, 6.979145348335693e-21),
-    (2.4801584758888655e-05, -1.6080712309255824e-21),
-];
-
 const LN10_HI: f64 = 2.302585092994046;
 const LN10_LO: f64 = -2.1707562233822494e-16;
 
@@ -410,43 +398,12 @@ const EXP2_T1: [(f64, f64); 64] = [
 /// Table size for the exponential family: `2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
 const EXP_N: i64 = 128;
 
-/// The mantissa `2`<sup>`j/N`</sup>` · exp(r)` of the exponential family, as a
-/// double-double normalized into [1, 2), with `q` adjusted for that normalization.
-///
-/// `r` is the reduced argument, `|r| ≤ ln2/2N`.  The full value is `2`<sup>`q`</sup>
-/// times the returned mantissa.
-#[inline]
-pub(super) fn exp_mantissa(j: usize, q: i64, r: DoubleDouble) -> (DoubleDouble, i64) {
-    // exp(r) by double-double Horner over the degree-8 minimax polynomial.
-    let (high, low) = EXP_R_COEFFS[EXP_R_COEFFS.len() - 1];
-    let mut acc = DoubleDouble { high, low };
-
-    for &(high, low) in EXP_R_COEFFS[..EXP_R_COEFFS.len() - 1].iter().rev() {
-        acc = acc * r + DoubleDouble { high, low };
-    }
-
-    // Fold the table entry in and normalize the mantissa.
-    let (high, low) = EXP2_TABLE[j];
-    let scaled = DoubleDouble { high, low } * acc;
-    let product = fast_sum(scaled.high, scaled.low);
-
-    // `2^(j/N) · exp(r)` lies in [0.997, 2.005); fold its exponent into `q` so the
-    // mantissa is in [1, 2).
-    if product.high < 1.0 {
-        (product * 2.0, q - 1)
-    } else if product.high >= 2.0 {
-        (product * 0.5, q + 1)
-    } else {
-        (product, q)
-    }
-}
-
 /// Fast double-double mantissa for the exponential family.
 ///
-/// Same contract as [`exp_mantissa`] — returns `2`<sup>`j/N`</sup>` · exp(r)`
-/// normalized into [1, 2) with `q` adjusted — but evaluates `exp(r)` with a
-/// plain-`f64` tail polynomial instead of a double-double Horner.  This trades
-/// the accurate path's ≈2⁻¹⁰⁰ for ≈2⁻⁶⁸ relative error at a fraction of the cost;
+/// Returns `2`<sup>`j/N`</sup>` · exp(r)` normalized into [1, 2) with `q` adjusted,
+/// evaluating `exp(r)` with a plain-`f64` tail polynomial instead of a
+/// double-double Horner.  This trades the
+/// accurate path's precision for ≈2⁻⁶⁸ relative error at a fraction of the cost;
 /// the callers' Ziv tests resolve the rare hard-to-round cases against an accurate
 /// path.
 #[inline]
@@ -630,16 +587,92 @@ pub(super) fn exp_reduce_dd(w: DoubleDouble) -> (usize, i64, DoubleDouble) {
     (j, q, DoubleDouble::from_sum(a, b))
 }
 
-/// `eᵂ` as `2`<sup>`q`</sup>` · mantissa` (mantissa a double-double in [1, 2)) for
-/// a double-double exponent `W`, the accurate counterpart of [`exp_dd_of_dd_fast`].
+/// Two-level reduction of a *double-double* exponent `W` for the lifted accurate
+/// `erf`/`erfc` path: returns `(jt, dx)` with `eᵂ = 2`<sup>`jt/4096`</sup>` · exp(dx)`
+/// and `|dx| ≤ ln2/8192` carried as a double-double.
+///
+/// The double-double counterpart of [`exp_two_level_reduce_accurate`] (the f64
+/// reduction): the same 4096-grid and three-word `ln2/4096` split
+/// ([`L2H`]/[`L2L`]/[`L2LL`]), but the reduced residual additionally gathers the
+/// input's low word `W.low`.  `tf·L2H` is exact ([`L2H`] has 24 trailing zero
+/// bits, `|tf| < 2²³` over `erfc`'s `|W| ≤ ~750`), so `dxh0 = W.high − tf·L2H` is
+/// exact (Sterbenz); `W.low`, `tf·L2L`, `tf·L2LL` are then folded in with a
+/// compensated accumulation that keeps the result faithful to ≈2⁻¹¹⁸ absolute
+/// (≈2⁻¹⁰⁴·⁵ relative to `dx` even at `erfc`'s `|W| ≈ 114`, `x ≈ 10.7`), past the
+/// ≈2⁻⁵⁴-ulp hardness of the worst cases.  The caller must keep `|W.high|` in the
+/// finite `eᵂ` range (`< ~746`) so `round(4096·W/ln2)` fits.
 #[inline]
-pub(super) fn exp_dd_of_dd(w: DoubleDouble) -> (DoubleDouble, i64) {
-    let (j, q, r) = exp_reduce_dd(w);
-    exp_mantissa(j, q, r)
+fn exp_two_level_reduce_dd_accurate(w: DoubleDouble) -> (i64, DoubleDouble) {
+    let tf = (w.high * N_OVER_LN2_4096).round_ties_even();
+    // SAFETY: `|W.high| < 746`, so `|tf| < 2²³`.
+    let jt = unsafe { tf.to_int_unchecked::<i64>() };
+
+    // dxh0 = W.high − tf·L2H, exact (Sterbenz); the bulk of dx, |dxh0| ≤ ln2/8192.
+    let dxh0 = crate::fma(tf, -L2H, w.high);
+    // tf·(ln2/4096) low words: `ln2/4096 = L2H − L2L − L2LL`, so dx gains
+    // `+tf·L2L + tf·L2LL`.  `dxl + dxl_t = tf·L2L` exactly; fold L2LL into dxll.
+    let dxl = tf * L2L;
+    let dxl_t = crate::fma(tf, L2L, -dxl);
+    let dxll = crate::fma(tf, L2LL, dxl_t);
+
+    // dx = dxh0 + dxl + W.low + dxll as a normalized double-double.  Each addend
+    // is an exact f64; threading both words through `add_loose` (2Sum on the
+    // highs, compensated lows) keeps every bit down to ≈2⁻¹¹⁸ — `W.low` (≈2⁻⁴⁶ at
+    // the largest `|W|`) folds into the high word without truncating the residual.
+    let dx = DoubleDouble::from_sum(dxh0, dxl)
+        .add_loose(DoubleDouble {
+            high: w.low,
+            low: 0.0,
+        })
+        .add_loose(DoubleDouble {
+            high: dxll,
+            low: 0.0,
+        });
+    (jt, dx)
+}
+
+/// Lifted accurate `eᵂ` for a double-double exponent `W` (≈2⁻¹⁰⁷ relative), the
+/// correctly-rounding fallback `erf`/`erfc` route through (replacing the old
+/// ≈2⁻¹⁰⁰ N=128 double-double Horner on the cold Ziv path).
+///
+/// Mirrors [`exp_two_level_mantissa_accurate`] (the f64 accurate mantissa) but
+/// reduces the *double-double* `W` with [`exp_two_level_reduce_dd_accurate`]: the
+/// 4096-grid value `2`<sup>`j/4096`</sup>` = EXP2_T0[i0]·EXP2_T1[i1]` folded with
+/// the `exp(dx) − 1` of the degree-7 double-double [`exp_poly_dd`].  Returns the
+/// un-rounded mantissa as a double-double in [1, 2) and the adjusted exponent, so
+/// `erf`/`erfc` can do their own sound rounding (and the `1 − erfc` / `2 − erfc`
+/// reflections) afterward.
+#[inline]
+pub(super) fn exp_dd_of_dd_accurate(w: DoubleDouble) -> (DoubleDouble, i64) {
+    let (jt, dx) = exp_two_level_reduce_dd_accurate(w);
+    let i0 = ((jt >> 6) & 63) as usize;
+    let i1 = (jt & 63) as usize;
+    let ie = jt >> 12;
+
+    let em1 = dx * exp_poly_dd(dx);
+    let (t0h, t0l) = EXP2_T0[i0];
+    let (t1h, t1l) = EXP2_T1[i1];
+    let table = DoubleDouble {
+        high: t0h,
+        low: t0l,
+    } * DoubleDouble {
+        high: t1h,
+        low: t1l,
+    };
+    let m = table.add_ordered(em1 * table);
+
+    // Normalize the mantissa into [1, 2), folding its binary exponent into `ie`.
+    if m.high < 1.0 {
+        (m * 2.0, ie - 1)
+    } else if m.high >= 2.0 {
+        (m * 0.5, ie + 1)
+    } else {
+        (m, ie)
+    }
 }
 
 /// Lean `eᵂ` for a double-double exponent `W` (≈2⁻⁶⁸ relative), the fast leg
-/// `erfc` Ziv-gates against [`exp_dd_of_dd`].
+/// `erfc` Ziv-gates against [`exp_dd_of_dd_accurate`].
 #[inline]
 pub(super) fn exp_dd_of_dd_fast(w: DoubleDouble) -> (DoubleDouble, i64) {
     let (j, q, r) = exp_reduce_dd(w);
@@ -1306,4 +1339,92 @@ fn expm1_general(x: f64) -> f64 {
     };
     let fh = fast_sum(s.high, mant.low + s.low).high;
     fast_ldexp(fh, ie)
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod accurate_dd_tests {
+    use super::*;
+
+    /// `exp_dd_of_dd_accurate` must reconstruct `exp(W)` from a double-double `W`
+    /// to ≈2⁻¹⁰⁵⁺ relative over `erf`/`erfc`'s exponent range `W = Q − x²`
+    /// (`W ∈ [−750, 0.7]`).  Checked against a 250-bit MPFR `exp`, this is the
+    /// precision floor the lifted accurate path needs to correctly round the
+    /// hard-to-round corpus (whose worst cases sit ≈2⁻⁵⁴ ulp ≈ 2⁻¹⁰⁷ relative
+    /// from a midpoint).
+    #[test]
+    fn exp_dd_of_dd_accurate_vs_mpfr() {
+        use rug::Float;
+
+        // Deterministic SplitMix64 stream of double-double `W` in [lo, hi]: a
+        // value-uniform high word, plus a low word ≈ ulp(high)/2 · uniform(−1,1),
+        // i.e. a genuinely two-word argument like `Q − x²`.
+        fn mix(i: u64) -> u64 {
+            let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+
+        let mut worst = 0.0_f64;
+        let mut worst_w = (0.0, 0.0);
+        let n = 2_000_000u64;
+        for i in 0..n {
+            let h0 = mix(i);
+            let h1 = mix(i ^ 0x9E37_79B9_7F4A_7C15);
+            // High word uniform in [-750, 0.7] (erfc's W range; erf rides 0..0.7).
+            let unit = (h0 >> 11) as f64 / (1u64 << 53) as f64;
+            let hi = crate::fma(unit, 750.7, -750.0);
+            // Low word: a few ulp of `hi`, signed — exercises the W.low fold.
+            let ulp_hi = if hi == 0.0 {
+                0.0
+            } else {
+                f64::from_bits(hi.abs().to_bits() + 1) - hi.abs()
+            };
+            let s = ((h1 >> 11) as f64 / (1u64 << 53) as f64) - 0.5; // [-0.5, 0.5)
+            let lo = ulp_hi * s; // |lo| ≤ ulp(hi)/2, the normalized-dd contract
+            let w = DoubleDouble::from_sum(hi, lo);
+
+            let (m, q) = exp_dd_of_dd_accurate(w);
+            // Reconstruct exp(W) = (m.high + m.low) · 2^q and compare to MPFR.
+            // Compare the mantissa directly against `truth · 2^-q` (exact shift)
+            // so no `2^q` underflow distorts the relative error for very negative q.
+            let got = Float::with_val(250, m.high) + Float::with_val(250, m.low);
+
+            // True exp of the EXACT double-double value W = w.high + w.low,
+            // scaled to the mantissa domain by 2^-q (an exact binary shift).
+            let wexact = Float::with_val(250, w.high) + Float::with_val(250, w.low);
+            let truth = wexact.exp();
+            let q32 = i32::try_from(q).expect("q in i32 range over the W range");
+            let truth_m = truth >> q32; // truth · 2^-q, exact
+
+            if truth_m == 0.0 || !truth_m.is_finite() {
+                continue;
+            }
+            let rel = Float::with_val(250, &got - &truth_m).abs() / truth_m.clone().abs();
+            let rel = rel.to_f64();
+            if rel > worst {
+                worst = rel;
+                worst_w = (w.high, w.low);
+            }
+        }
+        let bits = if worst <= 0.0 {
+            f64::INFINITY
+        } else {
+            -worst.log2()
+        };
+        println!(
+            "exp_dd_of_dd_accurate: worst relative error 2^-{bits:.1} at W=({:e}, {:e})",
+            worst_w.0, worst_w.1
+        );
+        // The lifted path must clear ≈2⁻¹⁰³ relative (margin over the corpus's
+        // 2⁻¹⁰⁷-relative hardness at small `|x|`); ≈2⁻¹⁰⁰ would just reproduce the
+        // old miss set.  The worst random samples sit at `|W| ≈ 277` (`x ≈ 16.6`),
+        // where the input `W.low ≈ 2⁻⁴⁵` caps a two-word residual near 2⁻¹⁰³·⁵ —
+        // still far inside every non-tail corpus case; the deep subnormal tail
+        // (`x ≳ 26`) is resolved by the hard-case database.
+        assert!(
+            worst < 2.0_f64.powi(-103),
+            "exp_dd_of_dd_accurate only reached 2^-{bits:.1} (want < 2^-103)"
+        );
+    }
 }

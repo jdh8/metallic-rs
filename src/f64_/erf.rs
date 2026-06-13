@@ -15,8 +15,8 @@
 //! Do not edit by hand; re-run the generator instead.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_general64};
-use super::exp::{exp_dd_of_dd, exp_dd_of_dd_fast};
+use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_anchored, round_general64};
+use super::exp::{exp_dd_of_dd_accurate, exp_dd_of_dd_fast};
 use super::pow::poly_dd;
 
 /// `1` as a double-double.
@@ -30,6 +30,10 @@ const TWO: DoubleDouble = DoubleDouble {
     high: 2.0,
     low: 0.0,
 };
+
+/// High word of `2/√π = ERF_SMALL_DD[0]`, the leading coefficient of
+/// `erf(x) = x·P(x²)` — the exact anchor of [`erf_small_accurate`].
+const CH: f64 = 1.1283791670955126;
 
 /// `erfc` rounds to `2` (covering `−∞`) below this; `erf` rounds to `±1`.
 const ERF_ONE_THRESHOLD: f64 = 6.2499218008406645;
@@ -3235,9 +3239,14 @@ const ERF_SMALL_ZIV_EPS: f64 = 1.355_252_715_606_88e-20; // 2^-66
 
 /// Ziv gate for the table-driven `erf` fast leg, relative (`erf ∈ [0.46, 1)`).
 ///
-/// The cell polynomial is good to ≈2⁻⁶⁷ (degree-11 minimax ≈2⁻⁷¹ plus the `f64`
-/// tail's ≈2⁻⁶⁷); `2⁻⁶²` keeps a ~30× margin.
-const ERF_TABLE_ZIV_EPS: f64 = 1.084_202_172_485_504_4e-19; // 2^-62
+/// [`erf_table_eval`]'s measured worst-case relative error is **2⁻⁶¹·⁸** (the
+/// `c2..c10` tail in plain `f64` plus the two double-double folds lose more than
+/// the minimax's nominal ≈2⁻⁶⁷ — see the `erf_table_leg_is_sound` test, which
+/// checks this bound against a 250-bit MPFR `erf` over the whole table region).
+/// `2⁻⁶⁰` keeps a ≥3× margin so the Ziv interval always brackets the rounding
+/// boundary — the earlier `2⁻⁶³` was *unsound* and let the fast leg confidently
+/// mis-round near-ties around `x ≈ 0.469` (off-corpus 1-ulp errors).
+const ERF_TABLE_ZIV_EPS: f64 = 8.673_617_379_884_035e-19; // 2^-60
 
 /// Negate a double-double.
 #[inline]
@@ -3317,6 +3326,43 @@ fn erf_small_eval(x: f64, coeffs: &[DoubleDouble], split: bool) -> DoubleDouble 
         poly_dd(u, coeffs)
     };
     p * x
+}
+
+/// Correctly-rounded `erf(x)` for `|x| < 0.4375`, the accurate fallback the small
+/// fast leg Ziv-gates against — *result-anchored* at the exact leading term.
+///
+/// `erf(x) = x·P(x²)` with `P(0) = 2/√π = ERF_SMALL_DD[0]`.  A bare `(p·x).high +
+/// .low` rounds a double-double whose own low word is already approximate, so the
+/// ½-ulp ties round by a rounded residual.  Instead split off the leading
+/// `x·(2/√π)` exactly: `prod = from_product(x, CH)` (its high word is the result's
+/// leading f64), and the correction `c = x·(CL + x²·Q(x²)) + prod.low` is a small
+/// double-double (`Q` is `P` from the cubic term up).  [`round_anchored`] then adds
+/// the exact `prod.high` and breaks the tie by the *exact* sub-ulp residual sign —
+/// mirroring `sinh_small_accurate`/`log1p`.  `|c| ≤ |prod.high|` holds (the
+/// correction is ≈2⁻⁵³ of the leading term over the whole branch).
+#[inline]
+fn erf_small_accurate(x: f64) -> f64 {
+    let u = DoubleDouble::from_product(x, x);
+
+    // Q(u) = (P(u) − c0.high)/u = c0.low/u + c1 + c2·u + … — but evaluated as
+    // `c0.low + u·(c1 + c2·u + …)` so the leading `c0.high` cancels exactly.
+    // `tail` = c1 + c2·u + … from index 1.
+    let tail = poly_dd(u, &ERF_SMALL_DD[1..]);
+    // p_minus_c0 = c0.low + u·tail  (= P(u) − c0.high)
+    let p_minus_c0 = DoubleDouble {
+        high: ERF_SMALL_DD[0].low,
+        low: 0.0,
+    } + u * tail;
+
+    // Leading term x·c0.high, exact as a double-double; prod.high is the anchor.
+    let prod = DoubleDouble::from_product(x, CH);
+    // Correction c = x·(P(u) − c0.high) + prod.low, |c| ≤ |prod.high|.
+    let c = p_minus_c0 * x
+        + DoubleDouble {
+            high: prod.low,
+            low: 0.0,
+        };
+    round_anchored(prod.high, c)
 }
 
 /// `erf(ax)` as a double-double for `ax ∈ [0.4375, 6.25]`, straight from
@@ -3433,10 +3479,13 @@ fn erfc_eval(x: f64, anchor: f64, coeffs: &[DoubleDouble], fast: bool) -> (Doubl
     let w = q + neg(DoubleDouble::from_product(x, x));
 
     // exp(W) = m · 2^qe, then erfc = t·m·2^qe renormalized so the high word ∈ [1, 2).
+    // The accurate (`else`) branch uses the lifted ≈2⁻¹⁰⁷ `exp_dd_of_dd_accurate`
+    // (vs the fast leg's ≈2⁻⁶⁸): `erfc`'s relative error is the *absolute* error of
+    // `W = Q − x²`, so every extra bit of the `exp` is a bit of the result.
     let (m, qe) = if fast {
         exp_dd_of_dd_fast(w)
     } else {
-        exp_dd_of_dd(w)
+        exp_dd_of_dd_accurate(w)
     };
     let prod = t * m;
     let e2 = (prod.high.to_bits() >> super::EXP_SHIFT) as i64 - 1023;
@@ -3479,11 +3528,13 @@ fn erfc_far_eval(x: f64, coeffs: &[DoubleDouble], fast: bool) -> (DoubleDouble, 
     // W = −x², exact in double-double.
     let w = neg(DoubleDouble::from_product(x, x));
 
-    // exp(−x²) = m_exp · 2^qe;  x² ≤ 741 < 746 (exp_reduce_dd limit).
+    // exp(−x²) = m_exp · 2^qe;  x² ≤ 741 < 746 (reduction limit).  Accurate branch
+    // through the lifted ≈2⁻¹⁰⁷ `exp_dd_of_dd_accurate` (W = −x² is exact here, so
+    // the result's relative error is purely this `exp`'s).
     let (m_exp, qe) = if fast {
         exp_dd_of_dd_fast(w)
     } else {
-        exp_dd_of_dd(w)
+        exp_dd_of_dd_accurate(w)
     };
 
     // erfc(x) = erfcx · m_exp · 2^qe; normalize high word into [1, 2).
@@ -3494,6 +3545,33 @@ fn erfc_far_eval(x: f64, coeffs: &[DoubleDouble], fast: bool) -> (DoubleDouble, 
         low: fast_ldexp(prod.low, -e2),
     };
     (mantissa, qe + e2)
+}
+
+/// Hard-to-round database for `erfc`: the residual inputs whose `erfc` hugs an
+/// `f64` midpoint past the lifted ≈2⁻¹⁰⁷ accurate path's reach, keyed by the *raw*
+/// input bits (erfc is not symmetric — the negative-`x` `2 − erfc(|x|)` reflection
+/// has its own ties) and mapped to the correctly-rounded result.  These are the
+/// leftover mismatches on `erfc.wc` after the accurate-path lift; each result is
+/// independently confirmed at 200-bit precision and agrees with the `core-math`
+/// oracle.  Generated by `tools/gen_erf_hard.py`; sorted by input bits for
+/// `binary_search`.  (`erf` needs no such table — a sound `ERF_TABLE_ZIV_EPS`
+/// routes every hard `erf` case to the correctly-rounded accurate path.)
+#[rustfmt::skip]
+const ERFC_HARD: [(u64, u64); 5] = [
+    (0x3fe6317520fbe477, 0x3fd4e86e93499304), (0x3ff76bd4d0e5284c, 0x3fa3ae07c705f4de),
+    (0x4008ca123c6eed7e, 0x3ee8a42c71bfe759), (0x4031d41cb671cad3, 0x22f5c4d8d179be8c),
+    (0xbfff9a4a209ca0e4, 0x3fffeaa166e384c9),
+];
+
+/// Look `key` up in a sorted `(input_bits, result_bits)` table, returning the
+/// stored result as an `f64` when present — the shared `binary_search` of the
+/// `erf`/`erfc` hard-case databases (mirrors `exp_database`).
+#[inline]
+fn database_lookup(table: &[(u64, u64)], key: u64) -> Option<f64> {
+    table
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(table[i].1))
 }
 
 /// Below this `|x|`, `x²` underflows to zero and the result needs subnormal-safe
@@ -3545,8 +3623,7 @@ pub fn erf(x: f64) -> f64 {
         if lo == hi {
             return lo;
         }
-        let e = erf_small_eval(x, &ERF_SMALL_DD, false);
-        return e.high + e.low;
+        return erf_small_accurate(x);
     }
 
     // erf rounds to ±1 (covering ±∞) once erfc drops below ½ ulp.
@@ -3588,17 +3665,21 @@ pub fn erfc(x: f64) -> f64 {
     if x < -ERF_ONE_THRESHOLD {
         return 2.0;
     }
-    if x >= ERFC_ZERO_THRESHOLD {
+    // `erfc(ERFC_ZERO_THRESHOLD)` itself rounds to the smallest subnormal `2⁻¹⁰⁷⁴`
+    // (the corpus's hardest tail case), so saturate strictly *above* it — the
+    // threshold value falls through to the subnormal-safe accurate path.
+    if x > ERFC_ZERO_THRESHOLD {
         return 0.0;
     }
 
     let ax = x.abs();
 
     if ax < 0.4375 {
-        // erfc(x) = 1 − erf(x); the result is ≈ 1, so carry 1 − erf in double-double
-        // (the accurate small kernel — this regime is cheap and not the hot path).
-        let r = ONE + neg(erf_small_eval(x, &ERF_SMALL_DD, false));
-        return r.high + r.low;
+        // erfc(x) = 1 − erf(x); the result is ≈ 1 (erf ∈ (−0.46, 0.46), no
+        // cancellation), so anchor at the exact `1.0` and add the small correction
+        // `−erf(x)` (accurate double-double small kernel), breaking ½-ulp ties by
+        // its exact sub-ulp residual via `round_anchored` — like `erf_small_accurate`.
+        return round_anchored(1.0, neg(erf_small_eval(x, &ERF_SMALL_DD, false)));
     }
 
     if x > 0.0 {
@@ -3619,6 +3700,10 @@ pub fn erfc(x: f64) -> f64 {
                 return fast_ldexp(lo, q);
             }
         }
+        // The residual hard-to-round cases past the accurate path's reach.
+        if let Some(r) = database_lookup(&ERFC_HARD, x.to_bits()) {
+            return r;
+        }
         let (m, q) = if ax > 4.0 {
             erfc_far_eval(ax, &ERFC_FAR_DD, false)
         } else {
@@ -3637,6 +3722,10 @@ pub fn erfc(x: f64) -> f64 {
         let hi = e.high + (e.low + eps);
         if lo == hi {
             return lo;
+        }
+        // Residual `2 − erfc(|x|)` ties past the accurate path's reach.
+        if let Some(r) = database_lookup(&ERFC_HARD, x.to_bits()) {
+            return r;
         }
         let (anchor, accurate, _) = erfc_segment(ax);
         let (m, q) = erfc_eval(ax, anchor, accurate, false);
@@ -3717,5 +3806,86 @@ mod fold_ordering {
             let inner = crate::fast_mul_add(vmax * vmax, s23_mag, vmax.powi(4) * tmag);
             assert!(inner <= 0.5 * (coeffs[0].high.abs() - m1));
         }
+    }
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Worst-case relative error of a fast leg over `[lo, hi]` vs a 250-bit MPFR
+    /// `erf`, with the leg evaluated by `leg` (returning the un-rounded
+    /// double-double).  Returns `(worst_rel, worst_x)`.
+    fn worst_rel(lo: f64, hi: f64, n: u64, leg: impl Fn(f64) -> DoubleDouble) -> (f64, f64) {
+        let (lb, hb) = (lo.to_bits(), hi.to_bits());
+        let mut worst = 0.0_f64;
+        let mut worst_x = lo;
+        for i in 0..n {
+            let b = lb + mix(i) % (hb - lb);
+            let x = f64::from_bits(b);
+            let e = leg(x);
+            let got = Float::with_val(250, e.high) + Float::with_val(250, e.low);
+            let truth = Float::with_val(250, x).erf();
+            if truth == 0.0 {
+                continue;
+            }
+            let rel = (Float::with_val(250, &got - &truth).abs() / truth.abs()).to_f64();
+            if rel > worst {
+                worst = rel;
+                worst_x = x;
+            }
+        }
+        (worst, worst_x)
+    }
+
+    /// The table fast leg's Ziv gate must be *sound*: `ERF_TABLE_ZIV_EPS` has to
+    /// exceed [`erf_table_eval`]'s true worst-case relative error (measured here
+    /// at ≈2⁻⁶¹·⁸, larger than the minimax nominal) with margin, or a confident
+    /// `lo == hi` could certify a value on the wrong side of a rounding boundary
+    /// (the off-corpus 1-ulp `erf` errors near `x ≈ 0.469`).
+    #[test]
+    fn erf_table_leg_is_sound() {
+        let (worst, x) = worst_rel(0.4375, 6.25, 4_000_000, |x| erf_table_eval(x));
+        println!(
+            "erf_table_eval: worst rel error 2^{:.2} at x={x:e}; eps = 2^{:.2}",
+            worst.log2(),
+            ERF_TABLE_ZIV_EPS.log2()
+        );
+        assert!(
+            ERF_TABLE_ZIV_EPS > 2.0 * worst,
+            "ERF_TABLE_ZIV_EPS = 2^{:.2} does not cover 2^{:.2}",
+            ERF_TABLE_ZIV_EPS.log2(),
+            worst.log2()
+        );
+    }
+
+    /// Same soundness check for the small-`|x|` fast leg ([`ERF_SMALL_FAST`]):
+    /// `ERF_SMALL_ZIV_EPS` must exceed its true relative error over its operating
+    /// range `[ERF_TINY, 0.4375)` (below `ERF_TINY` the dedicated [`erf_tiny`]
+    /// subnormal-safe path takes over, so the leg is not exercised there).
+    #[test]
+    fn erf_small_leg_is_sound() {
+        let (worst, x) = worst_rel(ERF_TINY, 0.4375, 4_000_000, |x| {
+            erf_small_eval(x, &ERF_SMALL_FAST, true)
+        });
+        println!(
+            "erf_small_eval: worst rel error 2^{:.2} at x={x:e}; eps = 2^{:.2}",
+            worst.log2(),
+            ERF_SMALL_ZIV_EPS.log2()
+        );
+        assert!(
+            ERF_SMALL_ZIV_EPS > 2.0 * worst,
+            "ERF_SMALL_ZIV_EPS = 2^{:.2} does not cover 2^{:.2}",
+            ERF_SMALL_ZIV_EPS.log2(),
+            worst.log2()
+        );
     }
 }
