@@ -174,6 +174,9 @@ fn hypot_hard(big_s: f64, small_s: f64) -> f64 {
     let le = (yi >> EXP_SHIFT) as i64;
 
     const BS: i64 = 2;
+    // A plain `f64` sqrt estimate to seed the integer search — not `hypot`, whose
+    // extra accuracy is exactly what the integer refinement supplies.
+    #[allow(clippy::imprecise_flops)]
     let ri = (big_s * big_s + small_s * small_s).sqrt().to_bits();
     let mut rm = (ri & (!0u64 >> 12)) | (1u64 << 52);
     let mut re = (ri >> EXP_SHIFT) as i64 - 0x3ff;
