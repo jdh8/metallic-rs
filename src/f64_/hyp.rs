@@ -2,7 +2,7 @@ use super::double::{
     DoubleDouble, fast_ldexp, fast_sum, round_anchored, round_general_signed64, round_general64,
     sqrt_dd,
 };
-use super::exp::{exp_dd, exp_two_level_fast, exp_two_level_mantissa_accurate};
+use super::exp::{exp_two_level_fast, exp_two_level_mantissa_accurate};
 use super::{ln_fast, ln_fast_scaled};
 use core::cmp::Ordering;
 
@@ -462,21 +462,147 @@ pub fn tanh(x: f64) -> f64 {
         return x;
     }
 
-    // tanh(x) = expm1(2x) / (expm1(2x) + 2).  Form expm1(2x) = 2^q·m − 1 as a
-    // double-double, then the quotient in double-double.
-    let (m, q) = exp_dd(2.0 * s);
-    let t = m * crate::exp2i(q)
+    // |x| < ⅛: forming expm1(2x) = 2^q·m − 1 would cancel (2x is small), so go
+    // *result-anchored* via the odd series — see [`tanh_small`].
+    if s < TANH_SMALL {
+        return tanh_small(s).copysign(x);
+    }
+
+    tanh_accurate(s).copysign(x)
+}
+
+/// Upper limit of `tanh`'s result-anchored small-`|x|` series leg.
+const TANH_SMALL: f64 = 0.125;
+
+/// `T(v) = (tanh(x) − x)/x³ = ∑ Tₖ vᵏ` (`v = x²`), low-degree first, as a
+/// double-double Horner table for [`tanh_small_accurate`].  `Tₖ = aₖ₊₁` of the
+/// `tanh` series `aₖ = −(∑ aᵢaⱼ)/(2k+1)` (`a₀ = 1`); unlike `sinh`'s factorially
+/// decaying coefficients these decay only geometrically (≈0.41ᵏ), so degree 15 is
+/// needed for the `v¹⁶/…` truncation (≈2⁻¹¹⁷ relative at `v = TANH_SMALL² =
+/// 0.0156`) to clear the double-double floor.
+#[allow(clippy::unreadable_literal)]
+const TANH_T_DD: [(f64, f64); 16] = [
+    (-0.3333333333333333, -1.850371707708594e-17),
+    (0.13333333333333333, 1.8503717077085942e-18),
+    (-0.053968253968253964, -4.383618688500122e-18),
+    (0.0218694885361552, 3.2956686566529393e-18),
+    (-0.008863235529902196, -9.71422895804976e-19),
+    (0.0035921280365724807, 3.0829850815353886e-19),
+    (-0.0014558343870513181, -1.5469550809574026e-19),
+    (0.000590027440945586, 3.478690842383652e-20),
+    (-0.00023912911424355248, -3.564613898329782e-21),
+    (9.69153795692945e-5, 7.313864280505558e-21),
+    (-3.927832388331683e-5, -1.3737015743076767e-21),
+    (1.5918905069328964e-5, 1.0427554807190543e-21),
+    (-6.451689215655431e-6, -1.1519922496640055e-22),
+    (2.6147711512907542e-6, 3.3037961741415215e-22),
+    (-1.0597268320104654e-6, -2.367052550521363e-24),
+    (4.294911078273806e-7, 1.1643520863702653e-23),
+];
+
+/// Plain-`f64` `T(v)` for [`tanh_small`]'s fast leg; degree 8 (its `v⁹/…`
+/// truncation is ≈2⁻⁶⁵ relative over `v < 0.0156`, far under the `f64` floor).
+#[allow(clippy::unreadable_literal)]
+const TANH_T_FAST: [f64; 9] = [
+    -0.3333333333333333,
+    0.13333333333333333,
+    -0.053968253968253964,
+    0.0218694885361552,
+    -0.008863235529902196,
+    0.0035921280365724807,
+    -0.0014558343870513181,
+    0.000590027440945586,
+    -0.00023912911424355248,
+];
+
+/// Correction-scaled Ziv gate for [`tanh_small`]'s series fast leg: the absolute
+/// error bound is `SCALE · |x|³`, since every error source rides the `x³·T(x²)`
+/// correction (the `asinh`/`sinh` shape).  ≈25× the measured fast-leg slip.
+const TANH_SMALL_ZIV_SCALE: f64 = 1.776_356_839_400_250_5e-15; // 2⁻⁴⁹
+
+/// Correctly-rounded `tanh(|x|)` for `0 < |x| < TANH_SMALL` via the
+/// result-anchored odd series `tanh(x) = x + x³·T(x²)`.  Lean fast leg
+/// (plain-`f64` [`TANH_T_FAST`], `x³`-scaled gate), falling to the double-double
+/// [`tanh_small_accurate`] on a straddle.  Mirrors `sinh_small`.
+#[inline]
+fn tanh_small(x: f64) -> f64 {
+    let v = x * x;
+    let x3 = x * v;
+    let tail = x3 * crate::poly(v, &TANH_T_FAST);
+    let DoubleDouble { high, low } = fast_sum(x, tail);
+    let err = TANH_SMALL_ZIV_SCALE * x3;
+    let lo = high + (low - err);
+    let hi = high + (low + err);
+    if lo == hi {
+        return lo;
+    }
+    tanh_small_accurate(x)
+}
+
+/// Accurate leg of [`tanh_small`]: `c = x³·T(x²)` as a double-double
+/// ([`TANH_T_DD`] Horner), then [`round_anchored`] adds the exact `x`.
+#[inline]
+fn tanh_small_accurate(x: f64) -> f64 {
+    let v = DoubleDouble::from_product(x, x);
+    let (high, low) = TANH_T_DD[TANH_T_DD.len() - 1];
+    let mut t = DoubleDouble { high, low };
+    for &(high, low) in TANH_T_DD[..TANH_T_DD.len() - 1].iter().rev() {
+        t = t * v + DoubleDouble { high, low };
+    }
+    let c = (DoubleDouble { high: x, low: 0.0 } * v) * t;
+    round_anchored(x, c)
+}
+
+/// Hard-to-round database for [`tanh_accurate`]: non-negative inputs (`⅛ ≤ |x| <
+/// 20`) whose `tanh` lies within the double-double path's reach of an `f64`
+/// midpoint, mapped (by bit pattern of `|x|`) to their correctly-rounded results.
+/// Residuals metallic's accurate path leaves on the `tanh.wc` corpus; the path is
+/// db-complete (error far below the corpus's ≥40-bit ≈2⁻⁹⁴ threshold), so this is
+/// sound for the whole `⅛ ≤ |x| < 20` domain.  Each confirmed by a 200-bit MPFR
+/// `tanh`.  `(|x|_bits, result_bits)`, sorted for binary search.
+#[rustfmt::skip]
+#[allow(clippy::unreadable_literal)]
+const TANH_HARD: [(u64, u64); 2] = [
+    (0x3fcac343b179fec4, 0x3fca612499c53078), (0x3fd291c601a05276, 0x3fd210b7d0c03743),
+];
+
+/// Look `x` (`⅛ ≤ x < 20`) up in [`TANH_HARD`], returning its correctly-rounded
+/// `tanh`.
+#[inline]
+fn tanh_database(x: f64) -> Option<f64> {
+    let key = x.to_bits();
+    TANH_HARD
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(TANH_HARD[i].1))
+}
+
+/// Correctly-rounded `tanh(x)` for `⅛ ≤ x < 20` via `tanh = E/(E + 2)`,
+/// `E = expm1(2x) = 2^q·m − 1` with `m` the two-level `eˣ` mantissa to ≈2⁻¹⁰⁷
+/// ([`exp_two_level_mantissa_accurate`]).  For `2x ≥ ¼` the `− 1` cancels ≤ ~2
+/// bits and the quotient never cancels, so the double-double carries the result;
+/// [`round_general_signed64`] rounds it soundly and the sub-2⁻¹⁰⁷ near-ties go in
+/// [`tanh_database`].  Kept `#[cold]`/out-of-line.
+#[cold]
+#[inline(never)]
+fn tanh_accurate(x: f64) -> f64 {
+    if let Some(r) = tanh_database(x) {
+        return r;
+    }
+
+    let (m, q) = exp_two_level_mantissa_accurate(2.0 * x);
+    let e = m * crate::exp2i(q)
         + DoubleDouble {
             high: -1.0,
             low: 0.0,
         };
-    let result = t
-        * (t + DoubleDouble {
+    let result = e
+        * (e + DoubleDouble {
             high: 2.0,
             low: 0.0,
         })
         .recip();
-    (result.high + result.low).copysign(x)
+    round_general_signed64(result, 0)
 }
 
 /// Upper limit of the result-anchored small-`|x|` series leg for `atanh`

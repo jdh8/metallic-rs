@@ -603,33 +603,10 @@ pub(super) fn exp2_reduce_dd(e: DoubleDouble) -> (usize, i64, DoubleDouble) {
     (j, q, r)
 }
 
-/// Argument reduction for the exponential family.
-///
-/// Returns `(j, q, r)` with `x = (q·N + j)·ln2/N + r` and `|r| ≤ ln2/2N`.  The
-/// caller must keep `|x|` small enough that `round(N·x/ln2)` fits an `i64`
-/// (`|x| < ~746`, the finite exp range).
-#[inline]
-fn exp_reduce(x: f64) -> (usize, i64, DoubleDouble) {
-    /// `N / ln(2)`, the scale that maps `x` to the reduction index
-    const N_OVER_LN2: f64 = 184.664_965_233_787_3;
-
-    let scaled = (x * N_OVER_LN2).round_ties_even();
-
-    // SAFETY: `|x| < 746`, so `|scaled| < 2^18`.
-    let n = unsafe { scaled.to_int_unchecked::<i64>() };
-    let j = (n & (EXP_N - 1)) as usize;
-    let q = n >> 7;
-
-    // r as a double-double.  `scaled · LN2_OVER_N_HI` is exact because the high
-    // word has 17 trailing zero bits, and the low word recovers the tail.
-    let a = crate::fma(scaled, -LN2_OVER_N_HI, x);
-    (j, q, DoubleDouble::from_sum(a, scaled * -LN2_OVER_N_LO))
-}
-
 /// Argument reduction for `eᵂ` with a *double-double* exponent `W`.
 ///
 /// Returns `(j, q, r)` with `eᵂ = 2`<sup>`q`</sup>` · 2`<sup>`j/N`</sup>` · exp(r)`
-/// and `|r| ≤ ln2/2N` — the base-`e` counterpart of [`exp_reduce`], lifted to a
+/// and `|r| ≤ ln2/2N` — the `N = 128` base-`e` reduction lifted to a
 /// double-double argument for `erfc`, where `W = Q(t) − x²`.  The caller must keep
 /// `|W.high|` within the finite `eᵂ` range (`< ~746`) so `round(N·W/ln2)` fits an
 /// `i64`.
@@ -667,16 +644,6 @@ pub(super) fn exp_dd_of_dd(w: DoubleDouble) -> (DoubleDouble, i64) {
 pub(super) fn exp_dd_of_dd_fast(w: DoubleDouble) -> (DoubleDouble, i64) {
     let (j, q, r) = exp_reduce_dd(w);
     exp_mantissa_fast(j, q, r)
-}
-
-/// `eˣ` as `2`<sup>`q`</sup>` · mantissa` with the mantissa a double-double in [1, 2).
-///
-/// The caller must ensure `x` is finite and within the non-overflow range
-/// (`|x| < ~710`); used by the hyperbolic functions, which need the extra words.
-#[inline]
-pub(super) fn exp_dd(x: f64) -> (DoubleDouble, i64) {
-    let (j, q, r) = exp_reduce(x);
-    exp_mantissa(j, q, r)
 }
 
 /// The exponential function
