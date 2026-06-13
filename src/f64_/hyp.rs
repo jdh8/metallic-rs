@@ -1,13 +1,7 @@
 use super::double::{DoubleDouble, fast_ldexp, sqrt_dd};
 use super::exp::{exp_dd, exp_two_level_fast};
-use super::{ln_dd, ln_fast, ln_fast_scaled};
+use super::{ln_fast, ln_fast_scaled};
 use core::cmp::Ordering;
-
-/// `ln(2)` as a double-double (CORE-MATH's split, matching `log.rs`).
-const LN2: DoubleDouble = DoubleDouble {
-    high: 0.693_147_180_559_890_3,
-    low: 5.497_923_018_708_371e-14,
-};
 
 /// `1` as a double-double.
 const ONE: DoubleDouble = DoubleDouble {
@@ -15,22 +9,10 @@ const ONE: DoubleDouble = DoubleDouble {
     low: 0.0,
 };
 
-/// Natural logarithm of a positive double-double, as a double-double.
-///
-/// `ln(s) = ln(s.high) + ln(1 + s.low/s.high) ≈ ln_dd(s.high) + s.low/s.high`,
-/// the linear term being all that survives since `s.low/s.high ≈ 2⁻⁵²`.
-#[inline]
-fn ln_sum(s: DoubleDouble) -> DoubleDouble {
-    ln_dd(s.high)
-        + DoubleDouble {
-            high: s.low / s.high,
-            low: 0.0,
-        }
-}
-
-/// Lean variant of [`ln_sum`] using the fast [`ln_fast`] kernel (<2⁻⁶⁶ absolute
-/// instead of ≈2⁻⁸⁷).  Only the leading `ln(s.high)` is leaner; the linear
-/// correction `s.low/s.high` is identical, so it cancels in the Ziv comparison.
+/// Lean leading `ln(s.high) + s.low/s.high` for the inverse-hyperbolic fast leg,
+/// using the fast [`ln_fast`] kernel (<2⁻⁶⁶ absolute).  The linear correction
+/// `s.low/s.high ≈ 2⁻⁵²` is all that survives of `ln(1 + s.low/s.high)`; on a Ziv
+/// straddle the sound 128-bit [`super::dint::ln_dd_scaled`] takes over.
 #[inline]
 fn ln_sum_fast(s: DoubleDouble) -> DoubleDouble {
     ln_fast(s.high)
@@ -64,8 +46,49 @@ fn ln_sum_rounded(u: DoubleDouble, scale: f64) -> f64 {
         return lo;
     }
 
-    let r = ln_sum(u) * scale;
-    r.high + r.low
+    // Accurate leg: correctly-rounded `scale·ln(u)` via the 128-bit `dint` log of
+    // the exact two-word `u`.  The double-double `ln_sum` (≈2⁻⁸⁷) mis-rounds the
+    // hard-to-round ties this gate straddles; `dint`'s sound `to_f64` resolves them.
+    let k = if scale == 0.5 { -1 } else { 0 };
+    super::dint::ln_dd_scaled(u.high, u.low, k)
+}
+
+/// Correctly-rounded `ln(x + c)` for the `acosh`/`asinh` argument, where
+/// `c = √(x² ∓ 1)` is a double-double and `x > 0`.
+///
+/// The fast leg gates the lean `ln_sum_fast(x + c)`; on a straddle the accurate
+/// leg feeds *four* words — `x` and a triple-word `√d` — to the 128-bit `dint`
+/// log.  The double-double sqrt (≈2⁻¹⁰⁵, ≈2⁻⁵⁷ ulp through `ln`) is one bit shy
+/// of the corpus's hardest ties (≈2⁻⁶²), so a third sqrt word `corr` is refined
+/// in and carried alongside `c.high`/`c.low`.
+#[inline]
+fn ln_sqrt_rounded(x: f64, c: DoubleDouble, d: DoubleDouble) -> f64 {
+    let u = c + DoubleDouble { high: x, low: 0.0 };
+    let DoubleDouble { high, low } = ln_sum_fast(u);
+    let lo = high + (low - IHYP_ZIV_EPS);
+    let hi = high + (low + IHYP_ZIV_EPS);
+    if lo == hi {
+        return lo;
+    }
+
+    // Refine `c = √d` with a third word so the argument reaches past the
+    // double-double sqrt's ≈2⁻¹⁰⁵ (≈2⁻⁵⁷ ulp), enough for the hardest ties
+    // (≈2⁻⁶²).  `corr = (d − c²)/(2c)`: the residual `d − c²` sits ≈106 bits below
+    // the argument — below double-double range — so it is extracted by *exact*
+    // cancellation (`from_product` for `c.high²` and the cross term, 2Sum chains
+    // keeping every residual), not the flat `c·c` (which rounds back to `d`).
+    let p = DoubleDouble::from_product(c.high, c.high);
+    let diff = DoubleDouble::from_sum(d.high, -p.high) + DoubleDouble::from_sum(d.low, -p.low);
+    let cr = DoubleDouble::from_product(c.high, c.low);
+    let diff = diff
+        + DoubleDouble {
+            high: -2.0 * cr.high,
+            low: -2.0 * cr.low,
+        };
+    // `(diff.high + diff.low) − c.low²`, the `c.low²` folded in with an exact FMA.
+    let resid = crate::fma(-c.low, c.low, diff.high + diff.low);
+    let corr = resid * (0.5 / c.high);
+    super::dint::ln_quad_scaled(x, c.high, c.low, corr, 0)
 }
 
 /// `2²⁷`.  Above this magnitude `asinh`/`acosh` switch from `sqrt_dd(x² ± 1)` to
@@ -99,14 +122,9 @@ fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
         return lo;
     }
 
-    // Accurate leg unchanged: the full double-double `ln_dd(s) + LN2 + correction`.
-    let r = ln_dd(s)
-        + LN2
-        + DoubleDouble {
-            high: correction,
-            low: 0.0,
-        };
-    r.high + r.low
+    // Accurate leg: correctly-rounded `ln(2s) + correction` via the 128-bit `dint`
+    // log — the sound counterpart of the double-double `ln_dd(s) + LN2 + correction`.
+    super::dint::ln_2s_corrected_accurate(s, correction)
 }
 
 /// Combine `(m, q)` — where `eˣ = 2`<sup>`q`</sup>` · m` for `x ≥ 0` — into the
@@ -294,8 +312,8 @@ pub fn asinh(x: f64) -> f64 {
         // asinh(x) = ln(2|x|) + 1/(4x²) − …, no square root.
         ln_2x_corrected(s, 0.25 / (s * s))
     } else {
-        let c = sqrt_dd(DoubleDouble::from_product(s, s) + ONE);
-        ln_sum_rounded(c + DoubleDouble { high: s, low: 0.0 }, 1.0)
+        let d = DoubleDouble::from_product(s, s) + ONE;
+        ln_sqrt_rounded(s, sqrt_dd(d), d)
     };
 
     magnitude.copysign(x)
@@ -328,14 +346,12 @@ pub fn acosh(x: f64) -> f64 {
         return ln_2x_corrected(x, -0.25 / (x * x));
     }
 
-    let c = sqrt_dd(
-        DoubleDouble::from_product(x, x)
-            + DoubleDouble {
-                high: -1.0,
-                low: 0.0,
-            },
-    );
-    ln_sum_rounded(c + DoubleDouble { high: x, low: 0.0 }, 1.0)
+    let d = DoubleDouble::from_product(x, x)
+        + DoubleDouble {
+            high: -1.0,
+            low: 0.0,
+        };
+    ln_sqrt_rounded(x, sqrt_dd(d), d)
 }
 
 /// `(1 + s)/(1 − s)` as a double-double for `s ∈ (0, 1)`, formed with a single

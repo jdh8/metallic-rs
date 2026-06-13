@@ -332,6 +332,58 @@ pub fn log1p_accurate(s: f64, c: f64) -> f64 {
     log_2(&arg).to_f64()
 }
 
+/// Correctly-rounded `2ᵏ · ln(u)` for a positive double-double `u = high + low`.
+///
+/// The exact two-word sum feeds the 128-bit [`log_2`], so the inverse-hyperbolic
+/// accurate legs round soundly at the hard-to-round ties the double-double
+/// `ln_dd` leg (≈2⁻⁸⁷) mis-rounds — `to_f64` carries explicit round and sticky
+/// bits, unlike a naive `high + low`.  `k` is a power-of-two scale (`0` for
+/// `acosh`/`asinh`, `−1` for `atanh`'s `½·ln`); folding it into the result
+/// exponent commutes with the mantissa rounding, so it stays exact.
+#[inline]
+pub fn ln_dd_scaled(high: f64, low: f64, k: i64) -> f64 {
+    let arg = Dint::from_f64(high).add(&Dint::from_f64(low));
+    let mut r = log_2(&arg);
+    if r.m == 0 {
+        return 0.0;
+    }
+    r.ex += k;
+    r.to_f64()
+}
+
+/// Correctly-rounded `ln(a + b + c + d)` for a positive four-word argument —
+/// [`ln_dd_scaled`] with two more words, carrying the third sqrt word so the
+/// `acosh`/`asinh` argument `x + √(x²∓1)` reaches past the double-double sqrt's
+/// ≈2⁻¹⁰⁵ (≈2⁻⁵⁷ ulp through `ln`) to the hardest ties (≈2⁻⁶²).
+#[inline]
+pub fn ln_quad_scaled(a: f64, b: f64, c: f64, d: f64, k: i64) -> f64 {
+    let arg = Dint::from_f64(a)
+        .add(&Dint::from_f64(b))
+        .add(&Dint::from_f64(c))
+        .add(&Dint::from_f64(d));
+    let mut r = log_2(&arg);
+    if r.m == 0 {
+        return 0.0;
+    }
+    r.ex += k;
+    r.to_f64()
+}
+
+/// Correctly-rounded `ln(2s) + correction` for the large-argument
+/// `asinh`/`acosh` asymptotic (`s > 2²⁷`), where the dropped `O(1/s⁴)` term is
+/// already below 2⁻¹¹⁰.
+///
+/// `ln(2s) = ln(s) + ln 2`; the tiny `correction = ±0.25/s²` enters as an exact
+/// `Dint`, contributing only round/sticky bits to the ≈`ln(2s)`-magnitude result
+/// — the sound 128-bit analogue of the double-double `ln_dd(s) + LN2 + correction`.
+#[inline]
+pub fn ln_2s_corrected_accurate(s: f64, correction: f64) -> f64 {
+    log_2(&Dint::from_f64(s))
+        .add(&LOG2)
+        .add(&Dint::from_f64(correction))
+        .to_f64()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
