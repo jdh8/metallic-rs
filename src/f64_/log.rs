@@ -1027,6 +1027,47 @@ fn ln_1p_kernel(r: DoubleDouble) -> DoubleDouble {
     p * r
 }
 
+/// Correctly-rounded `ln(1 + x)` for an exact `|x| < 1/256`, anchored at the
+/// result.
+///
+/// `ln(1+x) = x + x²·Q(x)` with `Q(x) = (ln(1+x) − x)/x² = ∑_{k≥0} (−1)ᵏ⁺¹ xᵏ/(k+2)`
+/// — the [`LN1P_P_COEFFS`] series shifted down past its leading `1`.  Evaluating
+/// only the correction `c = x²·Q(x)` as a double-double keeps its ≈2⁻¹⁰⁴ relative
+/// error on the *tiny* `c` (≲2⁻⁹·|x|), so adding the **exact** `x` leaves an
+/// absolute error far under ½ ulp of the result.  The hardest corpus cases land
+/// `x + c.high` exactly on a midpoint (`from_sum` residual = ½ ulp); a
+/// round-to-odd of the combined residual then breaks the tie by the sign of the
+/// `2⁻¹⁷ᵒ` sticky tail `c.low`, exactly as [`super::double::round`] does for the
+/// `f32` cast.
+#[inline]
+fn log1p_small_accurate(x: f64) -> f64 {
+    let xd = DoubleDouble { high: x, low: 0.0 };
+
+    // Q(x) as a double-double Horner over LN1P_P_COEFFS[1..] (the P-series minus
+    // its leading 1), then c = x²·Q(x).
+    let (high, low) = LN1P_P_COEFFS[LN1P_P_COEFFS.len() - 1];
+    let mut q = DoubleDouble { high, low };
+    for &(high, low) in LN1P_P_COEFFS[1..LN1P_P_COEFFS.len() - 1].iter().rev() {
+        q = q * xd + DoubleDouble { high, low };
+    }
+    let c = (xd * xd) * q;
+
+    // result = round(x + c), `x` exact.  Combine the two residuals exactly
+    // (`x + c.high = s`, then `s.low + c.low = w`), round `w` to odd in the
+    // direction of its sticky tail `we`, then one final round-to-nearest add.
+    let s = DoubleDouble::from_sum(x, c.high);
+    let DoubleDouble { high: w, low: we } = DoubleDouble::from_sum(s.low, c.low);
+    let w = if we == 0.0 || w.to_bits() & 1 == 1 {
+        w
+    } else if we.is_sign_positive() == w.is_sign_positive() {
+        // Step `w` away from zero (toward `we`): magnitudes share a sign.
+        f64::from_bits(w.to_bits() + 1)
+    } else {
+        f64::from_bits(w.to_bits() - 1)
+    };
+    s.high + w
+}
+
 /// Decompose a finite positive `x` into `(e, cell, z)` for the exact-`z` fast
 /// leg: `x = 2^e · m` with `m ∈ [1, 2)`, `cell` the 7-bit-indexed [`LnCell`],
 /// and `z = cell.r · m − 1` computed **exactly** by one fused multiply-add (the
@@ -1295,9 +1336,13 @@ pub fn log1p(x: f64) -> f64 {
             return lo;
         }
 
-        // `x` is exact and `|x| < 1/256`, so `1 + x` fits in the 128-bit
-        // accumulator exactly: `ln(1+x)` via the correctly-rounded `dint` log.
-        return super::dint::log1p_accurate(1.0, x);
+        // Accurate fallback, anchored at the *result*: the `dint` path forms a
+        // 128-bit `1 + x` whose window sits at magnitude `1`, leaving only ≈86
+        // bits at a tiny result like `x ≈ 2⁻⁴²` — short of the near-½-ulp ties
+        // here.  Instead compute only the correction `c = ln(1+x) − x = x²·Q(x)`
+        // as a double-double: its ≈2⁻¹⁰⁴ relative error rides the *tiny* `c`, not
+        // the result, so `x` (exact) + `c` resolves the rounding.
+        return log1p_small_accurate(x);
     }
 
     // Otherwise carry 1 + x exactly as `s + c` (Fast2Sum), so the bits of `x` lost
