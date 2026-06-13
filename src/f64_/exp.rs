@@ -227,6 +227,30 @@ const EXP_FAST3_COEFFS: [f64; 4] = [1.0, 0.5, 0.16666666666666666, 0.04166666666
 /// while still gating in the fast result for all but a ~2⁻⁹ fraction of inputs.
 const EXP_TWO_LEVEL_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
 
+/// `ln(2)/4096` split into three words for the *accurate* two-level reduction
+/// (`exp_accurate`): `dx = x − L2H·t + L2L·t + L2LL·t` carried as a double-double.
+/// `L2H` has enough trailing zero bits that `L2H·t` is exact for `|t| < 2²³`, and
+/// the three words sum to `ln(2)/4096` to ≈2⁻¹⁵⁶, so the reduced `dx` reaches the
+/// ≈2⁻¹⁰⁷ the accurate path needs (vs the two-word [`LN2_OVER_4096_HI`]/`_LO`,
+/// which caps the *fast* leg near 2⁻⁸⁴).
+const L2H: f64 = 0.00016922538588914904;
+const L2L: f64 = 1.0256140314162804e-14;
+const L2LL: f64 = 3.2042720746546034e-31;
+
+/// Double-double coefficients of `(exp(z) − 1)/z = ∑ zᵏ/(k+1)!`, low-degree first
+/// — the degree-7 accurate-path polynomial over `|z| ≤ ln2/8192`.  Evaluated by
+/// [`exp_poly_dd`]; the next dropped term `z⁷/40320 ≈ 2⁻⁹⁹` scaled by `z` lands
+/// well under the accurate path's budget.
+const EXP_DD_COEFFS: [(f64, f64); 7] = [
+    (1.0, 0.0),
+    (0.5, 2.2752803697148587e-30),
+    (0.16666666666666666, 9.251858538539695e-18),
+    (0.041666666666666664, 2.311375602431149e-18),
+    (0.008333333333333333, 1.1645814375470794e-19),
+    (0.0013888888892440137, -7.022792706270539e-20),
+    (0.0001984126983733902, -1.0602991841308864e-20),
+];
+
 const EXP2_T0: [(f64, f64); 64] = [
     (1.0, 0.0),
     (1.0108892860517005, -1.5234778603368577e-17),
@@ -666,13 +690,15 @@ pub fn exp(x: f64) -> f64 {
         return x;
     }
 
-    // `ln(f64::MAX)` and the threshold below which `exp` rounds to zero.  These FP
-    // compares (`comisd`, predicted not-taken) are cheaper here than a `|x|`-bit
-    // magnitude trick, which would force an XMM→GPR `movq`.
-    if x >= 709.782_712_893_384 {
+    // Overflow / underflow thresholds, exact to the ulp: `exp` is finite at
+    // x = 0x1.62e42fefa39efp+9 (→ f64::MAX) and overflows one ulp above, and is
+    // the smallest subnormal at x = -0x1.74910d52d3051p+9, underflowing to +0 one
+    // ulp below.  These FP compares (`comisd`, predicted not-taken) are cheaper
+    // here than a `|x|`-bit magnitude trick, which would force an XMM→GPR `movq`.
+    if x >= f64::from_bits(0x4086_2e42_fefa_39f0) {
         return f64::INFINITY;
     }
-    if x <= -745.133_219_101_941 {
+    if x <= f64::from_bits(0xc087_4910_d52d_3052) {
         return 0.0;
     }
 
@@ -696,16 +722,161 @@ pub fn exp(x: f64) -> f64 {
     exp_accurate(x)
 }
 
-/// Correctly-rounded `eˣ` via the N=128 double-double mantissa — [`exp`]'s rare
-/// fallback when the lean leg straddles a rounding boundary or nears the
-/// subnormal range.  Kept `#[cold]` and out-of-line so it does not bloat `exp`'s
-/// hot path.
+/// Degree-7 double-double Horner of [`EXP_DD_COEFFS`]: `P(z) = (exp(z) − 1)/z`
+/// for `z = dx` a double-double, `|dx| ≤ ln2/8192`.
+///
+/// Mirrors CORE-MATH's `opolydd` — each step multiplies the accumulator by `dx`
+/// then folds in the next coefficient with a renormalizing Fast2Sum on the high
+/// words, keeping the low word meaningful at ≈2⁻¹⁰⁷.
+#[inline]
+fn exp_poly_dd(dx: DoubleDouble) -> DoubleDouble {
+    let (high, low) = EXP_DD_COEFFS[6];
+    let mut acc = DoubleDouble { high, low };
+    for &(c0, c1) in EXP_DD_COEFFS[..6].iter().rev() {
+        acc = dx * acc;
+        let s = fast_sum(c0, acc.high);
+        acc = DoubleDouble {
+            high: s.high,
+            low: acc.low + (s.low + c1),
+        };
+    }
+    acc
+}
+
+/// Correctly-rounded `eˣ` — [`exp`]'s rare fallback when the lean leg straddles a
+/// rounding boundary.
+///
+/// Idiomatic port of CORE-MATH's `as_exp_accurate`: the same two-level grid as
+/// the fast leg (`2`<sup>`j/4096`</sup>` = EXP2_T0[i0]·EXP2_T1[i1]`), but with the
+/// reduced `dx` carried as a double-double (three-word `ln2/4096`, [`L2H`]/`L2L`/
+/// `L2LL`) and `exp(dx)` evaluated by the degree-7 double-double [`exp_poly_dd`].
+/// The double-double result reaches ≈2⁻¹⁰⁷, enough to correctly round every input
+/// except a handful of sub-2⁻¹⁰⁷ near-ties, which [`exp_database`] resolves.  Kept
+/// `#[cold]`/out-of-line so it does not bloat `exp`'s hot path.
 #[cold]
 #[inline(never)]
 fn exp_accurate(x: f64) -> f64 {
-    let (j, q, r) = exp_reduce(x);
-    let (product, q) = exp_mantissa(j, q, r);
-    super::double::round_general64(product, q)
+    // |x| < 2⁻⁵⁴: eˣ = 1 + x to nearest (the reduction would underflow `t = 0`).
+    if (x.to_bits() >> super::EXP_SHIFT) & 0x7ff < 0x3c9 {
+        return 1.0 + x;
+    }
+    if let Some(r) = exp_database(x) {
+        return r;
+    }
+
+    let tf = (x * N_OVER_LN2_4096).round_ties_even();
+    // SAFETY: |x| < 746, so |tf| < 2²³.
+    let jt = unsafe { tf.to_int_unchecked::<i64>() };
+    let i0 = ((jt >> 6) & 63) as usize;
+    let i1 = (jt & 63) as usize;
+    let ie = jt >> 12;
+
+    // dx = x − t·ln2/4096 as a double-double.  `tf·L2H` is exact, so `x − tf·L2H`
+    // is exact (Sterbenz); `L2L`, `L2LL` carry the rest.
+    let dxh0 = crate::fma(tf, -L2H, x);
+    let dxl = tf * L2L;
+    let dxll = crate::fma(tf, L2LL, crate::fma(tf, L2L, -dxl));
+    let dxh = dxh0 + dxl;
+    let dx = DoubleDouble {
+        high: dxh,
+        low: (dxh0 - dxh) + dxl + dxll,
+    };
+
+    // exp(dx) = 1 + dx·P(dx); fold into the table value: 2^(j/4096)·exp(dx).
+    let em1 = dx * exp_poly_dd(dx);
+    let (t0h, t0l) = EXP2_T0[i0];
+    let (t1h, t1l) = EXP2_T1[i1];
+    let table = DoubleDouble {
+        high: t0h,
+        low: t0l,
+    } * DoubleDouble {
+        high: t1h,
+        low: t1l,
+    };
+
+    let m = if table.high == 1.0 && table.low == 0.0 {
+        // x near a multiple of ln2 (table = 1): the mantissa is `1 + (exp(dx) − 1)`,
+        // a catastrophic near-1 sum.  Build it with an extra Fast2Sum so the low
+        // word keeps the full residual, then round-to-odd nudge it off any exact
+        // power-of-two tie (toward the discarded residual `e2`'s sign), so the
+        // final `high + low` rounds correctly — CORE-MATH's `th == 1` branch.
+        let s = fast_sum(1.0, em1.high);
+        let pair = fast_sum(s.low, em1.low);
+        let (mut fl, e2) = (pair.high, pair.low);
+        if fl.to_bits() & (!0u64 >> 12) == 0 && e2 != 0.0 {
+            let step = if (fl.to_bits() ^ e2.to_bits()) >> 63 == 1 {
+                -1i64
+            } else {
+                1
+            };
+            fl = f64::from_bits(fl.to_bits().wrapping_add(step as u64));
+        }
+        DoubleDouble {
+            high: s.high,
+            low: fl,
+        }
+    } else {
+        table.add_ordered(em1 * table)
+    };
+
+    // Normalize the mantissa into [1, 2) (folding its exponent into `ie`) for the
+    // subnormal-safe final rounding.
+    let (mantissa, ie) = if m.high < 1.0 {
+        (m * 2.0, ie - 1)
+    } else if m.high >= 2.0 {
+        (m * 0.5, ie + 1)
+    } else {
+        (m, ie)
+    };
+    super::double::round_general64(mantissa, ie)
+}
+
+/// Hard-to-round database for [`exp_accurate`]: inputs whose `eˣ` lies within the
+/// accurate path's ≈2⁻¹⁰⁷ of an `f64` midpoint — closer than the double-double
+/// can resolve — mapped (by bit pattern) to their correctly-rounded results.
+///
+/// The set is CORE-MATH's analytically-determined `exp` hard cases plus the
+/// residuals metallic's own accurate path leaves on the `exp.wc` corpus; every
+/// other input is correctly rounded by the double-double path.  `(input_bits,
+/// result_bits)`, sorted by `input_bits` for binary search.
+#[rustfmt::skip]
+const EXP_HARD: [(u64, u64); 52] = [
+    (0x3cafffffffffffff, 0x3ff0000000000001), (0x3f1ba07d73250de7, 0x3ff0006e83736f8d),
+    (0x3f76a4d1af9cc989, 0x3ff016b4df3299d7), (0x3f95a75293a5dcda, 0x3ff05789640bc8ad),
+    (0x3fa42ea46949b3c7, 0x3ff0a4ae9718080c), (0x3fa7c8bb0cf5d160, 0x3ff0c2c2efbe6960),
+    (0x3fc0948d39a41695, 0x3ff23677186be250), (0x3fca065fefae814f, 0x3ff39b8021bc065d),
+    (0x3fcf6e4c3ced7c72, 0x3ff47408cb9583ce), (0x3fd1a0408712e00a, 0x3ff512b3126454f3),
+    (0x3fdbcab27d05abde, 0x3ff8b367381d82f5), (0x3fe005ae04256bab, 0x3ffa65d89abf3d1f),
+    (0x3ffaca7ae8da5a7b, 0x401557d4acd7e557), (0x401273c188aa7b14, 0x40593295a96ec6eb),
+    (0x40183d4bcdebb3f4, 0x407ac50b409c8aee), (0x40308f51434652c3, 0x416daac459b157e5),
+    (0x4031d5c2daebe367, 0x418a8c02e974c315), (0x403c44ce0d716a1a, 0x427b890ca8637ae2),
+    (0x404e07e71bfcf06f, 0x45591ec4412c344f), (0x404f7216c4b435c9, 0x459a97e7be23e65a),
+    (0x40654cd1fea7663a, 0x4f4c90810d354618), (0x407d6479eba7c971, 0x6a562a88613629b6),
+    (0xbf1664716b68a409, 0x3fefff4cde6a0bfb), (0xbf2a2fefefd580df, 0x3feffe5d0bb7eabf),
+    (0xbf3ce3f638d0c742, 0x3feffc63b5617d47), (0xbf3ceff32831e2c2, 0x3feffc6235eee28d),
+    (0xbf433accae78b371, 0x3feffb31a941b9b1), (0xbf4d792b60084f92, 0x3feff8a28e429f33),
+    (0xbf77fb235d76cce7, 0x3fefd02d98c24bbb), (0xbf81ff9b8e8b38be, 0x3fefb85251a3f26f),
+    (0xbf854511e930898c, 0x3fefab5c6e464e0d), (0xbf95c5ed0ec83666, 0x3fef53a751d7db49),
+    (0xbf98c56ff5326197, 0x3fef3c35328f1d5d), (0xbf9a4187f2ca71f9, 0x3fef309f46111221),
+    (0xbfba8f783d749a8f, 0x3fecd8abd4de5c33), (0xbfbbd44fdaed819f, 0x3fecb4287f11060a),
+    (0xbfbdaf693d64fada, 0x3fec7f14af0a08eb), (0xbfc290ea09e36479, 0x3febaded30cbf1c4),
+    (0xbfc8aeb636f3ce35, 0x3fea634ae87df6ae), (0xbfcd3f3799439415, 0x3fe976a4c9985f5b),
+    (0xbfcea16274b0109b, 0x3fe9309142b73ea6), (0xbfe22e24fa3d5cf9, 0x3fe2217147b85eaa),
+    (0xbfe85068c07fbbf6, 0x3fddefa8f4a8af21), (0xbfebdc7955d1482c, 0x3fdacb8cf13bc769),
+    (0xbff2a9cad9998262, 0x3fd3ef1e9b3a81c8), (0xbffcc37ef7de7501, 0x3fc534d4de870713),
+    (0xc0002393d5976769, 0x3fc1064b2c103ddb), (0xc0065061daf79a78, 0x3faf78a60182b74d),
+    (0xc02e8bdbfcd9144e, 0x3e8f3e558cf4de54), (0xc038f80e06f3a04c, 0x3daf80aafa92b498),
+    (0xc0559f038076039c, 0x3822c0fa76a0e15f), (0xc06981587ad4542f, 0x2d88c0d4140c77b7),
+];
+
+/// Look `x` up in [`EXP_HARD`], returning its correctly-rounded `eˣ` when present.
+#[inline]
+fn exp_database(x: f64) -> Option<f64> {
+    let key = x.to_bits();
+    EXP_HARD
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(EXP_HARD[i].1))
 }
 
 /// 2 raised to the power `x`
