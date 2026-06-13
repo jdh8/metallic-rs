@@ -669,15 +669,14 @@ fn td_round(t: TripleDouble) -> f64 {
     t.high + s
 }
 
-/// `asin(a)` for `a ∈ [0, ½)` as a triple-double, via the direct series
-/// `asin(a) = a·B(a²)`, `B(u) = Σ aₖ uᵏ`.  The accurate fallback's direct leg:
-/// the slowly-decaying tail `a₉..a₆₀` runs double-double Horner, then `a₈..a₁`
+/// `B(u) = asin(√u)/√u = Σ aₖ uᵏ` as a triple-double, for `u ∈ [0, ¼]`.  The
+/// slowly-decaying tail `a₉..a₆₀` runs double-double Horner, then `a₈..a₁`
 /// (carried to a third limb in [`ASIN_ACC`]/[`ASIN_ACC_LO`]) finish in
-/// triple-double — reaching ~2⁻¹³⁰, enough to round the hard `acos` points the
-/// double-double path misses (the worst ~2⁻¹¹¹ from a midpoint).
-fn asin_direct_td(a: f64) -> TripleDouble {
-    let u = DoubleDouble::from_product(a, a); // exact a²
-
+/// triple-double — reaching ~2⁻¹³⁰, enough to round the hard `asin`/`acos`
+/// points the double-double path misses (the worst ~2⁻¹¹¹ from a midpoint).
+/// Shared by the direct leg [`asin_direct_td`] (`u = a²`) and `acos`'s
+/// reflection leg ([`acos_accurate`], `u = (1−|x|)/2` exact).
+fn asin_b_td(u: DoubleDouble) -> TripleDouble {
     let mut p = ASIN_ACC[59];
     let mut idx = 59;
     while idx > 8 {
@@ -702,9 +701,44 @@ fn asin_direct_td(a: f64) -> TripleDouble {
         );
     }
 
-    // B = 1 + u·t,  asin(a) = a·B.
-    let b = td_add_f64(dd_mul_td(u, t), 1.0);
-    td_mul_f64(b, a)
+    // B = 1 + u·t.
+    td_add_f64(dd_mul_td(u, t), 1.0)
+}
+
+/// `asin(a)` for `a ∈ [0, ½]` as a triple-double, via the direct series
+/// `asin(a) = a·B(a²)`.  The accurate fallback's direct leg.
+fn asin_direct_td(a: f64) -> TripleDouble {
+    td_mul_f64(asin_b_td(DoubleDouble::from_product(a, a)), a)
+}
+
+/// `√u` as a triple-double, for an exact non-negative `f64` `u`.
+///
+/// One Newton step `s + (u − s²)/(2s)` from the double-double seed `sqrt_dd(u)`
+/// lifts ~2⁻¹⁰⁵ to ~2⁻¹⁵⁰: `s²` is assembled in triple-double (`high²` exact,
+/// the `2·hi·lo` cross term, and `lo²`), the residual `u − s²` is tiny, and the
+/// correction `÷2s` only needs the seed's high word.
+fn sqrt_td(u: f64) -> TripleDouble {
+    let s = sqrt_dd(DoubleDouble { high: u, low: 0.0 });
+
+    // s² = high² + 2·high·lo + lo², in triple-double.
+    let hh = DoubleDouble::from_product(s.high, s.high);
+    let hl = DoubleDouble::from_product(s.high, s.low); // exact high·lo
+    let mut sq = renorm3(hh.high, hh.low, 2.0 * hl.high);
+    for term in [2.0 * hl.low, s.low * s.low] {
+        sq = td_add_f64(sq, term);
+    }
+
+    // s ← s + (u − s²)/(2s).
+    let residual = td_add_f64(td_neg(sq), u);
+    let correction = td_mul_f64(residual, 0.5 / s.high);
+    td_add(
+        TripleDouble {
+            high: s.high,
+            mid: s.low,
+            low: 0.0,
+        },
+        correction,
+    )
 }
 
 /// `asin(|x|)` for `a = |x| ∈ [0, 1]`, as a double-double in `[0, π/2]`.
@@ -812,7 +846,31 @@ fn acos_accurate(x: f64) -> f64 {
             };
             td_round(mt)
         } else {
-            m.high + m.low
+            // Reflection: with `u = (1−|x|)/2` exact (Sterbenz) and `s = √u`,
+            // `asin(√u) = √u·B(u)`, so `acos(x) = 2·asin(√u)` for `x ≥ 0` and
+            // `π − 2·asin(√u)` for `x < 0`.  The double-double `m` lands within a
+            // hard-to-round point's reach, so resolve the series in triple-double.
+            let u = 0.5 * (1.0 - a);
+            let b = asin_b_td(DoubleDouble { high: u, low: 0.0 });
+            let s = sqrt_td(u);
+            // asin(√u) = √u·B(u): fold the seed's low limb in as an `f64` (`B ≈ 1`).
+            let asin_s = td_add_f64(
+                dd_mul_td(
+                    DoubleDouble {
+                        high: s.high,
+                        low: s.mid,
+                    },
+                    b,
+                ),
+                s.low * b.high,
+            );
+            let two_asin = td_mul_f64(asin_s, 2.0);
+            let mt = if x.is_sign_negative() {
+                td_add(td_mul_f64(FRAC_PI_2_TD, 2.0), td_neg(two_asin))
+            } else {
+                two_asin
+            };
+            td_round(mt)
         }
     })
 }
