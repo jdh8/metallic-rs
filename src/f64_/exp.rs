@@ -761,22 +761,73 @@ fn exp_accurate(x: f64) -> f64 {
         return r;
     }
 
+    let (jt, dx) = exp_two_level_reduce_accurate(x);
+    exp_two_level_finish(jt, dx)
+}
+
+/// Two-level reduction of a finite `x` for the *accurate* paths: returns
+/// `(jt, dx)` with `eˣ = 2`<sup>`jt/4096`</sup>` · exp(dx)` and `|dx| ≤ ln2/8192`
+/// carried as a double-double (three-word `ln2/4096`, [`L2H`]/`L2L`/`L2LL`).
+/// `tf·L2H` is exact (`L2H` has 24 trailing zero bits, `|tf| < 2²³`), so
+/// `x − tf·L2H` is exact (Sterbenz); `L2L`, `L2LL` carry the rest.  The caller
+/// must keep `|x|` in the finite range (`< ~746`) so `round(4096·x/ln2)` fits.
+#[inline]
+fn exp_two_level_reduce_accurate(x: f64) -> (i64, DoubleDouble) {
     let tf = (x * N_OVER_LN2_4096).round_ties_even();
     // SAFETY: |x| < 746, so |tf| < 2²³.
     let jt = unsafe { tf.to_int_unchecked::<i64>() };
 
-    // dx = x − t·ln2/4096 as a double-double.  `tf·L2H` is exact, so `x − tf·L2H`
-    // is exact (Sterbenz); `L2L`, `L2LL` carry the rest.
     let dxh0 = crate::fma(tf, -L2H, x);
     let dxl = tf * L2L;
     let dxll = crate::fma(tf, L2LL, crate::fma(tf, L2L, -dxl));
     let dxh = dxh0 + dxl;
-    let dx = DoubleDouble {
-        high: dxh,
-        low: (dxh0 - dxh) + dxl + dxll,
-    };
+    (
+        jt,
+        DoubleDouble {
+            high: dxh,
+            low: (dxh0 - dxh) + dxl + dxll,
+        },
+    )
+}
 
-    exp_two_level_finish(jt, dx)
+/// Raw two-level `eˣ` mantissa for the hyperbolic accurate legs: `eˣ = 2`<sup>`ie`
+/// </sup>` · m` with `m` a double-double in [1, 2) (≈2⁻¹⁰⁷ relative).
+///
+/// The accurate counterpart of [`exp_two_level_fast`]: the two-level grid value
+/// `2`<sup>`j/4096`</sup>` = EXP2_T0[i0]·EXP2_T1[i1]` folded with the `exp(dx) − 1`
+/// of the degree-7 double-double [`exp_poly_dd`].  Unlike [`exp_two_level_finish`]
+/// it stops at the
+/// (un-rounded) mantissa and omits the `table == 1` round-to-odd nudge — `cosh`
+/// and `sinh` add the `e⁻ˣ` term and do their own sound rounding afterward, so
+/// they need the plain double-double mantissa, not `exp`'s pre-rounded one.  `x`
+/// must be finite and in the non-overflow range.
+#[inline]
+pub(super) fn exp_two_level_mantissa_accurate(x: f64) -> (DoubleDouble, i64) {
+    let (jt, dx) = exp_two_level_reduce_accurate(x);
+    let i0 = ((jt >> 6) & 63) as usize;
+    let i1 = (jt & 63) as usize;
+    let ie = jt >> 12;
+
+    let em1 = dx * exp_poly_dd(dx);
+    let (t0h, t0l) = EXP2_T0[i0];
+    let (t1h, t1l) = EXP2_T1[i1];
+    let table = DoubleDouble {
+        high: t0h,
+        low: t0l,
+    } * DoubleDouble {
+        high: t1h,
+        low: t1l,
+    };
+    let m = table.add_ordered(em1 * table);
+
+    // Normalize the mantissa into [1, 2), folding its binary exponent into `ie`.
+    if m.high < 1.0 {
+        (m * 2.0, ie - 1)
+    } else if m.high >= 2.0 {
+        (m * 0.5, ie + 1)
+    } else {
+        (m, ie)
+    }
 }
 
 /// Shared reconstruction tail of the two-level accurate paths ([`exp_accurate`]

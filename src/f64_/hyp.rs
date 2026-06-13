@@ -1,5 +1,5 @@
-use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_anchored, sqrt_dd};
-use super::exp::{exp_dd, exp_two_level_fast};
+use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_anchored, round_general64, sqrt_dd};
+use super::exp::{exp_dd, exp_two_level_fast, exp_two_level_mantissa_accurate};
 use super::{ln_fast, ln_fast_scaled};
 use core::cmp::Ordering;
 
@@ -214,9 +214,64 @@ pub fn cosh(x: f64) -> f64 {
         return fast_ldexp(lo, q - 1);
     }
 
-    let (m, q) = exp_dd(x);
-    let mantissa = combine(m, q, true);
-    fast_ldexp(mantissa.high + mantissa.low, q - 1)
+    cosh_accurate(x)
+}
+
+/// Hard-to-round database for [`cosh_accurate`]: non-negative inputs whose
+/// `cosh` lies within the double-double path's reach of an `f64` midpoint —
+/// closer than it can resolve — mapped (by bit pattern of `|x|`) to their
+/// correctly-rounded results.  These are the residuals metallic's accurate path
+/// leaves on the `cosh.wc` corpus; the corpus enumerates every input ≥ 40
+/// hard-to-round bits and the double-double error is far below that threshold
+/// (no cancellation in `eˣ + e⁻ˣ`), so the residuals are sound for the whole
+/// domain.  Each result is confirmed by a 200-bit MPFR `cosh`.  `(|x|_bits,
+/// result_bits)`, sorted for binary search.
+#[rustfmt::skip]
+#[allow(clippy::unreadable_literal)]
+const COSH_HARD: [(u64, u64); 10] = [
+    (0x3e50000000000000, 0x3ff0000000000001), (0x3e82de32c662873d, 0x3ff000000000002d),
+    (0x3ea90b8278768adc, 0x3ff00000000004e7), (0x3ec12d0f92fb5032, 0x3ff00000000024e1),
+    (0x3f40cf01d3f9f5e4, 0x3ff000002350f3db), (0x3f610d6a14c0d526, 0x3ff000024591a32b),
+    (0x3f7b4ae17e3720ef, 0x3ff0001747116305), (0x3fb2ff1e16810fe7, 0x3ff00b4846f2860f),
+    (0x3fe03923f2b47c07, 0x3ff219c1989e3373), (0x3fe52268c6359f0e, 0x3ff39e464805bf01),
+];
+
+/// Look `x ≥ 0` up in [`COSH_HARD`], returning its correctly-rounded `cosh`.
+#[inline]
+fn cosh_database(x: f64) -> Option<f64> {
+    let key = x.to_bits();
+    COSH_HARD
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(COSH_HARD[i].1))
+}
+
+/// Correctly-rounded `cosh(x)` for `x ≥ 0` — [`cosh`]'s fallback when the lean
+/// leg straddles a rounding boundary.
+///
+/// `cosh = ½(eˣ + e⁻ˣ) = 2`<sup>`q−1`</sup>`·(m + 2⁻²q/m)` with `m` the two-level
+/// `eˣ` mantissa to ≈2⁻¹⁰⁷ ([`exp_two_level_mantissa_accurate`]); the `eˣ + e⁻ˣ`
+/// sum never cancels, so the double-double carries the result and
+/// [`round_general64`] rounds it soundly.  The handful of sub-2⁻¹⁰⁷ near-ties are
+/// caught by [`cosh_database`].  Kept `#[cold]`/out-of-line.
+#[cold]
+#[inline(never)]
+fn cosh_accurate(x: f64) -> f64 {
+    if let Some(r) = cosh_database(x) {
+        return r;
+    }
+
+    let (m, q) = exp_two_level_mantissa_accurate(x);
+    let combined = combine(m, q, true);
+
+    // `m + 2⁻²q/m ∈ [1, 2]`; normalize into [1, 2) for the subnormal-safe finish,
+    // folding the carry into the `2^(q−1)` exponent.
+    let (mantissa, e) = if combined.high >= 2.0 {
+        (combined * 0.5, q)
+    } else {
+        (combined, q - 1)
+    };
+    round_general64(mantissa, e)
 }
 
 /// Hyperbolic sine
