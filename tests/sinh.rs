@@ -19,3 +19,22 @@ fn test_sinh_worst_cases() {
 fn test_sinh_worst_faithful() {
     common::test_worst_faithful("sinh", metallic::sinh, core_math::sinh, 1);
 }
+
+/// Independent confirmation of correct rounding against MPFR — the gold-standard
+/// oracle CORE-MATH itself checks against.  Run with
+/// `cargo test --release --features mpfr`.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_sinh_vs_mpfr() {
+    let cr = |x: f64| rug::Float::with_val(200, x).sinh().to_f64();
+    // Exponent-uniform sampler: |x| ∈ [2⁻⁶⁰, ~2⁹) with a random sign, so the
+    // result-anchored small leg and the eˣ − e⁻ˣ cancellation band are exercised
+    // as densely as the large arguments.
+    let sampler = |i| {
+        let h = common::mix64(i);
+        let exp = 1023 - 60 + (h >> 52) % 70; // unbiased exponent in [-60, 9]
+        let x = f64::from_bits((exp << 52) | (h & 0x000F_FFFF_FFFF_FFFF));
+        if h & 1 == 1 { -x } else { x }
+    };
+    common::mpfr_sweep_univariate(metallic::sinh, cr, sampler, 5_000_000);
+}

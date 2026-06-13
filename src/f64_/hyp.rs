@@ -1,4 +1,7 @@
-use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_anchored, round_general64, sqrt_dd};
+use super::double::{
+    DoubleDouble, fast_ldexp, fast_sum, round_anchored, round_general_signed64, round_general64,
+    sqrt_dd,
+};
 use super::exp::{exp_dd, exp_two_level_fast, exp_two_level_mantissa_accurate};
 use super::{ln_fast, ln_fast_scaled};
 use core::cmp::Ordering;
@@ -295,10 +298,16 @@ pub fn sinh(x: f64) -> f64 {
         return x;
     }
 
-    // sinh(x) = ½(eˣ − e⁻ˣ) = 2^(q−1)·(m − 2⁻²q/m).  The double-double subtraction
-    // `m − 2⁻²q/m` captures the cancellation exactly (2Sum), so no separate
-    // small-argument polynomial is needed above the 2⁻²⁶ threshold.  Fast path
-    // with a Ziv test, as in `cosh`.
+    // |x| < ¼: `½(eˣ − e⁻ˣ)` cancels catastrophically (the linear terms of eˣ and
+    // e⁻ˣ cancel, leaving ≈2x), so the `m − 2⁻²q/m` mantissa loses the result's
+    // leading bits.  Go *result-anchored* via the odd series — see [`sinh_small`].
+    if s < SINH_SMALL {
+        return sinh_small(s).copysign(x);
+    }
+
+    // |x| ≥ ¼: sinh(x) = ½(eˣ − e⁻ˣ) = 2^(q−1)·(m − 2⁻²q/m); the residual
+    // cancellation (`t < 0.6·m`) is mild enough for the double-double.  Fast path:
+    // lean mantissa accepted by a Ziv test, as in `cosh`.
     let (m, q) = exp_two_level_fast(s);
     let mantissa = combine_fast(m, q, false);
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
@@ -307,9 +316,128 @@ pub fn sinh(x: f64) -> f64 {
         return fast_ldexp(lo, q - 1).copysign(x);
     }
 
-    let (m, q) = exp_dd(s);
-    let mantissa = combine(m, q, false);
-    fast_ldexp(mantissa.high + mantissa.low, q - 1).copysign(x)
+    sinh_accurate(s).copysign(x)
+}
+
+/// Upper limit of `sinh`'s result-anchored small-`|x|` series leg.
+const SINH_SMALL: f64 = 0.25;
+
+/// `S(v) = (sinh(x) − x)/x³ = ∑ vᵏ/(2k+3)!` (`v = x²`), low-degree first, as a
+/// double-double Horner table for [`sinh_small_accurate`].  Degree 11 leaves a
+/// truncation ≈2⁻¹³⁶ relative at `v = SINH_SMALL² = 0.0625`.
+#[allow(clippy::unreadable_literal)]
+const SINH_S_DD: [(f64, f64); 12] = [
+    (0.16666666666666666, 9.25185853854297e-18),
+    (0.008333333333333333, 1.1564823173178714e-19),
+    (0.0001984126984126984, 1.7209558293420705e-22),
+    (2.7557319223985893e-6, -1.858393274046472e-22),
+    (2.505210838544172e-8, -1.448814070935912e-24),
+    (1.6059043836821613e-10, 1.2585294588752098e-26),
+    (7.647163731819816e-13, 7.03872877733453e-30),
+    (2.8114572543455206e-15, 1.6508842730861433e-31),
+    (8.22063524662433e-18, 2.2141894119604265e-34),
+    (1.9572941063391263e-20, -1.3643503830087908e-36),
+    (3.868170170630684e-23, -8.843177655482344e-40),
+    (6.446950284384474e-26, -1.9330404233703465e-42),
+];
+
+/// Plain-`f64` `S(v)` for [`sinh_small`]'s fast leg; degree 7 (its `v⁸/19!`
+/// truncation is ≈2⁻⁹⁰ relative over `v < 0.0625`, far under the `f64` floor).
+#[allow(clippy::unreadable_literal)]
+const SINH_S_FAST: [f64; 8] = [
+    0.16666666666666666,
+    0.008333333333333333,
+    0.0001984126984126984,
+    2.7557319223985893e-6,
+    2.505210838544172e-8,
+    1.6059043836821613e-10,
+    7.647163731819816e-13,
+    2.8114572543455206e-15,
+];
+
+/// Correction-scaled Ziv gate for [`sinh_small`]'s series fast leg: the absolute
+/// error bound is `SCALE · |x|³`, since every error source rides the `x³·S(x²)`
+/// correction (the same shape as `asinh`).  ≈26× the measured fast-leg slip.
+const SINH_SMALL_ZIV_SCALE: f64 = 1.776_356_839_400_250_5e-15; // 2⁻⁴⁹
+
+/// Correctly-rounded `sinh(|x|)` for `0 < |x| < SINH_SMALL` via the
+/// result-anchored odd series `sinh(x) = x + x³·S(x²)` — `½(eˣ − e⁻ˣ)` cancels
+/// here, so this anchors at the exact `x` instead (the `asinh`/`expm1` template).
+/// Lean fast leg (plain-`f64` [`SINH_S_FAST`], `x³`-scaled gate), falling to the
+/// double-double [`sinh_small_accurate`] on a straddle.
+#[inline]
+fn sinh_small(x: f64) -> f64 {
+    let v = x * x;
+    let x3 = x * v;
+    let tail = x3 * crate::poly(v, &SINH_S_FAST);
+    let DoubleDouble { high, low } = fast_sum(x, tail);
+    let err = SINH_SMALL_ZIV_SCALE * x3;
+    let lo = high + (low - err);
+    let hi = high + (low + err);
+    if lo == hi {
+        return lo;
+    }
+    sinh_small_accurate(x)
+}
+
+/// Accurate leg of [`sinh_small`]: the correction `c = x³·S(x²)` as a
+/// double-double ([`SINH_S_DD`] Horner), then [`round_anchored`] adds the exact
+/// `x` and breaks the ½-ulp ties.  Mirrors `asinh_small_accurate`; the
+/// double-double resolves the whole branch (no database entries needed here).
+#[inline]
+fn sinh_small_accurate(x: f64) -> f64 {
+    let v = DoubleDouble::from_product(x, x);
+    let (high, low) = SINH_S_DD[SINH_S_DD.len() - 1];
+    let mut s = DoubleDouble { high, low };
+    for &(high, low) in SINH_S_DD[..SINH_S_DD.len() - 1].iter().rev() {
+        s = s * v + DoubleDouble { high, low };
+    }
+    let c = (DoubleDouble { high: x, low: 0.0 } * v) * s;
+    round_anchored(x, c)
+}
+
+/// Hard-to-round database for [`sinh_accurate`]: non-negative inputs (`|x| ≥ ¼`)
+/// whose `sinh` lies within the double-double path's reach of an `f64` midpoint,
+/// mapped (by bit pattern of `|x|`) to their correctly-rounded results.  Residuals
+/// metallic's accurate path leaves on the `sinh.wc` corpus; the path is
+/// db-complete (its error stays far below the corpus's ≥40-bit ≈2⁻⁹⁴ threshold),
+/// so this is sound for the whole `|x| ≥ ¼` domain.  Each confirmed by a 200-bit
+/// MPFR `sinh`.  `(|x|_bits, result_bits)`, sorted for binary search.
+#[rustfmt::skip]
+#[allow(clippy::unreadable_literal)]
+const SINH_HARD: [(u64, u64); 2] = [
+    (0x3fd4169f234f23b9, 0x3fd46b7b3b358f99), (0x3fd6660974af4f3a, 0x3fd6dbcf9dad0171),
+];
+
+/// Look `x ≥ ¼` up in [`SINH_HARD`], returning its correctly-rounded `sinh`.
+#[inline]
+fn sinh_database(x: f64) -> Option<f64> {
+    let key = x.to_bits();
+    SINH_HARD
+        .binary_search_by_key(&key, |&(input, _)| input)
+        .ok()
+        .map(|i| f64::from_bits(SINH_HARD[i].1))
+}
+
+/// Correctly-rounded `sinh(x)` for `x ≥ ¼` — [`sinh`]'s fallback when the lean
+/// leg straddles a rounding boundary.
+///
+/// `sinh = ½(eˣ − e⁻ˣ) = 2`<sup>`q−1`</sup>`·(m − 2⁻²q/m)` with `m` the two-level
+/// `eˣ` mantissa to ≈2⁻¹⁰⁷ ([`exp_two_level_mantissa_accurate`]).  For `x ≥ ¼` the
+/// `e⁻ˣ` term is at most `0.6·eˣ`, so the subtraction loses ≤ 1 bit and the
+/// double-double carries the result; [`round_general_signed64`] normalizes the
+/// `(0, 2)` mantissa and rounds it soundly.  The sub-2⁻¹⁰⁷ near-ties go in
+/// [`sinh_database`].  Kept `#[cold]`/out-of-line.
+#[cold]
+#[inline(never)]
+fn sinh_accurate(x: f64) -> f64 {
+    if let Some(r) = sinh_database(x) {
+        return r;
+    }
+
+    let (m, q) = exp_two_level_mantissa_accurate(x);
+    let combined = combine(m, q, false);
+    round_general_signed64(combined, q - 1)
 }
 
 /// Hyperbolic tangent
