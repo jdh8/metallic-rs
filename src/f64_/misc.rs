@@ -136,7 +136,101 @@ pub fn hypot(x: f64, y: f64) -> f64 {
     } else {
         (corrected, e)
     };
+
+    // Ziv gate: the double-double sqrt is good to ≈2⁻¹⁰⁴; if its `±eps` interval
+    // does not straddle a rounding boundary, round it directly.  The few inputs
+    // that straddle — CORE-MATH's hard-to-round corpus — are resolved exactly by
+    // the integer [`hypot_hard`].  That exact resolver rounds to 53 bits assuming
+    // a normal result, so restrict it to a normal `big` (where the result, being
+    // ≥ `big`, is itself normal); a subnormal `big` keeps the dd round.
+    let eps = value.high * HYPOT_ZIV_EPS;
+    let lo = value.high + (value.low - eps);
+    let hi = value.high + (value.low + eps);
+    if lo != hi && bits >= f64::MIN_POSITIVE.to_bits() {
+        return ldexp(hypot_hard(big_s, small_s), e);
+    }
     round_general64(value, i64::from(exponent))
+}
+
+/// Relative half-width of the `hypot` Ziv gate; the double-double sqrt is good to
+/// ≈2⁻¹⁰⁴, so `2⁻⁹⁹` keeps a comfortable margin while deferring only genuine
+/// near-ties to the exact resolver.
+const HYPOT_ZIV_EPS: f64 = 1.577_721_810_442_023_6e-30; // 2⁻⁹⁹
+
+/// Exact integer resolution of the `hypot` inputs the double-double sqrt cannot
+/// correctly round (≈2⁻¹⁰⁴ leaves them on the wrong side of a midpoint).
+///
+/// Port of CORE-MATH's `as_hypot_hard` (round-to-nearest only).  With both legs
+/// scaled so `big_s ∈ [1, 2)`, it forms `m2 = (bm·2ᴮˢ)² + (lm·2ˡˢ)²` exactly as a
+/// 128-bit integer (a sticky bit absorbs the smaller leg's shifted-out tail),
+/// integer-searches the sqrt mantissa from just below the `f64` estimate, then
+/// breaks the midpoint tie to even.  Returns √(big_s²+small_s²) ∈ [1, 2√2).
+fn hypot_hard(big_s: f64, small_s: f64) -> f64 {
+    let xi = big_s.to_bits();
+    let yi = small_s.to_bits();
+    let bm = (xi & (!0u64 >> 12)) | (1u64 << 52);
+    let lm = (yi & (!0u64 >> 12)) | (1u64 << 52);
+    let be = (xi >> EXP_SHIFT) as i64;
+    let le = (yi >> EXP_SHIFT) as i64;
+
+    const BS: i64 = 2;
+    let ri = (big_s * big_s + small_s * small_s).sqrt().to_bits();
+    let mut rm = (ri & (!0u64 >> 12)) | (1u64 << 52);
+    let mut re = (ri >> EXP_SHIFT) as i64 - 0x3ff;
+    // rm -= 3, borrowing across the binade so the search starts safely below √.
+    for _ in 0..3 {
+        if rm == 1u64 << 52 {
+            rm = !0u64 >> 11;
+            re -= 1;
+        } else {
+            rm -= 1;
+        }
+    }
+
+    let bm = bm << BS;
+    let mut m2 = u128::from(bm) * u128::from(bm);
+    let ls = BS - (be - le);
+    if ls >= 0 {
+        let lm = lm << ls;
+        m2 += u128::from(lm) * u128::from(lm);
+    } else {
+        let lm2 = u128::from(lm) * u128::from(lm);
+        let shift = (-ls * 2) as u32;
+        m2 += lm2 >> shift;
+        if lm2 << (128 - shift) != 0 {
+            m2 |= 1; // sticky bit for the shifted-out tail
+        }
+    }
+
+    let k = (BS + re) as u32;
+    let mut d: i128;
+    loop {
+        rm += 1 + u64::from(rm >= (1u64 << 53));
+        let tm = rm << k;
+        d = m2 as i128 - (u128::from(tm) * u128::from(tm)) as i128;
+        if d <= 0 {
+            break;
+        }
+    }
+    if d != 0 {
+        // `rm² > m2`: compare `m2` against the midpoint half a step below `rm`.
+        let half = 1u64 << (k - u32::from(rm <= (1u64 << 53)));
+        let tm = (rm << k) - half;
+        let dmid = m2 as i128 - (u128::from(tm) * u128::from(tm)) as i128;
+        if dmid != 0 {
+            rm = (rm as i64 + (dmid >> 127) as i64) as u64; // round down if below midpoint
+        } else {
+            rm -= rm & 1; // exact midpoint → round to even
+        }
+    }
+    if rm >= (1u64 << 53) {
+        rm >>= 1;
+        re += 1;
+    }
+
+    // big_s ∈ [1, 2) gives biased exponent 0x3ff; `rm ∈ [2⁵², 2⁵³)`, so its
+    // implicit bit carries into the exponent field: result = ((0x3fe+re)<<52) + rm.
+    f64::from_bits((((0x3fe + re) as u64) << EXP_SHIFT) + rm)
 }
 
 /// Multiply `x` by 2 raised to the power `n`
