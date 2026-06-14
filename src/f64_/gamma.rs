@@ -6,7 +6,8 @@
 //! (`from_sum(z, k)`) and the products run on four parallel lanes; a deep downward
 //! divisor carries a binary exponent so it never overflows even for very negative
 //! `z`.  A table-driven fast leg (per-cell minimax of `Γ(2.875 + d)`) is Ziv-gated
-//! against the degree-31 ≈2⁻¹¹⁰ accurate path.
+//! against a triple-double accurate path (degree-38 minimax walked through a
+//! triple-double recurrence, ≈2⁻¹³⁵) that clears the corpus's hardest near-ties.
 //!
 //! `lgamma = ln|Γ|` reads a central per-cell minimax of `ln Γ(2.875 + d)` for
 //! `½ ≤ y < 8` (reducing into `[2.375, 3.375]` by `i = round(y − 2.875)` and adding
@@ -23,7 +24,7 @@
 //! Do not edit by hand; re-run the generator instead.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
-use super::double::{DoubleDouble, fast_ldexp, round_general_signed64};
+use super::double::{DoubleDouble, fast_ldexp};
 use super::pow::poly_dd;
 use super::trig::abs_sinpi_dd;
 
@@ -48,141 +49,502 @@ fn neg(a: DoubleDouble) -> DoubleDouble {
     }
 }
 
+// ── Triple-double accurate path ──────────────────────────────────────────────
+//
+// The double-double accurate leg ([`tgamma_accurate`]) is ≈2⁻¹¹⁰ nominally, but
+// degrades to ≈2⁻⁹⁹ relative over the long recurrence (up to ~168 double-double
+// products / one reciprocal).  The worst-case corpus has ties as close as ≈2⁻⁶⁰
+// to an `f64` midpoint, so a 2⁻⁹⁹ band straddles them and mis-rounds ~310 inputs.
+//
+// The fix lifts the whole accurate path to triple-double (`high + mid + low`,
+// non-overlapping): a degree-38 minimax ([`TGAMMA_TD`], approximation error
+// 2⁻¹³⁷·²) walked through a triple-double recurrence (each product / the
+// reciprocal drops only ≈2⁻²¹², negligible over the ~168-factor depth).  The
+// resulting ≈2⁻¹³⁵ path clears every tie with a > 70-bit margin.  These ops are
+// duplicated from `atan.rs`'s `TripleDouble` (the house "keep kernels local"
+// convention; `atan.rs` stays private), with two additions tgamma needs that
+// `atan.rs` lacks — a full triple×triple multiply [`td_mul`] and a triple-double
+// reciprocal [`td_recip`] — plus a signed, subnormal-safe finisher
+// [`round_td_signed64`].
+
+/// A triple-`f64` value `high + mid + low`.  Normalized forms are
+/// non-overlapping: `|mid| ≤ ½ulp(high)`, `|low| ≤ ½ulp(mid)`.
+#[derive(Clone, Copy)]
+struct TripleDouble {
+    high: f64,
+    mid: f64,
+    low: f64,
+}
+
+/// `1` as a triple-double.
+const TD_ONE: TripleDouble = TripleDouble {
+    high: 1.0,
+    mid: 0.0,
+    low: 0.0,
+};
+
+/// 2Sum: the exact `a + b` as `(sum, error)`.
+#[inline]
+fn two_sum(a: f64, b: f64) -> (f64, f64) {
+    let s = a + b;
+    let bb = s - a;
+    (s, (a - (s - bb)) + (b - bb))
+}
+
+/// Renormalize the exact sum `a + b + c` into a non-overlapping triple-double.
+#[inline]
+fn renorm3(a: f64, b: f64, c: f64) -> TripleDouble {
+    let (s, t1) = two_sum(b, c);
+    let (high, t2) = two_sum(a, s);
+    let (mid, low) = two_sum(t2, t1);
+    TripleDouble { high, mid, low }
+}
+
+/// Add an `f64` into a triple-double, dropping only the 4th-order residual.
+#[inline]
+fn td_add_f64(t: TripleDouble, x: f64) -> TripleDouble {
+    let (s0, e0) = two_sum(t.high, x);
+    let (s1, e1) = two_sum(t.mid, e0);
+    renorm3(s0, s1, t.low + e1)
+}
+
+/// Add two triple-doubles (fold the addend's limbs in, high-first).
+#[inline]
+fn td_add(a: TripleDouble, b: TripleDouble) -> TripleDouble {
+    td_add_f64(td_add_f64(td_add_f64(a, b.high), b.mid), b.low)
+}
+
+/// Negate a triple-double.
+#[inline]
+fn td_neg(t: TripleDouble) -> TripleDouble {
+    TripleDouble {
+        high: -t.high,
+        mid: -t.mid,
+        low: -t.low,
+    }
+}
+
+/// Promote a double-double to a triple-double.
+#[inline]
+const fn dd_to_td(d: DoubleDouble) -> TripleDouble {
+    TripleDouble {
+        high: d.high,
+        mid: d.low,
+        low: 0.0,
+    }
+}
+
+/// Multiply a double-double by a triple-double.
+#[inline]
+fn dd_mul_td(d: DoubleDouble, t: TripleDouble) -> TripleDouble {
+    let q0 = DoubleDouble::from_product(d.high, t.high);
+    let q1 = DoubleDouble::from_product(d.high, t.mid);
+    let q2 = DoubleDouble::from_product(d.low, t.high);
+    let mut acc = TripleDouble {
+        high: q0.high,
+        mid: 0.0,
+        low: 0.0,
+    };
+    for term in [
+        q1.high,
+        q2.high,
+        q0.low,
+        q1.low,
+        q2.low,
+        d.high * t.low,
+        d.low * t.mid,
+    ] {
+        acc = td_add_f64(acc, term);
+    }
+    acc
+}
+
+/// Multiply two triple-doubles.  Accumulates every cross term down to the
+/// `high·low`/`mid·mid`/`low·high` order (≈2⁻¹⁵⁹ relative), the orders below
+/// being far past the path's budget; the leading products carry their FMA tails.
+#[inline]
+fn td_mul(a: TripleDouble, b: TripleDouble) -> TripleDouble {
+    let p_hh = DoubleDouble::from_product(a.high, b.high);
+    let p_hm = DoubleDouble::from_product(a.high, b.mid);
+    let p_mh = DoubleDouble::from_product(a.mid, b.high);
+    let mut acc = TripleDouble {
+        high: p_hh.high,
+        mid: 0.0,
+        low: 0.0,
+    };
+    for term in [
+        p_hm.high,
+        p_mh.high,
+        p_hh.low,
+        p_hm.low,
+        p_mh.low,
+        a.high * b.low,
+        a.mid * b.mid,
+        a.low * b.high,
+    ] {
+        acc = td_add_f64(acc, term);
+    }
+    acc
+}
+
+/// `1 / t` as a triple-double: a Newton step `r·(2 − t·r)` from the
+/// double-double seed `r₀ = recip(high+mid)` triples the seed's ≈2⁻¹⁰⁶ accuracy.
+#[inline]
+fn td_recip(t: TripleDouble) -> TripleDouble {
+    let seed = DoubleDouble {
+        high: t.high,
+        low: t.mid,
+    }
+    .recip();
+    let two = TripleDouble {
+        high: 2.0,
+        mid: 0.0,
+        low: 0.0,
+    };
+    // r·(2 − t·r)
+    td_mul(
+        dd_to_td(seed),
+        td_add(two, td_neg(td_mul(t, dd_to_td(seed)))),
+    )
+}
+
+/// Round a normalized triple-double to the nearest `f64`.  Round-to-odd of the
+/// low pair `mid + low` (so its dropped tail survives as a sticky bit) followed
+/// by one `high + ·` add yields the correctly-rounded result.
+#[inline]
+fn td_round(t: TripleDouble) -> f64 {
+    let (s, e) = two_sum(t.mid, t.low);
+    let s = if e != 0.0 && s.to_bits() & 1 == 0 {
+        let bits = s.to_bits();
+        f64::from_bits(if (s >= 0.0) == (e > 0.0) {
+            bits + 1
+        } else {
+            bits - 1
+        })
+    } else {
+        s
+    };
+    t.high + s
+}
+
+/// Round a signed triple-double `value · 2ⁿ` to the nearest `f64`, safe across
+/// the subnormal range — the triple-double analogue of
+/// [`round_general_signed64`](super::double::round_general_signed64).
+///
+/// Normalizes `|value|` so its high word lands in `[1, 2)` (folding the binary
+/// exponent into `n`), rounds on the appropriate grid, then restores the sign.
+/// In the normal range (`e + n ≥ −1022`) the `2ⁿ` scaling is exact and one
+/// [`td_round`] suffices; into the subnormals the magnitude is quantized once on
+/// the `2⁻¹⁰⁷⁴` grid (rounding the leading limb, then correcting with the exact
+/// residual of the lower limbs), exactly as [`round_general64`] does for a pair.
+#[inline]
+fn round_td_signed64(value: TripleDouble, n: i64) -> f64 {
+    let sign = value.high;
+    let mag = if sign < 0.0 { td_neg(value) } else { value };
+
+    let e = (mag.high.to_bits() >> (f64::MANTISSA_DIGITS - 1)) as i64 - 1023;
+    let m = TripleDouble {
+        high: fast_ldexp(mag.high, -e),
+        mid: fast_ldexp(mag.mid, -e),
+        low: fast_ldexp(mag.low, -e),
+    };
+    let shift = e + n;
+
+    let magnitude = if shift >= -1022 {
+        // Normal: scaling by 2^shift is exact, so one rounding of the triple.
+        fast_ldexp(td_round(m), shift)
+    } else {
+        // Subnormal: quantize once on the 2⁻¹⁰⁷⁴ grid.  `g = m · 2^(shift+1074)`
+        // lies in [0, 2⁵²]; round its integer part, correcting with the exact
+        // residual of the lower limbs, then `· 2⁻¹⁰⁷⁴`.
+        let s = shift + 1074;
+        let h = fast_ldexp(m.high, s);
+        let mid = fast_ldexp(m.mid, s);
+        let lo = fast_ldexp(m.low, s);
+        let n0 = h.round_ties_even();
+        // exact residual (h − n0) + mid + lo, then round to the grid
+        let r = td_round(td_add_f64(
+            TripleDouble {
+                high: h - n0,
+                mid,
+                low: lo,
+            },
+            0.0,
+        ));
+        (n0 + r.round_ties_even()) * f64::from_bits(1)
+    };
+
+    magnitude.copysign(sign)
+}
+
+/// Evaluate a triple-double polynomial `Σ coeffs[k]·uᵏ` at the triple-double `u`,
+/// Estrin scheme — the triple-double analogue of [`poly_dd`].
+///
+/// Pairing adjacent coefficients into `c[2i] + power·c[2i+1]` and squaring
+/// `power` builds a depth-`⌈log₂ n⌉` tree; the writes `buf[i]` read only
+/// `buf[2i]`/`buf[2i+1]` (both at indices `> i` once `i ≥ 1`), so the in-place
+/// fold never clobbers an unread entry.
+#[inline]
+fn poly_td(u: TripleDouble, coeffs: &[TripleDouble]) -> TripleDouble {
+    /// Scratch capacity; the largest caller ([`TGAMMA_TD`]) has 39 terms.
+    const CAP: usize = 40;
+    const TD_ZERO: TripleDouble = TripleDouble {
+        high: 0.0,
+        mid: 0.0,
+        low: 0.0,
+    };
+
+    let n = coeffs.len();
+    debug_assert!(n <= CAP);
+    let mut buf = [TD_ZERO; CAP];
+    buf[..n].copy_from_slice(coeffs);
+
+    let mut len = n;
+    let mut power = u;
+    while len > 1 {
+        let half = len.div_ceil(2);
+        for i in 0..half {
+            buf[i] = if 2 * i + 1 < len {
+                td_add(buf[2 * i], td_mul(power, buf[2 * i + 1]))
+            } else {
+                buf[2 * i]
+            };
+        }
+        len = half;
+        power = td_mul(power, power);
+    }
+    buf[0]
+}
+
+/// `∏_{m=0}^{n−1} (z + first + step·m)` as a triple-double, on four parallel lanes
+///
+/// The triple-double analogue of [`recurrence_product_z`]: each factor
+/// `from_sum(z, …)` is an exact double-double, folded into a triple-double lane by
+/// [`dd_mul_td`]; four lanes cut the dependency chain to ≈n/4 multiplies.
+#[inline]
+fn recurrence_product_z_td(z: f64, first: i64, step: i64, n: i64) -> TripleDouble {
+    let factor = |m: i64| DoubleDouble::from_sum(z, (first + step * m) as f64);
+
+    let mut p = [TD_ONE; 4];
+    let mut m = 0;
+    while m + 4 <= n {
+        p[0] = dd_mul_td(factor(m), p[0]);
+        p[1] = dd_mul_td(factor(m + 1), p[1]);
+        p[2] = dd_mul_td(factor(m + 2), p[2]);
+        p[3] = dd_mul_td(factor(m + 3), p[3]);
+        m += 4;
+    }
+    while m < n {
+        p[0] = dd_mul_td(factor(m), p[0]);
+        m += 1;
+    }
+    td_mul(td_mul(p[0], p[1]), td_mul(p[2], p[3]))
+}
+
 // generated by tools/gen_gamma_f64.py
-// Γ(2.875 + d), d ∈ [−½, ½]: degree 31, err 2^-112.7
 
 /// Center of the tgamma minimax interval, `Γ(TGAMMA_CENTER + d)`
 const TGAMMA_CENTER: f64 = 2.875;
 
-/// Accurate `Γ(2.875 + d)` minimax, double-double (degree 31, ≈2⁻¹¹⁰)
-const TGAMMA_DD: [DoubleDouble; 32] = [
-    DoubleDouble {
+// Γ(2.875 + d), d ∈ [−½, ½] (triple-double): degree 38, err 2^-137.2
+
+/// Accurate `Γ(2.875 + d)` minimax, triple-double (degree 38, ≈2⁻¹³⁶) — the
+/// lifted accurate path's central polynomial (see the triple-double section).
+const TGAMMA_TD: [TripleDouble; 39] = [
+    TripleDouble {
         high: 1.7877108988969403,
-        low: -3.737560105011311e-17,
+        mid: -3.737560105011311e-17,
+        low: 2.6956899537083993e-33,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 1.5591939012079505,
-        low: -6.631567859470687e-18,
+        mid: -6.631567859470687e-18,
+        low: 2.036960888707665e-34,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 1.051049326681183,
-        low: -8.116096010951971e-17,
+        mid: -8.116096010951992e-17,
+        low: -6.055978706758241e-34,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.4706580182933971,
-        low: 5.342391332052946e-18,
+        mid: 5.342391332053018e-18,
+        low: 8.768275100150477e-35,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.1888186383201151,
-        low: -1.3054896293957532e-17,
+        mid: -1.3054896293886901e-17,
+        low: -5.340833590896756e-34,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.05883154841061269,
-        low: -9.273306373560545e-19,
+        mid: -9.27330637380622e-19,
+        low: -1.3612628639355033e-35,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.01782594364117838,
-        low: 5.031238733093318e-19,
+        mid: 5.031238638217678e-19,
+        low: 2.187414960371291e-35,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.004228758172266868,
-        low: 1.1511808936941706e-19,
+        mid: 1.151180926694932e-19,
+        low: 7.325038880696517e-36,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.0010979180310503826,
-        low: -1.1010184923888806e-20,
+        mid: -1.100951591775643e-20,
+        low: 4.604762624165258e-37,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.00019456543685651592,
-        low: 1.0116225007363177e-20,
+        mid: 1.0115992305621253e-20,
+        low: -1.4209038311248387e-37,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 5.1969790143123595e-05,
-        low: -7.964391642008636e-22,
+        mid: -8.2495146086661e-22,
+        low: -1.561437139199483e-38,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 4.915670863671917e-06,
-        low: 3.3426034114876754e-23,
+        mid: 4.334353430937917e-23,
+        low: -1.0128955399515383e-39,
     },
-    DoubleDouble {
-        high: 2.4444094880039094e-06,
-        low: 5.891028679821057e-23,
+    TripleDouble {
+        high: 2.4444094880039103e-06,
+        mid: 9.038382801092153e-24,
+        low: -6.9066252700779965e-40,
     },
-    DoubleDouble {
-        high: -1.497442756717949e-07,
-        low: -1.1810575273257206e-23,
+    TripleDouble {
+        high: -1.4974427567179518e-07,
+        mid: 2.078104042117125e-24,
+        low: -1.1367097590227043e-40,
     },
-    DoubleDouble {
-        high: 1.6499307279580177e-07,
-        low: 1.450291103838293e-24,
+    TripleDouble {
+        high: 1.649930727957864e-07,
+        mid: -7.499701604994109e-24,
+        low: -7.878315002664207e-42,
     },
-    DoubleDouble {
-        high: -4.04617505243256e-08,
-        low: -2.032191789465186e-24,
+    TripleDouble {
+        high: -4.0461750524320245e-08,
+        mid: -3.1152578400850563e-24,
+        low: 1.7048425477296851e-40,
     },
-    DoubleDouble {
-        high: 1.6571285740619803e-08,
-        low: 1.3342997647579815e-25,
+    TripleDouble {
+        high: 1.6571285740831624e-08,
+        mid: 1.1588286958783835e-24,
+        low: -6.183440723387665e-41,
     },
-    DoubleDouble {
-        high: -5.433148476367102e-09,
-        low: -2.682019257654185e-25,
+    TripleDouble {
+        high: -5.433148476440781e-09,
+        mid: -6.1931065457646884e-27,
+        low: 2.1357651316036832e-44,
     },
-    DoubleDouble {
-        high: 1.9368755053998543e-09,
-        low: 2.7838483465822866e-26,
+    TripleDouble {
+        high: 1.936875503280264e-09,
+        mid: -1.985494885477204e-25,
+        low: 4.3732210144983453e-42,
     },
-    DoubleDouble {
-        high: -6.686172405176842e-10,
-        low: 2.596125460184264e-26,
+    TripleDouble {
+        high: -6.686172397804114e-10,
+        mid: 4.7448540058758533e-26,
+        low: 9.542720632853339e-43,
     },
-    DoubleDouble {
-        high: 2.3340504724828034e-10,
-        low: -2.4034050050775847e-26,
+    TripleDouble {
+        high: 2.334050627987074e-10,
+        mid: -2.4015864750478112e-26,
+        low: 9.930437282524611e-43,
     },
-    DoubleDouble {
-        high: -8.11430497599371e-11,
-        low: -2.3386312901085136e-27,
+    TripleDouble {
+        high: -8.114305516901225e-11,
+        mid: 8.124524514541912e-28,
+        low: -2.3974522426711057e-44,
     },
-    DoubleDouble {
-        high: 2.8243098423463646e-11,
-        low: 4.191183469399253e-28,
+    TripleDouble {
+        high: 2.8243014906732135e-11,
+        mid: 8.121334676175837e-28,
+        low: 7.612405213345632e-44,
     },
-    DoubleDouble {
-        high: -9.825325203805483e-12,
-        low: 2.6863769129376103e-28,
+    TripleDouble {
+        high: -9.825296152744914e-12,
+        mid: 4.087337259730191e-28,
+        low: 9.90501106456069e-45,
     },
-    DoubleDouble {
-        high: 3.417956815472629e-12,
-        low: -4.451422155188213e-29,
+    TripleDouble {
+        high: 3.4182808774005197e-12,
+        mid: 2.22742729981412e-29,
+        low: 1.8507566390044874e-46,
     },
-    DoubleDouble {
-        high: -1.1890196028905508e-12,
-        low: 8.074851335465472e-29,
+    TripleDouble {
+        high: -1.1891323307685265e-12,
+        mid: -4.633951871736472e-29,
+        low: 1.3448603464763925e-45,
     },
-    DoubleDouble {
-        high: 4.145397911532885e-13,
-        low: 1.7387591331746797e-29,
+    TripleDouble {
+        high: 4.136577292208494e-13,
+        mid: 2.5861238647105886e-30,
+        low: 3.441406622472407e-47,
     },
-    DoubleDouble {
-        high: -1.441993769481667e-13,
-        low: 8.29570211316567e-30,
+    TripleDouble {
+        high: -1.438925215383897e-13,
+        mid: -2.299507980257203e-30,
+        low: 1.2146520002193949e-46,
     },
-    DoubleDouble {
-        high: 4.8463031813154956e-14,
-        low: -2.0704085043927324e-30,
+    TripleDouble {
+        high: 5.005260884113559e-14,
+        mid: 5.486702801663778e-31,
+        low: 4.973451647939902e-48,
     },
-    DoubleDouble {
-        high: -1.6857480107584077e-14,
-        low: -5.5655679058910915e-31,
+    TripleDouble {
+        high: -1.7410568520748156e-14,
+        mid: -4.358802738061344e-31,
+        low: -2.5643470424175236e-47,
     },
-    DoubleDouble {
-        high: 7.735461983288856e-15,
-        low: 1.9130355998779127e-31,
+    TripleDouble {
+        high: 6.056051644415055e-15,
+        mid: -3.3294399151932493e-31,
+        low: 3.9443262648049115e-48,
     },
-    DoubleDouble {
-        high: -2.6906549784298133e-15,
-        low: -1.1237734992114873e-31,
+    TripleDouble {
+        high: -2.105963346669623e-15,
+        mid: 8.168537036122508e-32,
+        low: -2.2999677742739988e-48,
+    },
+    TripleDouble {
+        high: 7.325224234674443e-16,
+        mid: 1.326453038562385e-32,
+        low: -3.151015956652144e-49,
+    },
+    TripleDouble {
+        high: -2.559423807173466e-16,
+        mid: 9.267771333081324e-33,
+        low: 1.2685445416872617e-49,
+    },
+    TripleDouble {
+        high: 8.90243321157459e-17,
+        mid: -3.591385183416275e-33,
+        low: 1.1735219726985877e-50,
+    },
+    TripleDouble {
+        high: -2.929747002576454e-17,
+        mid: -9.249603752157267e-35,
+        low: -2.168528621509817e-52,
+    },
+    TripleDouble {
+        high: 1.0190483137623982e-17,
+        mid: 5.483420892663014e-34,
+        low: -3.7773787032221925e-50,
+    },
+    TripleDouble {
+        high: -5.0269720470725814e-18,
+        mid: -3.4295850740906972e-34,
+        low: -2.219355583310735e-51,
+    },
+    TripleDouble {
+        high: 1.7485166900258535e-18,
+        mid: 2.615142507866369e-35,
+        low: 1.7789802052817682e-51,
     },
 ];
 
@@ -1026,7 +1388,7 @@ const PRODUCT_RESCALE: f64 = crate::exp2i(512);
 /// The [`TGAMMA_TABLE`] leg is ≈2⁻⁶⁸: worst-cell minimax 2⁻⁷⁵, the `f64` tail
 /// (≤ 2⁻¹⁹ of Γ) lands near 2⁻⁷¹, and the dropped `h.low` in the innermost fold
 /// adds ≈2⁻⁶⁹; the recurrence's exact factors only ≈2⁻⁹⁸.  `2⁻⁶²` keeps a ~60×
-/// margin, deferring ≈0.1% of inputs to the accurate [`TGAMMA_DD`] path.
+/// margin, deferring ≈0.1% of inputs to the accurate [`TGAMMA_TD`] path.
 const TGAMMA_ZIV_EPS: f64 = 2.168404344971009e-19; // 2^-62
 
 /// Max downward recurrence length for the rescale-free parallel divisor product
@@ -1159,6 +1521,49 @@ fn tgamma_recurrence(z: f64, i: f64, value: DoubleDouble) -> (DoubleDouble, i64)
     }
 }
 
+/// Walk the recurrence in **triple-double** from `value = Γ(z − i)` to
+/// `(value, e2)` with `Γ(z) = value · 2`<sup>`e2`</sup> — the lifted accurate
+/// path's analogue of [`tgamma_recurrence`].
+///
+/// Same three cases (upward product, short downward divide, deep downward serial
+/// rescale), each in triple-double via [`recurrence_product_z_td`] / [`td_recip`].
+#[inline]
+fn tgamma_recurrence_td(z: f64, i: f64, value: TripleDouble) -> (TripleDouble, i64) {
+    let steps = i.abs() as i64;
+
+    if i > 0.0 {
+        (td_mul(value, recurrence_product_z_td(z, -1, -1, steps)), 0)
+    } else if i < 0.0 && steps <= TGAMMA_DOWNWARD_DIRECT {
+        (
+            td_mul(value, td_recip(recurrence_product_z_td(z, 0, 1, steps))),
+            0,
+        )
+    } else if i < 0.0 {
+        let mut product = TripleDouble {
+            high: z,
+            mid: 0.0,
+            low: 0.0,
+        };
+        let mut e2: i64 = 0;
+        let mut k = 0.0;
+        for _ in 1..steps {
+            k += 1.0;
+            product = dd_mul_td(DoubleDouble::from_sum(z, k), product);
+            if product.high.abs() > PRODUCT_RESCALE {
+                product = TripleDouble {
+                    high: fast_ldexp(product.high, -512),
+                    mid: fast_ldexp(product.mid, -512),
+                    low: fast_ldexp(product.low, -512),
+                };
+                e2 += 512;
+            }
+        }
+        (td_mul(value, td_recip(product)), -e2)
+    } else {
+        (value, 0)
+    }
+}
+
 /// The gamma function
 #[must_use]
 #[inline]
@@ -1218,16 +1623,20 @@ pub fn tgamma(z: f64) -> f64 {
     tgamma_accurate(z, i, d)
 }
 
-/// The accurate double-double leg of [`tgamma`], reached only when the table
+/// The accurate **triple-double** leg of [`tgamma`], reached only when the table
 /// leg's Ziv test fails to certify a correctly-rounded result.  Outlined as
-/// `#[cold] #[inline(never)]` — the 32-term [`TGAMMA_DD`] evaluation through
-/// [`poly_dd`] is bulky and almost never taken, so inlining it would only bloat
-/// the hot path (mirrors `exp_accurate` and the f32 `tgamma_dd`).
+/// `#[cold] #[inline(never)]` — the degree-38 [`TGAMMA_TD`] evaluation through
+/// [`poly_td`] plus the triple-double recurrence is bulky and almost never taken,
+/// so inlining it would only bloat the hot path.
+///
+/// Lifted from double-double to triple-double (≈2⁻¹³⁵) because the double-double
+/// recurrence degraded to ≈2⁻⁹⁹, straddling the corpus's ≈2⁻⁶⁰ near-ties (see the
+/// triple-double section); the lift clears them all with a > 70-bit margin.
 #[cold]
 #[inline(never)]
 fn tgamma_accurate(z: f64, i: f64, d: DoubleDouble) -> f64 {
-    let (value, e2) = tgamma_recurrence(z, i, poly_dd(d, &TGAMMA_DD));
-    round_general_signed64(value, e2)
+    let (value, e2) = tgamma_recurrence_td(z, i, poly_td(dd_to_td(d), &TGAMMA_TD));
+    round_td_signed64(value, e2)
 }
 
 /// Natural logarithm of a positive double-double, as a double-double.
@@ -1577,5 +1986,83 @@ mod fold_ordering {
             let a2 = a1.add_ordered(HALF_LN_2PI);
             assert!(a2.high.abs() >= tail.abs(), "fold 3 at z = {z}");
         }
+    }
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// The exact double-double value the [`tgamma`] fast leg (table eval through
+    /// the recurrence) certifies against [`TGAMMA_ZIV_EPS`], for `z` whose
+    /// recurrence needs no rescaling (`e2 == 0` — the only inputs the gate runs on).
+    fn fast_leg(z: f64) -> DoubleDouble {
+        let (i, d) = tgamma_reduce(z);
+        let (value, e2) = tgamma_recurrence(z, i, tgamma_table_eval(d));
+        debug_assert_eq!(e2, 0, "fast-leg gate runs only on e2 == 0");
+        value
+    }
+
+    /// The fast leg's Ziv gate must be *sound*: `TGAMMA_ZIV_EPS` has to exceed the
+    /// fast leg's true worst-case relative error with margin, or a confident
+    /// `lo == hi` could certify a value on the wrong side of a rounding boundary
+    /// (exactly the erf bug this mirrors).  Sweep the active band `(−100, 171.6)`
+    /// where the recurrence stays rescale-free (`e2 == 0`), skipping the poles and
+    /// the tiny-`z` 1/z overflow corner, comparing the un-rounded fast-leg pair to
+    /// a 250-bit MPFR `Γ`.
+    #[test]
+    fn tgamma_fast_leg_is_sound() {
+        // Cover the whole rescale-free range with margin: `i = round(z − 2.875)`
+        // and `|i| ≤ TGAMMA_DOWNWARD_DIRECT` downward keeps `e2 == 0`, i.e.
+        // `z > 2.875 − 100`.  Stay just inside for safety.
+        let (lo, hi) = ((-97.0f64).to_bits(), 171.6f64.to_bits());
+        let mut worst = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for k in 0..300_000u64 {
+            let b = lo.wrapping_add(mix(k) % hi.wrapping_sub(lo));
+            let z = f64::from_bits(b);
+            // Skip non-positive integers (poles) and the near-pole / tiny-z humps
+            // where Γ spans signed zeros or the 1/z corner overflows — those never
+            // reach the gate (handled by the special-case ladder).
+            if z <= 0.0 && (z - z.round()).abs() < 1.0 / 64.0 {
+                continue;
+            }
+            if z.abs() < 1.0 / 1024.0 {
+                continue;
+            }
+            let e = fast_leg(z);
+            if !e.high.is_finite() || e.high == 0.0 {
+                continue;
+            }
+            let got = Float::with_val(250, e.high) + Float::with_val(250, e.low);
+            let truth = Float::with_val(250, z).gamma();
+            if truth == 0.0 || !truth.is_finite() {
+                continue;
+            }
+            let rel = (Float::with_val(250, &got - &truth).abs() / truth.abs()).to_f64();
+            if rel > worst {
+                worst = rel;
+                worst_x = z;
+            }
+        }
+        println!(
+            "tgamma fast leg: worst rel error 2^{:.2} at z={worst_x:e}; eps = 2^{:.2}",
+            worst.log2(),
+            TGAMMA_ZIV_EPS.log2()
+        );
+        assert!(
+            TGAMMA_ZIV_EPS > 2.0 * worst,
+            "TGAMMA_ZIV_EPS = 2^{:.2} does not cover the fast leg's 2^{:.2}",
+            TGAMMA_ZIV_EPS.log2(),
+            worst.log2()
+        );
     }
 }
