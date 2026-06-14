@@ -1256,16 +1256,43 @@ const LGAMMA_TAIL_F64_FAR: [f64; 6] = [
     -0.0019175269175269176,
 ];
 
-/// Absolute error bound for the Stirling [`lgamma_fast`] Ziv leg (`|z| ≥ 8`)
+/// `1/t`-weighted Ziv slack for the Stirling [`lgamma_fast`] leg (`t ≥ 8`)
 ///
-/// The leg's sub-double-double slack is the `f64` tail (≲2⁻⁶⁰ absolute) plus
-/// `ln_fast`'s <2⁻⁶⁶-absolute error scaled by the largest log multiplier `t − ½`.
-/// Keeping `|z|` below [`LGAMMA_FAST_BOUND`] keeps `t ≲ 256`, so that scaled term
-/// stays ≲2⁻⁵⁸ and the total below `2⁻⁵⁶` with a comfortable margin.  Being
-/// absolute, the gate also forces the accurate fallback whenever the result
-/// cancels toward zero (lgamma's zeros at `z = 1, 2` and on `z < 0`), where `2⁻⁵⁶`
-/// spans many ulps.
-const LGAMMA_FAST_ERR: f64 = 1.3877787807814457e-17; // 2^-56
+/// An MPFR profile of the leg's true absolute error (`ziv_soundness`) is *not*
+/// flat across `[8, 256)`: it peaks at the cutoff (≈2⁻⁵⁷·⁴ at `t = 8`, where the
+/// `f64` Stirling tail's truncation and evaluation rounding dominate), falls to a
+/// ≈2⁻⁶⁰ trough near `t ≈ 50`, then drifts back up with `ln_fast`'s
+/// `(t − ½)`-scaled <2⁻⁶⁶ slack.  The old flat `2⁻⁵⁶` gate was set by that `t = 8`
+/// peak, leaving it ~16× looser than the leg needs through the mid-band — and the
+/// straddle (hence accurate-fallback) rate is `≈ 2·gate / ulp(result)`, so that
+/// slack is pure fallback.  This gate instead tracks the error shape with the
+/// reciprocal the leg already forms: `A/t + (t − ½)·2⁻⁶⁶`.  The `A/t` term covers
+/// the falling tail-dominated peak; the linear term covers the `ln`-dominated
+/// drift.  `A` is tuned to ≈3× the `t = 8` peak (matching the
+/// [`tgamma_stirling_ziv_rel`] margin), certified ≥ 2× across `[8, 256)` by
+/// `ziv_soundness::lgamma_positive_stirling_leg_is_sound`.  Being absolute, the
+/// gate still forces the accurate fallback wherever the result cancels toward zero
+/// (`ln Γ`'s zeros at `z = 1, 2` and on `z < 0`), where any fixed slack spans many
+/// ulps.
+const LGAMMA_STIRLING_ZIV_RECIP: f64 = 1.37e-16; // ≈ 2^-52.7
+
+/// Per-unit-`t` Ziv slack for the Stirling [`lgamma_fast`] leg — the `ln_fast`
+/// `(t − ½)`-scaled term of [`LGAMMA_STIRLING_ZIV_RECIP`]'s `A/t + (t − ½)·LIN`
+/// gate (`ln_fast` is <2⁻⁶⁶ absolute; `2⁻⁶⁶` clears the leg's measured `ln` drift).
+const LGAMMA_STIRLING_ZIV_LIN: f64 = 1.3552527156068805e-20; // 2^-66
+
+/// Absolute Ziv slack for the Stirling [`lgamma_fast`] leg at argument `t`, given
+/// the reciprocal `inv_t = 1/t` the leg already computed:
+/// `A·inv_t + (t − ½)·2⁻⁶⁶`.  Sound bound on the leg's absolute error (see
+/// [`LGAMMA_STIRLING_ZIV_RECIP`]); checked against MPFR in `ziv_soundness`.
+#[inline]
+fn lgamma_stirling_ziv(t: f64, inv_t: f64) -> f64 {
+    crate::fast_mul_add(
+        t - 0.5,
+        LGAMMA_STIRLING_ZIV_LIN,
+        LGAMMA_STIRLING_ZIV_RECIP * inv_t,
+    )
+}
 
 /// Absolute error bound for the central-table [`lgamma_fast`] Ziv leg (`½ ≤ z < 8`,
 /// and the reflection's `ln Γ(1−z)` when `1−z < 8`)
@@ -1273,15 +1300,16 @@ const LGAMMA_FAST_ERR: f64 = 1.3877787807814457e-17; // 2^-56
 /// The table leg has no Stirling tail: it is the per-cell minimax (worst 2⁻⁷⁸, the
 /// `f64` cell tail and dropped `h.low` landing ≈2⁻⁶⁹) plus one `ln_fast` of the
 /// ≤ 5 recurrence factors (<2⁻⁶⁶), so ≈2⁻⁶⁵·⁷ overall — far tighter than the
-/// Stirling leg.  `2⁻⁶²` certifies it with a ~14× margin, and being ~16× tighter than
-/// [`LGAMMA_FAST_ERR`] it straddles (defers) far less where `ln Γ` is O(1), which is
-/// exactly this moderate band.
+/// Stirling leg.  `2⁻⁶²` certifies it with a ~14× margin, and being tighter than
+/// the Stirling [`lgamma_stirling_ziv`] gate it straddles (defers) far less where
+/// `ln Γ` is O(1), which is exactly this moderate band.
 const LGAMMA_TABLE_ERR: f64 = 2.168404344971009e-19; // 2^-62
 
 /// `|z|` ceiling for the [`lgamma_fast`] Ziv leg
 ///
 /// Above it the largest log multiplier `t` would push `ln_fast`'s absolute slack
-/// past [`LGAMMA_FAST_ERR`], so the gate could no longer certify the leg; such
+/// past the Stirling [`lgamma_stirling_ziv`] gate, so it could no longer certify
+/// the leg; such
 /// `z` (rare, and far outside any benchmark) go straight to the accurate path.
 /// (1024 under the old double-double reduction; the exact-`z` `ln_fast` trades
 /// its looser <2⁻⁶⁶ bound for speed, so the certifiable band is `t·2⁻⁶⁶ ≤ 2⁻⁵⁸`.)
@@ -1797,8 +1825,7 @@ fn lgamma_table_fast(y: DoubleDouble) -> DoubleDouble {
 /// the lean fast leg (`steps = 0`): the reflection's `ln Γ(1−z)` once `1−z` clears
 /// the cutoff
 #[inline]
-fn lgamma_stirling_dd(y: DoubleDouble) -> DoubleDouble {
-    let inv_t = 1.0 / y.high;
+fn lgamma_stirling_dd(y: DoubleDouble, inv_t: f64) -> DoubleDouble {
     let u = inv_t * inv_t;
     let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
 
@@ -1819,14 +1846,19 @@ fn lgamma_stirling_dd(y: DoubleDouble) -> DoubleDouble {
 ///
 /// Below [`LGAMMA_FAST_CUTOFF`] the central table ([`lgamma_table_fast`], ≈2⁻⁶⁷,
 /// gate [`LGAMMA_TABLE_ERR`]); above it the lean direct Stirling
-/// ([`lgamma_stirling_dd`], ≈2⁻⁵⁸, gate [`LGAMMA_FAST_ERR`]).  The reflection feeds
-/// its `1−z` here, so the gate the caller applies tracks which leg ran.
+/// ([`lgamma_stirling_dd`], `t`-scaled gate [`lgamma_stirling_ziv`]).  The
+/// reflection feeds its `1−z` here, so the gate the caller applies tracks which
+/// leg ran.
 #[inline]
 fn lgamma_pos_fast(y: DoubleDouble) -> (DoubleDouble, f64) {
     if y.high < LGAMMA_FAST_CUTOFF {
         (lgamma_table_fast(y), LGAMMA_TABLE_ERR)
     } else {
-        (lgamma_stirling_dd(y), LGAMMA_FAST_ERR)
+        let inv_t = 1.0 / y.high;
+        (
+            lgamma_stirling_dd(y, inv_t),
+            lgamma_stirling_ziv(y.high, inv_t),
+        )
     }
 }
 
@@ -1841,7 +1873,7 @@ fn lgamma_pos_fast(y: DoubleDouble) -> (DoubleDouble, f64) {
 /// `½ln(2π)`, `tail`), and the running sum stays above the next term too — proven
 /// in `fold_ordering::lgamma_stirling`.  Skipping the renormalizing `Add` shortens
 /// the serial chain that follows `ln_fast` on this hot (`z ≥ 8`) path, where its
-/// `≈2⁻¹⁰⁵` slack is far inside the [`LGAMMA_FAST_ERR`] gate.
+/// `≈2⁻¹⁰⁵` slack is far inside the [`lgamma_stirling_ziv`] gate.
 #[inline]
 fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
     (crate::f64_::ln_fast(z) * (z - 0.5))
@@ -1882,7 +1914,7 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     } else {
         crate::poly(u, &LGAMMA_TAIL_F64_FAR) * inv
     };
-    (lgamma_stirling_fast(z, tail), LGAMMA_FAST_ERR)
+    (lgamma_stirling_fast(z, tail), lgamma_stirling_ziv(z, inv))
 }
 
 // ── Triple-double accurate `ln|Γ|` path ──────────────────────────────────────
@@ -2552,8 +2584,8 @@ pub fn lgamma(z: f64) -> f64 {
 
     // Ziv two-step: a lean leg (central table or lean Stirling) gated against the
     // accurate triple-double path.  The leg returns its own absolute error bound —
-    // the tight [`LGAMMA_TABLE_ERR`] in the moderate band, the looser
-    // [`LGAMMA_FAST_ERR`] for Stirling.  Restricted to `|z| < LGAMMA_FAST_BOUND`,
+    // the tight [`LGAMMA_TABLE_ERR`] in the moderate band, the `t`-scaled
+    // [`lgamma_stirling_ziv`] for Stirling.  Restricted to `|z| < LGAMMA_FAST_BOUND`,
     // where those gates certify the leg; either gate also defers a result that
     // cancels toward zero (it then spans many ulps), to the accurate path.
     //
@@ -2798,6 +2830,49 @@ mod ziv_soundness {
             worst_ratio < 0.5,
             "reflection fast leg error reaches {worst_ratio:.3}× its gate at z={worst_x:e} \
              — the LGAMMA_SIN_RELIABLE guard is unsound"
+        );
+    }
+
+    /// The **positive Stirling** fast leg (`8 ≤ z < LGAMMA_FAST_BOUND`) must be
+    /// sound under the new `t`-scaled gate [`lgamma_stirling_ziv`]: the gate has to
+    /// exceed the un-rounded leg's true absolute error with margin, or a confident
+    /// `lo == hi` could certify a value on the wrong side of a rounding boundary.
+    /// Tightening the gate from a flat `2⁻⁵⁶` to `(t − ½)·2⁻⁶⁴ + 2⁻⁵⁸` is only safe
+    /// if it stays a sound bound across the whole band, so compare the fast pair to a
+    /// 300-bit MPFR `ln|Γ|` and require the gate to clear `2×` the worst |err|.
+    #[test]
+    fn lgamma_positive_stirling_leg_is_sound() {
+        let (lo, hi) = (8.0f64.to_bits(), LGAMMA_FAST_BOUND.to_bits());
+        let mut worst_ratio = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for k in 0..400_000u64 {
+            let b = lo.wrapping_add(mix(k) % hi.wrapping_sub(lo));
+            let z = f64::from_bits(b);
+            let (value, gate) = lgamma_fast(z);
+            if !value.high.is_finite() {
+                continue;
+            }
+            let got = Float::with_val(300, value.high) + Float::with_val(300, value.low);
+            let truth = Float::with_val(300, z).ln_abs_gamma().0;
+            if !truth.is_finite() {
+                continue;
+            }
+            let abs_err = Float::with_val(300, &got - &truth).abs().to_f64();
+            let ratio = abs_err / gate;
+            if ratio > worst_ratio {
+                worst_ratio = ratio;
+                worst_x = z;
+            }
+        }
+        println!(
+            "lgamma positive Stirling leg: worst |err|/gate = {worst_ratio:.3} (margin \
+             {:.2}×) at z={worst_x:e}",
+            1.0 / worst_ratio
+        );
+        assert!(
+            worst_ratio < 0.5,
+            "positive Stirling fast leg error reaches {worst_ratio:.3}× its gate at z={worst_x:e} \
+             — the lgamma_stirling_ziv gate is unsound"
         );
     }
 }
