@@ -1318,6 +1318,76 @@ const TGAMMA_ZIV_EPS: f64 = 2.168404344971009e-19; // 2^-62
 /// would overflow and take the serial rescaling path instead.
 const TGAMMA_DOWNWARD_DIRECT: i64 = 100;
 
+/// Smallest `z` for which the O(1) Stirling leg ([`tgamma_stirling_fast`]) replaces
+/// the O(z) recurrence.
+///
+/// Below it the asymptotic series is too short to certify a correctly-rounded `Γ`
+/// (the 14-term tail truncates at only ≈2⁻⁶⁰ for `z = 6`); at `z = 8` it reaches
+/// ≈2⁻⁶⁸, comfortably under the [`TGAMMA_ZIV_EPS`] gate.  The recurrence is also
+/// cheaper than Stirling for `z` this close to the centre, so the crossover is a
+/// genuine speed *and* accuracy boundary — the same `z = 8` cutoff `lgamma` uses
+/// ([`LGAMMA_FAST_CUTOFF`]).
+const TGAMMA_STIRLING_CUTOFF: f64 = 8.0;
+
+/// Linear (per-unit-`z`) Ziv slack for the Stirling [`tgamma_stirling_fast`] leg.
+///
+/// The leg's dominant error is `(z−½)·δ_ln`, where `δ_ln < 2⁻⁶⁶` is [`ln_fast`]'s
+/// absolute slack (`LN_ZIV_EPS`); `2⁻⁶⁵` bounds the per-unit-`z` contribution with
+/// a ~2× margin.  Being relative to the result, this also lets the leg run on the
+/// large `Γ` values Stirling covers without the absolute-gate cancellation issues
+/// of `lnΓ`.
+const TGAMMA_STIRLING_ZIV_LIN: f64 = 2.710505431213761e-20; // 2^-65
+
+/// Constant Ziv slack for the Stirling [`tgamma_stirling_fast`] leg.
+///
+/// Bounds the `z`-independent error: the double-double-leading tail (≈2⁻⁶⁷
+/// absolute on `lnΓ`, truncation + the `f64` minor terms) and [`exp_dd_of_dd_fast`]'s
+/// ≈2⁻⁶⁸ relative slack.  `2⁻⁶⁴` keeps a comfortable margin.
+const TGAMMA_STIRLING_ZIV_BASE: f64 = 5.421010862427522e-20; // 2^-64
+
+/// Relative Ziv slack for the Stirling fast leg at argument `z`: `z·2⁻⁶⁵ + 2⁻⁶⁴`.
+/// Sound bound on `Γ`'s relative error (see [`TGAMMA_STIRLING_ZIV_LIN`] /
+/// [`TGAMMA_STIRLING_ZIV_BASE`]); checked against MPFR in `ziv_soundness`.
+#[inline]
+fn tgamma_stirling_ziv_rel(z: f64) -> f64 {
+    crate::fast_mul_add(z, TGAMMA_STIRLING_ZIV_LIN, TGAMMA_STIRLING_ZIV_BASE)
+}
+
+/// `1/12`, the leading Stirling tail coefficient `B₂/2`, as a double-double.
+///
+/// The leading term `1/(12z)` is the only tail term large enough (≈2⁻⁷ of the
+/// reduced argument at `z = 8`) that its `f64` rounding (≈2⁻⁵⁹) would breach the
+/// `Γ = exp(lnΓ)` budget; carried as a double-double it drops to ≈2⁻¹⁰⁵.  The
+/// remaining terms ([`TGAMMA_STIRLING_TAIL_REST`]) are ≲2⁻¹⁷ of the result and
+/// sum in plain `f64`.
+const TWELFTH: DoubleDouble = DoubleDouble {
+    high: 0.08333333333333333,
+    low: 4.625929269271485e-18,
+};
+
+/// Stirling tail coefficients `Bₖ/(2k(2k−1))` for `k = 2..=14`, i.e. the terms
+/// *after* the leading `1/12` ([`TWELFTH`]).
+///
+/// `tail(z) = 1/(12z) + (1/z)·Σ cₖ·u^(k−1)` with `u = 1/z²`, evaluated as
+/// `inv·u·poly(u, TGAMMA_STIRLING_TAIL_REST)`.  Fourteen terms keep the truncation
+/// at ≈2⁻⁶⁸ for `z ≥ TGAMMA_STIRLING_CUTOFF = 8` (the first nine match `lgamma`'s
+/// [`LGAMMA_TAIL_F64`]; the last four extend it for the tighter `Γ` gate).
+const TGAMMA_STIRLING_TAIL_REST: [f64; 13] = [
+    -0.002777777777777778,
+    0.0007936507936507937,
+    -0.0005952380952380953,
+    0.0008417508417508417,
+    -0.0019175269175269176,
+    0.00641025641025641,
+    -0.029550653594771242,
+    0.17964437236883057,
+    -1.3924322169059011,
+    13.402864044168393,
+    -156.84828462600203,
+    2193.1033333333335,
+    -36108.77125372499,
+];
+
 /// `∏_{m=0}^{n−1} (z + first + step·m)` as a double-double, on four parallel lanes
 ///
 /// The `tgamma` recurrence products: upward `(z−1)(z−2)…(z−n)` is `first = step =
@@ -1483,6 +1553,54 @@ fn tgamma_recurrence_td(z: f64, i: f64, value: TripleDouble) -> (TripleDouble, i
     }
 }
 
+/// `lnΓ(z)` as a double-double for `z ≥ TGAMMA_STIRLING_CUTOFF`, the input to the
+/// `Γ = exp(lnΓ)` fast leg.
+///
+/// The Stirling assembly `lnΓ = (z−½)·ln z − z + ½ln(2π) + tail(z)`, the same
+/// shape as [`lgamma_stirling_fast`] (the lean [`ln_fast`], not the heavy accurate
+/// `ln_dd`, keeps the leg fast).  Its absolute error is dominated by
+/// `(z−½)·δ_ln ≤ (z−½)·2⁻⁶⁶` from `ln_fast`'s slack — `z`-dependent, which is why
+/// the caller's gate ([`tgamma_stirling_ziv_rel`]) scales with `z`.  The one
+/// refinement the `Γ` budget needs over `lgamma`'s leg is the leading tail term
+/// `1/(12z)` in double-double ([`TWELFTH`] × the reciprocal): the only term large
+/// enough (≈2⁻⁷ of the reduced argument) that its `f64` rounding (≈2⁻⁵⁹) would
+/// otherwise dominate `ln_fast`'s contribution.  The remaining tail terms are
+/// ≲2⁻¹⁷ of the result and round in `f64`.
+///
+/// The three closing folds are ordered Fast2Sums: for `z ≥ 8` the lead
+/// `(z−½)·ln z ≥ 15.6` dominates `−z`, `½ln(2π)`, and `tail`, and each running sum
+/// stays above the next term — the same ordering `fold_ordering::lgamma_stirling`
+/// proves for the `lgamma` leg.
+#[inline]
+fn tgamma_lngamma_stirling(z: f64) -> DoubleDouble {
+    let inv = DoubleDouble::from_quotient(1.0, z);
+    let u = inv.high * inv.high;
+    // tail = 1/(12z) + (1/z)·Σ_{k≥2} cₖ·u^(k−1).  Leading term in double-double,
+    // the rest (≲2⁻¹⁷ of the result) in plain f64.
+    let tail = (inv * TWELFTH).add_ordered(DoubleDouble {
+        high: inv.high * (u * crate::poly(u, &TGAMMA_STIRLING_TAIL_REST)),
+        low: 0.0,
+    });
+
+    (crate::f64_::ln_fast(z) * (z - 0.5))
+        .add_ordered(DoubleDouble { high: -z, low: 0.0 })
+        .add_ordered(HALF_LN_2PI)
+        .add_ordered(tail)
+}
+
+/// `Γ(z) = exp(lnΓ(z))` for large positive `z`, the O(1) Stirling fast leg.
+///
+/// Returns the un-normalized mantissa pair (in `[1, 2)`) and binary exponent `q`
+/// with `Γ(z) = mantissa · 2`<sup>`q`</sup>, for the caller's `z`-scaled Ziv gate
+/// ([`tgamma_stirling_ziv_rel`]).  The relative error is `lnΓ`'s
+/// `≈(z−½)·2⁻⁶⁶` absolute slack plus [`exp_dd_of_dd_fast`]'s ≈2⁻⁶⁸; on the rare
+/// miss the caller falls through to the recurrence leg (not straight to the
+/// triple-double accurate path).
+#[inline]
+fn tgamma_stirling_fast(z: f64) -> (DoubleDouble, i64) {
+    super::exp::exp_dd_of_dd_fast(tgamma_lngamma_stirling(z))
+}
+
 /// The gamma function
 #[must_use]
 #[inline]
@@ -1519,6 +1637,23 @@ pub fn tgamma(z: f64) -> f64 {
             } else {
                 -0.0
             };
+        }
+    }
+
+    // Large positive `z`: skip the O(z) recurrence for the O(1) Stirling leg
+    // `Γ = exp(lnΓ)`.  The result is comfortably normal (`Γ(8) = 5040`), so no
+    // subnormal handling is needed — just a `z`-scaled relative Ziv gate on the
+    // `[1, 2)` mantissa, then an exact `2`<sup>`q`</sup> scale.  On the rare miss
+    // (≈1%) the leg falls through to the recurrence path below, whose tighter
+    // `2⁻⁶²` gate resolves nearly all of them at ≈O(z) cost — far cheaper than
+    // jumping straight to the degree-38 triple-double [`tgamma_accurate`].
+    if z >= TGAMMA_STIRLING_CUTOFF {
+        let (m, q) = tgamma_stirling_fast(z);
+        let err = m.high * tgamma_stirling_ziv_rel(z);
+        let lo = m.high + (m.low - err);
+        let hi = m.high + (m.low + err);
+        if lo == hi {
+            return fast_ldexp(lo, q);
         }
     }
 
@@ -2555,6 +2690,50 @@ mod ziv_soundness {
             "TGAMMA_ZIV_EPS = 2^{:.2} does not cover the fast leg's 2^{:.2}",
             TGAMMA_ZIV_EPS.log2(),
             worst.log2()
+        );
+    }
+
+    /// The **Stirling** fast leg (`z ≥ TGAMMA_STIRLING_CUTOFF`) must be sound: its
+    /// `z`-scaled gate [`tgamma_stirling_ziv_rel`] has to exceed the un-rounded
+    /// leg's true relative error with margin, or a confident `lo == hi` could
+    /// certify a value on the wrong side of a boundary.  Reconstruct the leg's
+    /// `[1, 2)` mantissa (`Γ = m · 2^q`), compare it to a 250-bit MPFR `Γ` scaled
+    /// by the exact `2^-q`, and require the gate to clear `2×` the worst margin
+    /// across the whole Stirling range `[8, 171.6)`.
+    #[test]
+    fn tgamma_stirling_leg_is_sound() {
+        let (lo, hi) = (TGAMMA_STIRLING_CUTOFF.to_bits(), TGAMMA_OVERFLOW.to_bits());
+        let mut worst_margin = f64::INFINITY;
+        let mut worst_rel = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for k in 0..400_000u64 {
+            let b = lo.wrapping_add(mix(k) % hi.wrapping_sub(lo));
+            let z = f64::from_bits(b);
+            let (m, q) = tgamma_stirling_fast(z);
+            let got = Float::with_val(250, m.high) + Float::with_val(250, m.low);
+            let truth = Float::with_val(250, z).gamma();
+            let q32 = i32::try_from(q).expect("q in i32 range");
+            let truth_m = truth >> q32; // Γ(z) · 2^-q, exact
+            if truth_m == 0.0 || !truth_m.is_finite() {
+                continue;
+            }
+            let rel = (Float::with_val(250, &got - &truth_m).abs() / truth_m.abs()).to_f64();
+            let margin = tgamma_stirling_ziv_rel(z) / rel;
+            if margin < worst_margin {
+                worst_margin = margin;
+                worst_rel = rel;
+                worst_x = z;
+            }
+        }
+        println!(
+            "tgamma Stirling leg: worst margin {worst_margin:.2}× at z={worst_x:e} \
+             (rel 2^{:.2}, gate 2^{:.2})",
+            worst_rel.log2(),
+            tgamma_stirling_ziv_rel(worst_x).log2()
+        );
+        assert!(
+            worst_margin > 2.0,
+            "Stirling gate margin {worst_margin:.2}× at z={worst_x:e} is below 2×"
         );
     }
 
