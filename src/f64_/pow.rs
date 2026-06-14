@@ -1,13 +1,20 @@
 //! Power function `xʸ = 2^(y·log₂x)`, correctly rounded.
 //!
-//! The double-double `log₂`/`exp2` kernels here are shared with the f32
+//! The hot path is the lean `2^(y·log₂x)` of [`pow_fast`] under a Ziv gate; the
+//! rare straddles and the over/underflow / subnormal edges defer to
+//! [`pow_accurate`](super::pow_accurate::pow_accurate), a faithful port of
+//! CORE-MATH's two final Ziv iterations (128-bit `Dint`, then 256-bit `Qint`)
+//! plus its exact/midpoint detector — which together make every result
+//! bit-identical to the `core-math` oracle, including the rational-exponent
+//! ties-to-even cases.
+//!
+//! The double-double `log₂`/`exp2` kernels here are also shared with the f32
 //! [`powf`](crate::f32_::powf): they already run in f64 double-double, since even
-//! for an f32 result the error in `log₂x` is amplified by `y`.  This module hosts
-//! them (crate-visible) and adds the f64-output `exp2_dd`/`pow_core`.
+//! for an f32 result the error in `log₂x` is amplified by `y`.
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::EXP_SHIFT;
-use super::double::{DoubleDouble, fast_ldexp, round_general64};
+use super::double::{DoubleDouble, fast_ldexp};
 use core::cmp::Ordering;
 use core::f64::consts::FRAC_1_SQRT_2;
 use core::num::FpCategory;
@@ -288,44 +295,6 @@ pub fn log2_fast_path(x: f64) -> f64 {
     crate::fast_mul_add(t, crate::poly(t * t, &LOG2_FAST), exponent as f64)
 }
 
-/// `2^e` correctly rounded to `f64`, taking a double-double exponent
-///
-/// Splits `e = n + h` with `n = round(e)` and `|h| ≤ ½`, evaluates `2ʰ` in
-/// double-double via [`EXP2_CE`], normalizes the mantissa into `[1, 2)`, and
-/// rounds `mantissa · 2ⁿ` with [`round_general64`] (subnormal-safe).
-#[inline]
-fn exp2_dd(e: DoubleDouble) -> f64 {
-    // `2^1024` overflows and `2^−1075` rounds to zero; everything between is
-    // resolved by the rounder.
-    if e.high > 1024.0 {
-        return f64::INFINITY;
-    }
-    if e.high < -1075.0 {
-        return 0.0;
-    }
-
-    let n = e.high.round_ties_even();
-    let h = DoubleDouble::from_sum(e.high - n, e.low);
-    let m = poly_dd(h, &EXP2_CE);
-
-    // SAFETY: `−1075 ≤ e.high ≤ 1024` bounds `n` well within `i64`.
-    let mut n = unsafe { n.to_int_unchecked::<i64>() };
-
-    // `m = 2ʰ ∈ [√2/2, √2)`; bring it into [1, 2) for the rounder.
-    let m = if m.high < 1.0 {
-        n -= 1;
-        m * 2.0
-    } else {
-        m
-    };
-
-    // `m ∈ [1, 2)`, so the result is `≥ 2ⁿ`; `n ≥ 1024` means overflow.
-    if n >= 1024 {
-        return f64::INFINITY;
-    }
-    round_general64(m, n)
-}
-
 /// `log₂(e)` as a double-double, so `log₂x = ln x · log₂e`.
 const LOG2_E: DoubleDouble = DoubleDouble {
     high: 1.4426950408889634,
@@ -361,7 +330,12 @@ fn pow_fast(x: f64, y: f64) -> Option<f64> {
 
     // Gross overflow / underflow, decided directly (the `ln_fast` chain already
     // pins `e` more tightly than `log2_dd` would for these out-of-range inputs).
-    if e.high - slack > 1024.0 {
+    // The overflow threshold is `2^1025`, not `2^1024`: a result `xʸ` with
+    // `log₂(xʸ)` a hair below 1024 still rounds to the finite `DBL_MAX`, and the
+    // fast `e.high` can land just above `1024.0` for such an input — so the whole
+    // `[1023, 1025)` band is deferred to the accurate path (which rounds the
+    // `DBL_MAX`/∞ boundary exactly), and only `e ≥ 2^1025` is certainly ∞ here.
+    if e.high - slack > 1025.0 {
         return Some(f64::INFINITY);
     }
     if e.high + slack < -1075.0 {
@@ -384,18 +358,55 @@ fn pow_fast(x: f64, y: f64) -> Option<f64> {
     (lo == hi && (-1021..=1022).contains(&q)).then(|| fast_ldexp(lo, q))
 }
 
-/// `xʸ` for finite positive `x ≠ 1`, correctly rounded to `f64`
+/// Test-only: the fast leg's pre-gate `[1, 2)` mantissa and its `slack` bound, for
+/// the [`ziv_soundness`] audit.  Returns `None` when `pow_fast` would defer before
+/// forming the mantissa (out-of-range / boundary bands), so the test only checks
+/// inputs the gate actually rules on.
+#[cfg(all(test, feature = "mpfr"))]
+fn powf_fast_leg(x: f64, y: f64) -> Option<(DoubleDouble, i64, f64)> {
+    let e = super::ln_fast(x) * LOG2_E * y;
+    let slack = (1.0 + y.abs()) * POWF_ZIV_UNIT;
+    if e.high - slack > 1024.0 || e.high + slack < -1075.0 {
+        return None;
+    }
+    if !(e.high + slack < 1023.0 && e.high - slack > -1022.0) {
+        return None;
+    }
+    let (j, q, r) = super::exp::exp2_reduce_dd(e);
+    let (m, q) = super::exp::exp_mantissa_fast(j, q, r);
+    Some((m, q, slack))
+}
+
+/// `xʸ` for finite positive `x ≠ 1`, correctly rounded.
 ///
 /// Fast path: [`pow_fast`], a lean `2^(y·log₂x)` accepted by a Ziv gate.  The rare
-/// hard-to-round cases (and the over/underflow / subnormal edges) fall back to the
-/// double-double chain [`log2_dd`] → `×y` → [`exp2_dd`], good to ≈2⁻⁸⁴ after the
-/// `×y` amplification — the correctly-rounded reference.
+/// straddles (and the over/underflow / subnormal edges) fall back to
+/// [`pow_accurate`](super::pow_accurate::pow_accurate) — a faithful port of
+/// CORE-MATH's two final Ziv iterations (a 128-bit `Dint` chain ≈2⁻¹¹³, then a
+/// 256-bit `Qint` chain ≈2⁻²⁴⁰) framed by CORE-MATH's exact/midpoint detector,
+/// which resolves the rational-exponent ties-to-even cases (`x^1.5 = s³` when
+/// `x = s²`, …) that no finite-precision approximation of `xʸ` can decide.
 #[inline]
 fn pow_core(x: f64, y: f64) -> f64 {
     if let Some(result) = pow_fast(x, y) {
         return result;
     }
-    exp2_dd(log2_dd(x) * y)
+
+    // Infinite exponent: `pow_fast` defers it (its `slack` becomes ∞), and the
+    // accurate path cannot represent it.  With `x` finite, positive and ≠ 1,
+    // `e = y·log₂x = ±∞` with sign `sign(y)·sign(x−1)`, so the limit is ∞ or 0.
+    if !y.is_finite() {
+        return if (y > 0.0) == (x > 1.0) {
+            f64::INFINITY
+        } else {
+            0.0
+        };
+    }
+
+    // `x` is the positive magnitude here; the negative-base sign fold lives in
+    // [`pow`].  So the accurate path computes the positive magnitude (`s = +1`)
+    // and `x0 = x`.
+    super::pow_accurate::pow_accurate(x, y, x, 1.0)
 }
 
 /// Raise to a floating-point power
@@ -425,7 +436,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
                 } else if x.is_sign_negative() || y.is_nan() {
                     f64::NAN // negative base (complex result) or NaN exponent, x ≠ 1
                 } else {
-                    // xʸ = 2^(y·log₂x), entirely in double-double.
+                    // xʸ = 2^(y·log₂x): lean fast leg, CORE-MATH accurate finisher.
                     pow_core(x, y)
                 }
             }
@@ -447,4 +458,79 @@ pub fn pow(x: f64, y: f64) -> f64 {
     }
 
     magnitude(x, y)
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+    use rug::ops::Pow;
+
+    const fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// The fast leg's Ziv gate must be *sound*: the `slack = (1+|y|)·2⁻⁶⁴` it tests
+    /// the `[1, 2)` mantissa against has to exceed that mantissa's true absolute
+    /// error with margin, or a confident `lo == hi` could certify a value on the
+    /// wrong side of a rounding boundary.  We sweep the hard regime (`x` near 1,
+    /// large `|y|`, where the `×y` amplification is worst) and the wide regime,
+    /// measure `|m − x^y/2^q| / slack`, and require it stay below ½ (i.e. slack is
+    /// ≥ 2× the true error).
+    #[test]
+    fn powf_fast_leg_is_sound() {
+        let mut worst = 0.0_f64;
+        let mut worst_xy = (0.0, 0.0);
+        let mut n_checked = 0u64;
+
+        for i in 0..6_000_000u64 {
+            // Hard regime: x ∈ [1, 2) hashed, y value-uniform in [−1100, 1100].
+            let (x, y) = if i & 1 == 0 {
+                let xb = 0x3FF0_0000_0000_0000 | (mix(i) >> 12);
+                let yu = (mix(i ^ 0xABCD) >> 11) as f64 / (1u64 << 53) as f64;
+                (f64::from_bits(xb), crate::fma(yu, 2200.0, -1100.0))
+            } else {
+                // Wide regime: any positive x, y in [−40, 40].
+                let xb = (mix(i) & 0x7FFF_FFFF_FFFF_FFFF) | 1;
+                let yu = (mix(i ^ 0x1234) >> 11) as f64 / (1u64 << 53) as f64;
+                (f64::from_bits(xb), crate::fma(yu, 80.0, -40.0))
+            };
+            if !(x.is_finite() && x > 0.0 && x != 1.0) {
+                continue;
+            }
+            let Some((m, q, slack)) = powf_fast_leg(x, y) else {
+                continue;
+            };
+            // True [1, 2) mantissa = x^y / 2^q at 250 bits.
+            let truth = Float::with_val(250, x).pow(Float::with_val(250, y))
+                / Float::with_val(250, 2).pow(q);
+            if truth == 0.0 || !truth.is_finite() {
+                continue;
+            }
+            let got = Float::with_val(250, m.high) + Float::with_val(250, m.low);
+            let abs_err = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs_err / slack;
+            if ratio > worst {
+                worst = ratio;
+                worst_xy = (x, y);
+            }
+            n_checked += 1;
+        }
+
+        println!(
+            "powf_fast_leg: worst |error|/slack = {worst:.4} over {n_checked} gated inputs \
+             (at x={:e}, y={:e}); sound iff < 0.5",
+            worst_xy.0, worst_xy.1
+        );
+        assert!(
+            worst < 0.5,
+            "POWF_ZIV_UNIT unsound: fast-leg error reaches {worst:.4}× slack \
+             (need < 0.5 for a 2× margin) at x={:e}, y={:e}",
+            worst_xy.0,
+            worst_xy.1
+        );
+    }
 }

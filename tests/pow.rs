@@ -64,8 +64,8 @@ fn test_powf() {
     common::test_bivariate_cases(metallic::pow, core_math::pow, cases());
 }
 
-/// Correct-rounding gate on CORE-MATH's hard-to-round corpus (RED until pow is
-/// correctly rounded — issue #6).
+/// Correct-rounding gate on CORE-MATH's hard-to-round corpus: bit-exact vs the
+/// `core-math` oracle.  This is the strict gate (issue #6).
 #[test]
 fn test_pow_worst_cases() {
     common::test_worst_bivariate("pow", metallic::pow, core_math::pow);
@@ -75,4 +75,50 @@ fn test_pow_worst_cases() {
 #[test]
 fn test_pow_worst_faithful() {
     common::test_worst_faithful_bivariate("pow", metallic::pow, core_math::pow, 1);
+}
+
+/// Independent gold-standard cross-check against MPFR, guarding against a shared
+/// CORE-MATH bug.  `cargo test --release --features mpfr`.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_pow_vs_mpfr() {
+    use rug::Float;
+    use rug::ops::Pow;
+    // `x^y` at 250-bit precision, then rounded to f64 — the correctly-rounded
+    // reference.  Matches `pow`'s domain conventions (rug returns NaN for a
+    // negative base with a non-integer exponent, as `pow` does).
+    let cr = |x: f64, y: f64| {
+        Float::with_val(250, x)
+            .pow(Float::with_val(250, y))
+            .to_f64()
+    };
+
+    // Hard regime: x ∈ [1, 2) (small log₂x, max `×y` amplification) with large
+    // |y|, plus a wide regime with any positive x and moderate y, and a strand of
+    // negative bases with integer exponents (the sign-fold path).
+    common::mpfr_sweep_bivariate(
+        metallic::pow,
+        cr,
+        |i| {
+            let h = common::mix64(i);
+            match i % 3 {
+                0 => {
+                    let xb = 0x3FF0_0000_0000_0000 | (h >> 12);
+                    let y = common::uniform(common::mix64(i ^ 0xABCD), -1100.0, 1100.0);
+                    [f64::from_bits(xb), y]
+                }
+                1 => {
+                    let xb = (h & 0x7FFF_FFFF_FFFF_FFFF) | 1;
+                    let y = common::uniform(common::mix64(i ^ 0x1234), -40.0, 40.0);
+                    [f64::from_bits(xb), y]
+                }
+                _ => {
+                    let xb = 0x3FF0_0000_0000_0000 | (h >> 12);
+                    let n = (common::mix64(i ^ 0x9999) % 600) as f64 - 300.0;
+                    [-f64::from_bits(xb), n]
+                }
+            }
+        },
+        5_000_000,
+    );
 }

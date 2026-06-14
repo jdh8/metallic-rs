@@ -13,6 +13,9 @@ mod hyp;
 mod log;
 mod misc;
 pub mod pow;
+mod pow_accurate;
+mod pow_consts;
+mod qint;
 mod trig;
 
 pub use atan::{acos, asin, atan, atan2};

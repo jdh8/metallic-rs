@@ -259,6 +259,73 @@ impl Dint {
         let e = f64::from_bits((((self.ex + 1023) & 0x7ff) as u64) << 52);
         r * e
     }
+
+    /// Convert to `f64` with correct rounding, safe across the subnormal range and
+    /// at overflow.
+    ///
+    /// [`to_f64`](Self::to_f64) assumes a normal-range result (one exact `×2^ex`);
+    /// a subnormal/overflow-safe `Dint`→`f64` rounder.  It rounds the 128-bit
+    /// significand onto the subnormal grid (round + sticky from the full `m`, like
+    /// [`round_general64`](super::double::round_general64)) and saturates to `±∞`.
+    /// `value = (−1)^sgn · (m/2^127) · 2^ex`, so the unbiased exponent of the
+    /// result is `ex` and `m/2^127 ∈ [1, 2)`.
+    ///
+    /// `pow`'s accurate path now uses its own CORE-MATH-faithful `dint_tod`
+    /// rounder, so this is retained only for its round-trip test (a generic sound
+    /// 128-bit finisher kept available for future callers).
+    #[inline]
+    #[allow(clippy::wrong_self_convention)] // `Dint` is `Copy`; `&self` avoids a move
+    #[allow(dead_code)] // exercised by `to_f64_general_round_trips`
+    pub fn to_f64_general(&self) -> f64 {
+        let sign = if self.sgn { -1.0_f64 } else { 1.0 };
+
+        if self.m == 0 {
+            return sign * 0.0;
+        }
+        // `m ∈ [2^127, 2^128)` ⇒ value ∈ [2^ex, 2^(ex+1)); 2^1024 overflows and
+        // anything below half the smallest subnormal (exponent < −1075) is 0.
+        if self.ex >= 1024 {
+            return sign * f64::INFINITY;
+        }
+        if self.ex < -1075 {
+            return sign * 0.0;
+        }
+
+        // `keep` = number of significand bits to retain above the round bit: 53 for
+        // a normal result, fewer as the result goes subnormal (the lowest retained
+        // bit must sit at exponent −1074).  `keep ∈ 0..=53`; `keep = 0` is the
+        // `ex = −1075` boundary (value in [2^-1075, 2^-1074): round bit is the
+        // leading bit, the entire significand decides the round to 2^-1074 vs 0).
+        let keep: i64 = if self.ex >= -1022 {
+            53
+        } else {
+            self.ex + 1075 // exponent of lowest kept bit is −1074; in 0..=52
+        };
+
+        // The round bit sits at bit `shift − 1` of `m` (bit 127 = leading 1); the
+        // bits below it are sticky.  `shift = 128 − keep ∈ 75..=128`.
+        let shift = 128 - keep as u32;
+        let mantissa = if shift >= 128 {
+            0
+        } else {
+            (self.m >> shift) as u64
+        };
+        let round_pos = shift - 1; // 74..=127, always valid
+        let round = (self.m >> round_pos) & 1;
+        let sticky = (self.m & ((1u128 << round_pos) - 1)) != 0;
+
+        // Round half to even.
+        let up = round == 1 && (sticky || (mantissa & 1) == 1);
+        let mantissa = mantissa + u64::from(up);
+
+        // The value is `mantissa · 2^(ex − keep + 1)`, with `mantissa ≤ 2^53` (a
+        // carry out of the kept field lands exactly on a power of two) — exactly an
+        // `f64`.  `mantissa · 2^scale` is one exact step: the subnormal carry
+        // `2^52 · 2^-1074 = 2^-1022` is the smallest normal (exact), and an
+        // overflowing `2^53 · 2^971 = 2^1024` rounds to ∞ as it should.
+        let scale = self.ex - keep + 1; // ≥ −1074
+        sign * (mantissa as f64) * crate::exp2i(scale)
+    }
 }
 
 /// Degree-12 Horner evaluation of the accurate-path polynomial (port of `p_2`).
@@ -434,5 +501,69 @@ mod tests {
             }
             assert_eq!(ln_accurate(x).to_bits(), core_math::log(x).to_bits());
         }
+    }
+
+    /// [`Dint::to_f64_general`] must (a) reproduce any exactly-representable `f64`
+    /// it round-trips from `from_f64` — across the subnormal, normal and
+    /// overflow-saturation range — and (b) agree with the normal-range
+    /// [`Dint::to_f64`] wherever the latter applies.
+    #[test]
+    fn to_f64_general_round_trips() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        // Random finite f64 across every magnitude, plus all subnormals densely.
+        for _ in 0..3_000_000 {
+            let v = f64::from_bits(next() & 0x7fff_ffff_ffff_ffff);
+            if !v.is_finite() {
+                continue;
+            }
+            let d = Dint::from_f64(v);
+            assert_eq!(
+                d.to_f64_general().to_bits(),
+                v.to_bits(),
+                "round-trip failed for {v:e}"
+            );
+            if v >= f64::MIN_POSITIVE && v.is_finite() {
+                // `to_f64` is the normal-range reference.
+                assert_eq!(d.to_f64_general().to_bits(), d.to_f64().to_bits());
+            }
+        }
+        // Dense subnormal sweep, including 0 and the boundary to normals.
+        for bits in 0u64..(1 << 22) {
+            let v = f64::from_bits(bits);
+            assert_eq!(Dint::from_f64(v).to_f64_general().to_bits(), v.to_bits());
+        }
+        // Overflow saturates to ±∞ (value ≥ 2^1024).
+        let big = Dint {
+            sgn: false,
+            ex: 1024,
+            m: 1u128 << 127,
+        };
+        assert_eq!(big.to_f64_general(), f64::INFINITY);
+        assert_eq!(neg_dint_test(big).to_f64_general(), f64::NEG_INFINITY);
+        // Exactly half the smallest subnormal (2^-1075) ties to even → 0.
+        let half_ulp = Dint {
+            sgn: false,
+            ex: -1075,
+            m: 1u128 << 127,
+        };
+        assert_eq!(half_ulp.to_f64_general(), 0.0);
+        // A hair above 2^-1075 rounds up to the smallest subnormal.
+        let just_above = Dint {
+            sgn: false,
+            ex: -1075,
+            m: (1u128 << 127) | 1,
+        };
+        assert_eq!(just_above.to_f64_general(), f64::from_bits(1));
+    }
+
+    fn neg_dint_test(v: Dint) -> Dint {
+        Dint { sgn: !v.sgn, ..v }
     }
 }
