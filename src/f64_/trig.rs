@@ -323,10 +323,10 @@ const TWO_DINT: Dint = Dint {
     m: 0x80000000000000000000000000000000,
 };
 
-/// `sin(r)/r = Σ (−1)ᵏ·uᵏ/(2k+1)!` as `Dint` Taylor coefficients in `u = r²`,
-/// low-degree first.  16 terms — the tail at `u = (π/4)²` is ≈2⁻¹³⁴, below the
-/// `Dint` arithmetic floor.
-const SIN_DINT: [Dint; 16] = [
+/// `sin(r)/r` as `Dint` minimax coefficients in `u = r²`, low-degree first.
+/// 14 terms — the max error over `[0, (π/4)²]` is ≈2⁻¹³⁹ (≈2⁻¹³³ after
+/// quantizing the coefficients to `Dint`), below the `Dint` arithmetic floor.
+const SIN_DINT: [Dint; 14] = [
     Dint {
         sgn: false,
         ex: 0,
@@ -335,83 +335,74 @@ const SIN_DINT: [Dint; 16] = [
     Dint {
         sgn: true,
         ex: -3,
-        m: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab,
+        m: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
     },
     Dint {
         sgn: false,
         ex: -7,
-        m: 0x88888888888888888888888888888889,
+        m: 0x88888888888888888888888888888304,
     },
     Dint {
         sgn: true,
         ex: -13,
-        m: 0xd00d00d00d00d00d00d00d00d00d00d0,
+        m: 0xd00d00d00d00d00d00d00d00cfd3c095,
     },
     Dint {
         sgn: false,
         ex: -19,
-        m: 0xb8ef1d2ab6399c7d560e4472800b8ef2,
+        m: 0xb8ef1d2ab6399c7d560e44714a1cf810,
     },
     Dint {
         sgn: true,
         ex: -26,
-        m: 0xd7322b3faa271c7f3a3f25c1bee38f10,
+        m: 0xd7322b3faa271c7f3a3f1de7e8537244,
     },
     Dint {
         sgn: false,
         ex: -33,
-        m: 0xb092309d43684be51c198e91d7b4269e,
+        m: 0xb092309d43684be51bf8946b51ffd81a,
     },
     Dint {
         sgn: true,
         ex: -41,
-        m: 0xd73f9f399dc0f88ec32b58774657f48f,
+        m: 0xd73f9f399dc0f88e072a304aab268f7a,
     },
     Dint {
         sgn: false,
         ex: -49,
-        m: 0xca963b81856a53593028cbbb8d7ff53c,
+        m: 0xca963b81856a506e6987c48d14c9f8fc,
     },
     Dint {
         sgn: true,
         ex: -57,
-        m: 0x97a4da340a0ab92650f61dbdcb3a5abf,
+        m: 0x97a4da340a028ffc77b0b12c8f37e854,
     },
     Dint {
         sgn: false,
         ex: -66,
-        m: 0xb8dc77b6e7ab8c5f78a37e77372290c2,
+        m: 0xb8dc77b6c7a286d623f9a0ebf12f4b58,
     },
     Dint {
         sgn: true,
         ex: -75,
-        m: 0xbb0da098b1c0cecbdc3826ebfb13cc27,
+        m: 0xbb0da042577331ee2548b4a4a2bba83e,
     },
     Dint {
         sgn: false,
         ex: -84,
-        m: 0x9f9e66e8b2fd46a722520cbbb7885c4a,
+        m: 0x9f9dceae8bd1c3807edcb35637352631,
     },
     Dint {
         sgn: true,
         ex: -94,
-        m: 0xe8d58e16e67519054d0c78aea13b9a50,
-    },
-    Dint {
-        sgn: false,
-        ex: -103,
-        m: 0x92cfcc5a1ac56bd5f1873bb378948eb3,
-    },
-    Dint {
-        sgn: true,
-        ex: -113,
-        m: 0xa1a6973c1fade2170f7237d35fe1c89e,
+        m: 0xe79967c7c1fd457e8bad5620ab5c78a2,
     },
 ];
 
-/// `cos(r) = Σ (−1)ᵏ·uᵏ/(2k)!` as `Dint` Taylor coefficients in `u = r²`,
-/// low-degree first.  17 terms — the tail at `u = (π/4)²` is ≈2⁻¹³⁹.
-const COS_DINT: [Dint; 17] = [
+/// `cos(r)` as `Dint` minimax coefficients in `u = r²`, low-degree first.
+/// 14 terms — the max error over `[0, (π/4)²]` is ≈2⁻¹³⁴ (≈2⁻¹³³ after
+/// quantizing the coefficients to `Dint`).
+const COS_DINT: [Dint; 14] = [
     Dint {
         sgn: false,
         ex: 0,
@@ -419,83 +410,68 @@ const COS_DINT: [Dint; 17] = [
     },
     Dint {
         sgn: true,
-        ex: -1,
-        m: 0x80000000000000000000000000000000,
+        ex: -2,
+        m: 0xfffffffffffffffffffffffffffffff4,
     },
     Dint {
         sgn: false,
         ex: -5,
-        m: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab,
+        m: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaa82ad,
     },
     Dint {
         sgn: true,
         ex: -10,
-        m: 0xb60b60b60b60b60b60b60b60b60b60b6,
+        m: 0xb60b60b60b60b60b60b60b60b53be8cd,
     },
     Dint {
         sgn: false,
         ex: -16,
-        m: 0xd00d00d00d00d00d00d00d00d00d00d0,
+        m: 0xd00d00d00d00d00d00d00cfc6ce73cc3,
     },
     Dint {
         sgn: true,
         ex: -22,
-        m: 0x93f27dbbc4fae397780b69f5333c725b,
+        m: 0x93f27dbbc4fae397780b5bbb83a5f0ac,
     },
     Dint {
         sgn: false,
         ex: -29,
-        m: 0x8f76c77fc6c4bdaa26d4c3d67f425f60,
+        m: 0x8f76c77fc6c4bdaa269903347e0ad492,
     },
     Dint {
         sgn: true,
         ex: -37,
-        m: 0xc9cba54603e4e905d6f8a2efd1f27546,
+        m: 0xc9cba54603e4e904825156e42e86c60a,
     },
     Dint {
         sgn: false,
         ex: -45,
-        m: 0xd73f9f399dc0f88ec32b58774657f48f,
+        m: 0xd73f9f399dc0f345a3a45aadb465b2fa,
     },
     Dint {
         sgn: true,
         ex: -53,
-        m: 0xb413c31dcbecbbdd8024435161554bc3,
+        m: 0xb413c31dcbddf25e5a6dd8bae52be772,
     },
     Dint {
         sgn: false,
         ex: -62,
-        m: 0xf2a15d201011283d4e5695fc785d5dff,
+        m: 0xf2a15d1fd60500d69438ba5d2031b4d0,
     },
     Dint {
         sgn: true,
         ex: -70,
-        m: 0x8671cb6dbfc294a286485bf99c763abc,
+        m: 0x8671cb1f833c0957987226ca65cb7c1a,
     },
     Dint {
         sgn: false,
         ex: -80,
-        m: 0xf96780cb97abbe6525a033e54ec51034,
+        m: 0xf9666cf2db6b1cb738dd68ce5a1a05c4,
     },
     Dint {
         sgn: true,
         ex: -89,
-        m: 0xc4742fe35272cd1c790285d3580a4a34,
-    },
-    Dint {
-        sgn: false,
-        ex: -98,
-        m: 0x850c5131a842e9b9e2e28e1aa546a152,
-    },
-    Dint {
-        sgn: true,
-        ex: -108,
-        m: 0x9c9962823eb0730656f6a614c4e2ba59,
-    },
-    Dint {
-        sgn: false,
-        ex: -118,
-        m: 0xa1a6973c1fade2170f7237d35fe1c89e,
+        m: 0xc355ba2967b5ca732d6ab7f31ee13ec5,
     },
 ];
 
@@ -682,7 +658,7 @@ const fn neg_dint(v: Dint) -> Dint {
     Dint { sgn: !v.sgn, ..v }
 }
 
-/// Horner evaluation of a `Dint` Taylor polynomial in `u`, low-degree first.
+/// Horner evaluation of a `Dint` polynomial in `u`, low-degree first.
 #[inline]
 fn poly_dint(u: &Dint, coeffs: &[Dint]) -> Dint {
     let mut acc = coeffs[coeffs.len() - 1];
