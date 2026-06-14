@@ -25,7 +25,6 @@
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::double::{DoubleDouble, fast_ldexp};
-use super::pow::poly_dd;
 use super::trig::abs_sinpi_dd;
 
 /// `1` as a double-double.
@@ -112,6 +111,41 @@ fn td_add_f64(t: TripleDouble, x: f64) -> TripleDouble {
 #[inline]
 fn td_add(a: TripleDouble, b: TripleDouble) -> TripleDouble {
     td_add_f64(td_add_f64(td_add_f64(a, b.high), b.mid), b.low)
+}
+
+/// Cancellation-robust `a + b` for triple-doubles: distill all six limbs with
+/// error-free 2Sum passes, then renormalize to a non-overlapping triple-double.
+///
+/// [`td_add`]'s high-first fold drops a 4th-order residual at each step, which is
+/// invisible while the leading words stay large but becomes significant after a
+/// near-total cancellation (`ln Γ`'s roots at `z = 1, 2`, the reflection's
+/// `ln π − ln|sin| − ln Γ(1−z)`).  This routine instead keeps every error term:
+/// a first 2Sum pass over the six limbs propagates each rounding error upward
+/// losslessly, and a second pass plus a final `renorm3` lands the leading three
+/// words with the full tail intact — so the result stays accurate to ≈2⁻¹⁵⁰
+/// *relative to the cancelled magnitude*.
+#[inline]
+fn td_add_exact(a: TripleDouble, b: TripleDouble) -> TripleDouble {
+    // Order the six limbs by descending magnitude so the distillation is stable.
+    let mut v = [a.high, b.high, a.mid, b.mid, a.low, b.low];
+    v.sort_unstable_by(|x, y| y.abs().partial_cmp(&x.abs()).unwrap());
+
+    // VecSum (Ogita–Rump–Oishi): a bottom-up 2Sum sweep turning `v` into an
+    // error-free expansion (descending) — losslessly, so no cancellation bit is
+    // dropped.  Two passes pull the leading components to the front.
+    for _ in 0..2 {
+        for i in (1..v.len()).rev() {
+            let (s, c) = two_sum(v[i - 1], v[i]);
+            v[i - 1] = s;
+            v[i] = c;
+        }
+    }
+
+    // The expansion `v` is now non-overlapping and descending; its top three
+    // components carry the result to ≈2⁻¹⁵⁰ relative (the remaining `v[3..]` are
+    // below that), so a final `renorm3` of the leading three lands a clean
+    // triple-double.
+    renorm3(v[0], v[1], v[2] + (v[3] + (v[4] + v[5])))
 }
 
 /// Negate a triple-double.
@@ -278,7 +312,7 @@ fn round_td_signed64(value: TripleDouble, n: i64) -> f64 {
 }
 
 /// Evaluate a triple-double polynomial `Σ coeffs[k]·uᵏ` at the triple-double `u`,
-/// Estrin scheme — the triple-double analogue of [`poly_dd`].
+/// Estrin scheme — the triple-double analogue of `pow::poly_dd`.
 ///
 /// Pairing adjacent coefficients into `c[2i] + power·c[2i+1]` and squaring
 /// `power` builds a depth-`⌈log₂ n⌉` tree; the writes `buf[i]` read only
@@ -286,8 +320,8 @@ fn round_td_signed64(value: TripleDouble, n: i64) -> f64 {
 /// fold never clobbers an unread entry.
 #[inline]
 fn poly_td(u: TripleDouble, coeffs: &[TripleDouble]) -> TripleDouble {
-    /// Scratch capacity; the largest caller ([`TGAMMA_TD`]) has 39 terms.
-    const CAP: usize = 40;
+    /// Scratch capacity; the largest caller ([`LGAMMA_ROOT1_TD`]) has 42 terms.
+    const CAP: usize = 44;
     const TD_ZERO: TripleDouble = TripleDouble {
         high: 0.0,
         mid: 0.0,
@@ -847,134 +881,6 @@ const LGAMMA_FAST_CUTOFF: f64 = 8.0;
 const LGAMMA_CENTER: f64 = 2.875;
 // ln Γ(2.875 + d), d ∈ [−½, ½]: degree 30, err 2^-112.6
 
-/// Accurate `ln Γ(2.875 + d)` minimax, double-double (degree 30, ≈2⁻¹¹⁰)
-const LGAMMA_DD: [DoubleDouble; 31] = [
-    DoubleDouble {
-        high: 0.5809359740231859,
-        low: -2.5656804770465922e-17,
-    },
-    DoubleDouble {
-        high: 0.8721734046427808,
-        low: -5.870301790101574e-18,
-    },
-    DoubleDouble {
-        high: 0.20758703225044092,
-        low: 6.158099260536006e-18,
-    },
-    DoubleDouble {
-        high: -0.028352847622464046,
-        low: -1.5076319552358057e-18,
-    },
-    DoubleDouble {
-        high: 0.005738272251365373,
-        low: 3.7196109786039465e-19,
-    },
-    DoubleDouble {
-        high: -0.001378013326981361,
-        low: -4.9425681851074157e-20,
-    },
-    DoubleDouble {
-        high: 0.000363906229973969,
-        low: -1.445278091710143e-20,
-    },
-    DoubleDouble {
-        high: -0.00010199470476492863,
-        low: -6.4983514567406224e-21,
-    },
-    DoubleDouble {
-        high: 2.9758062671005415e-05,
-        low: 2.6480068876609444e-22,
-    },
-    DoubleDouble {
-        high: -8.93330111155507e-06,
-        low: -2.30398062188423e-22,
-    },
-    DoubleDouble {
-        high: 2.7387396161994973e-06,
-        low: -1.9307783191942454e-22,
-    },
-    DoubleDouble {
-        high: -8.531625199351918e-07,
-        low: 2.4049261292810225e-23,
-    },
-    DoubleDouble {
-        high: 2.6910676649153097e-07,
-        low: -8.488386749504722e-25,
-    },
-    DoubleDouble {
-        high: -8.572896296387957e-08,
-        low: -7.0193291471213795e-25,
-    },
-    DoubleDouble {
-        high: 2.7531386945775175e-08,
-        low: 9.857171936638687e-25,
-    },
-    DoubleDouble {
-        high: -8.900500913334526e-09,
-        low: -9.490025275984083e-26,
-    },
-    DoubleDouble {
-        high: 2.893461615602942e-09,
-        low: 1.99852755319786e-26,
-    },
-    DoubleDouble {
-        high: -9.450888289719845e-10,
-        low: 8.863204674242735e-26,
-    },
-    DoubleDouble {
-        high: 3.0994911024154373e-10,
-        low: 5.755344280859591e-27,
-    },
-    DoubleDouble {
-        high: -1.0200926388570966e-10,
-        low: 2.5861492745008663e-27,
-    },
-    DoubleDouble {
-        high: 3.3676933830660465e-11,
-        low: 1.9984323406321347e-27,
-    },
-    DoubleDouble {
-        high: -1.1148480803998898e-11,
-        low: 5.742537944391341e-28,
-    },
-    DoubleDouble {
-        high: 3.699641215332498e-12,
-        low: -3.5767768641431813e-28,
-    },
-    DoubleDouble {
-        high: -1.2303567996585222e-12,
-        low: 6.521958525186233e-29,
-    },
-    DoubleDouble {
-        high: 4.100074376761586e-13,
-        low: -1.4744173700346995e-29,
-    },
-    DoubleDouble {
-        high: -1.370954103579572e-13,
-        low: -8.9203504359661e-30,
-    },
-    DoubleDouble {
-        high: 4.584503551615155e-14,
-        low: 2.1159539199440712e-30,
-    },
-    DoubleDouble {
-        high: -1.4940113618828544e-14,
-        low: 7.719062159618601e-31,
-    },
-    DoubleDouble {
-        high: 5.009904940366794e-15,
-        low: 5.502495127419647e-32,
-    },
-    DoubleDouble {
-        high: -2.1551713524065003e-15,
-        low: -7.945611417564297e-32,
-    },
-    DoubleDouble {
-        high: 7.249530460786751e-16,
-        low: -1.368293728459151e-32,
-    },
-];
-
 /// Fast-path table for `ln Γ(2.875 + d)`, `d ∈ [−½, ½]`: per-cell minimax of
 /// `ln Γ(2.875 + i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8,
 /// `i ∈ [-4, 4]`.  Degree 11 (`c0..c3` double-double, `c4..c11` plain
@@ -1259,67 +1165,69 @@ const HALF_LN_2PI: DoubleDouble = DoubleDouble {
     low: -3.8782941580672414e-17,
 };
 
-/// `½·ln(2π) − ½`, the additive Stirling constant once `−t` is folded into the
-/// lead as `(t−½)·(ln t − 1)` (see [`lgamma_pos_dd`]).  `0.9189… − 0.5` is
-/// Sterbenz-exact, so the low word is unchanged from [`HALF_LN_2PI`].
-const HALF_LN_2PI_M_HALF: DoubleDouble = DoubleDouble {
-    high: 0.4189385332046728,
-    low: -3.8782941580672414e-17,
-};
-// lgamma Stirling tail: 10 double-double coeffs, residual at t=40 is 2^-108.0, max|c|=1.39e+00
-
-/// Stirling tail `P(u) = Σ B_2k/(2k(2k−1)) u^(k−1)`, `u = 1/t²` (10 terms, double-double)
-const LGAMMA_TAIL_DD: [DoubleDouble; 10] = [
-    DoubleDouble {
+/// Stirling tail `P(u) = Σ B_2k/(2k(2k−1)) u^(k−1)` as triple-double (10 terms),
+/// the accurate path's Bernoulli asymptotic series.
+const LGAMMA_TAIL_TD: [TripleDouble; 10] = [
+    TripleDouble {
         high: 0.08333333333333333,
-        low: 4.625929269271485e-18,
+        mid: 4.625929269271485e-18,
+        low: 2.5679065925163143e-34,
     },
-    DoubleDouble {
+    TripleDouble {
         high: -0.002777777777777778,
-        low: 1.0601087908747154e-19,
+        mid: 1.0601087908747154e-19,
+        low: 3.4773735106991755e-36,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.0007936507936507937,
-        low: 6.883823317368282e-22,
+        mid: 6.883823317368282e-22,
+        low: 5.970764956557651e-40,
     },
-    DoubleDouble {
+    TripleDouble {
         high: -0.0005952380952380953,
-        low: 5.36938218754726e-20,
+        mid: 5.36938218754726e-20,
+        low: -1.8342189946545105e-36,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.0008417508417508417,
-        low: 3.6870174889237694e-20,
+        mid: 3.6870174889237694e-20,
+        low: -6.889900895324708e-37,
     },
-    DoubleDouble {
+    TripleDouble {
         high: -0.0019175269175269176,
-        low: 1.0675702776872475e-19,
+        mid: 1.0675702776872475e-19,
+        low: 6.568342495426554e-37,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.00641025641025641,
-        low: 2.2240044563805217e-19,
+        mid: 2.2240044563805217e-19,
+        low: 1.975312763474088e-35,
     },
-    DoubleDouble {
+    TripleDouble {
         high: -0.029550653594771242,
-        low: 4.861760957508855e-19,
+        mid: 4.861760957508855e-19,
+        low: 1.316681517535326e-35,
     },
-    DoubleDouble {
+    TripleDouble {
         high: 0.17964437236883057,
-        low: -6.401600482710946e-19,
+        mid: -6.401600482710946e-19,
+        low: 9.779977439678332e-36,
     },
-    DoubleDouble {
+    TripleDouble {
         high: -1.3924322169059011,
-        low: 1.5837056989230303e-17,
+        mid: 1.5837056989230303e-17,
+        low: 5.2056012685038854e-34,
     },
 ];
 
 /// Stirling tail in plain `f64` for the cutoff-8 fast leg (all 10 high words of
-/// [`LGAMMA_TAIL_DD`])
+/// [`LGAMMA_TAIL_TD`])
 ///
 /// [`lgamma_pos_fast`] reduces to `t ≥ LGAMMA_FAST_CUTOFF = 8`, where
 /// `u = 1/t² ≤ 2⁻⁶`.  The 10 terms truncate at 2^-59.3 there (and still shrink
 /// monotonically — no Horner cancellation), inside the leg's 2⁻⁵⁶ Ziv gate.  The
-/// hot `z ≥ 40` leg uses the shorter [`LGAMMA_TAIL_F64_FAR`]; the accurate fallback
-/// and the reduced/reflection paths use the double-double [`LGAMMA_TAIL_DD`].
+/// hot `z ≥ 40` leg uses the shorter [`LGAMMA_TAIL_F64_FAR`]; the accurate path
+/// uses the triple-double [`LGAMMA_TAIL_TD`].
 const LGAMMA_TAIL_F64: [f64; 10] = [
     0.08333333333333333,
     -0.002777777777777778,
@@ -1334,7 +1242,7 @@ const LGAMMA_TAIL_F64: [f64; 10] = [
 ];
 
 /// Stirling tail in plain `f64` for the hot large-`z` leg (the leading 6 high words
-/// of [`LGAMMA_TAIL_DD`])
+/// of [`LGAMMA_TAIL_TD`])
 ///
 /// [`lgamma_stirling_fast`] runs only at `z ≥ LGAMMA_CUTOFF = 40`, where
 /// `u = 1/z² ≤ 2⁻¹⁰·⁶`, so 6 terms truncate at 2^-76.5 — far below the result's
@@ -1378,6 +1286,17 @@ const LGAMMA_TABLE_ERR: f64 = 2.168404344971009e-19; // 2^-62
 /// (1024 under the old double-double reduction; the exact-`z` `ln_fast` trades
 /// its looser <2⁻⁶⁶ bound for speed, so the certifiable band is `t·2⁻⁶⁶ ≤ 2⁻⁵⁸`.)
 const LGAMMA_FAST_BOUND: f64 = 256.0;
+
+/// Smallest `sin(πz)` magnitude for which the fast reflection leg's double-double
+/// `sin` is trustworthy.
+///
+/// The fast leg forms `sin(πz)` as a double-double; its low word needs
+/// `sin(πz) ≥ 2⁻⁹⁶⁹` to stay normal (`sin·2⁻⁵³` above the subnormal floor `2⁻¹⁰²²`).
+/// Below that the dropped low word inflates the leg's `ln|sin πz|` error past the
+/// gate, so `lgamma` defers to the accurate path.  `2⁻⁹⁰⁰` keeps a comfortable
+/// margin while only deferring `z` within ≈2⁻⁹⁰⁰ of a (negative) integer or tiny
+/// `z` — both far outside any benchmark.
+const LGAMMA_SIN_RELIABLE: f64 = crate::exp2i(-900);
 
 /// Keep the divisor product's high word below this (rescale by `2⁵¹²`, tracking a
 /// binary exponent) so the long negative-`z` product never overflows `f64`.
@@ -1641,17 +1560,8 @@ fn tgamma_accurate(z: f64, i: f64, d: DoubleDouble) -> f64 {
 
 /// Natural logarithm of a positive double-double, as a double-double.
 ///
-/// `ln(s) = ln(s.high) + ln(1 + s.low/s.high) ≈ ln_dd(s.high) + s.low/s.high`.
-#[inline]
-fn ln_sum(s: DoubleDouble) -> DoubleDouble {
-    crate::f64_::ln_dd(s.high)
-        + DoubleDouble {
-            high: s.low / s.high,
-            low: 0.0,
-        }
-}
-
-/// [`ln_sum`] with the lean `ln_fast` (<2⁻⁶⁶ absolute) — the Ziv fast leg's log.
+/// `ln(s) = ln(s.high) + ln(1 + s.low/s.high) ≈ ln_fast(s.high) + s.low/s.high` —
+/// the Ziv fast leg's log (the accurate path uses the triple-double [`ln_sum_td`]).
 #[inline]
 fn ln_fast_sum(s: DoubleDouble) -> DoubleDouble {
     crate::f64_::ln_fast(s.high)
@@ -1718,8 +1628,9 @@ fn lgamma_center_reduce(y: DoubleDouble) -> (i64, DoubleDouble) {
 /// `i > 0` reduces `y` down to `y − i ∈ [2.375, 3.375]`, contributing
 /// `+ ln ∏_{j=0}^{i−1}(y−i+j)`; `i < 0` reduces up, contributing `− ln ∏_{j=0}^{|i|−1}(y+j)`.
 /// All `|i| ≤ 5` factors are positive (≥ 0.5), so the product cannot overflow and
-/// its logarithm is real.  `ln_of` is [`ln_fast_sum`] (fast leg) or [`ln_sum`]
-/// (accurate); `i = 0` (already central) contributes nothing.
+/// its logarithm is real.  `ln_of` is [`ln_fast_sum`] (the fast leg's log); the
+/// accurate path uses the triple-double [`lgamma_recurrence_log_td`].  `i = 0`
+/// (already central) contributes nothing.
 #[inline]
 fn lgamma_recurrence_log(
     y: DoubleDouble,
@@ -1747,14 +1658,6 @@ fn lgamma_table_fast(y: DoubleDouble) -> DoubleDouble {
     cell_eval(&LGAMMA_TABLE, d) + lgamma_recurrence_log(y, i, ln_fast_sum)
 }
 
-/// `ln Γ(y)` for positive `y` with `y.high < LGAMMA_FAST_CUTOFF`, the accurate
-/// central-table leg: the degree-30 [`LGAMMA_DD`] minimax plus the recurrence's `ln ∏`
-#[inline]
-fn lgamma_table_dd(y: DoubleDouble) -> DoubleDouble {
-    let (i, d) = lgamma_center_reduce(y);
-    poly_dd(d, &LGAMMA_DD) + lgamma_recurrence_log(y, i, ln_sum)
-}
-
 /// Direct Stirling `ln Γ(y)` for a positive double-double `y` with `y.high ≥ 8`,
 /// the lean fast leg (`steps = 0`): the reflection's `ln Γ(1−z)` once `1−z` clears
 /// the cutoff
@@ -1775,61 +1678,6 @@ fn lgamma_stirling_dd(y: DoubleDouble) -> DoubleDouble {
             high: tail,
             low: 0.0,
         }
-}
-
-/// `ln Γ(y)` as a double-double for a positive double-double `y`
-///
-/// For `y.high < LGAMMA_FAST_CUTOFF` the accurate central table ([`lgamma_table_dd`])
-/// reduces in ≤ 5 steps; above it, reduce `y` upward to [`LGAMMA_CUTOFF`] via
-/// `ln Γ(y) = ln Γ(t) − ln ∏(y+j)` (the product exact in double-double), then apply
-/// Stirling `(t−½)·ln t − t + ½ln(2π) + tail(1/t²)`.  The cutoff is high enough that
-/// the Bernoulli tail stays short and well-conditioned (see [`LGAMMA_TAIL_DD`]).
-#[inline]
-fn lgamma_pos_dd(y: DoubleDouble) -> DoubleDouble {
-    // Moderate `y`: the central table reduces in ≤ 5 steps instead of ~40, so the
-    // fast leg's rare straddles (where `ln Γ` is O(1)) fall back cheaply.
-    if y.high < LGAMMA_FAST_CUTOFF {
-        return lgamma_table_dd(y);
-    }
-
-    // Number of upward steps to reach the Stirling region, in one shot.  An
-    // off-by-one is harmless: the telescoping `ln Γ(t) − ln ∏(y+j) = ln Γ(y)` is
-    // exact for *any* `steps` as long as `t = y + steps` is exact and `t.high`
-    // clears the cutoff (the Bernoulli tail still converges a step early).
-    let steps = (LGAMMA_CUTOFF - y.high).ceil().max(0.0) as i64;
-    // `t = y + steps` exactly: the double-double add keeps the low bits a scalar
-    // `y.high + steps` would round off once `t` crosses into a higher binade.
-    let t = y + DoubleDouble {
-        high: steps as f64,
-        low: 0.0,
-    };
-
-    // tail = P(u)/t with u = 1/t², the Stirling asymptotic series past the leads.
-    let inv_t = t.recip();
-    let u = inv_t * inv_t;
-    let tail = poly_dd(u, &LGAMMA_TAIL_DD) * inv_t;
-
-    // lnΓ(t) = (t−½)·(ln t − 1) − ½ + ½ln(2π) + tail.  Folding the `−t` term into
-    // the lead as `(t−½)·(ln t − 1)` keeps the dominant product at the *result*
-    // magnitude; the separate `(t−½)·ln t ≈ result + t` would exceed `f64::MAX`
-    // (→ ∞, then ∞−∞ = NaN) for `z ≳ 2.56e305`, even though lnΓ(z) is still finite.
-    let stirling = (ln_sum(t)
-        + DoubleDouble {
-            high: -1.0,
-            low: 0.0,
-        })
-        * (t + DoubleDouble {
-            high: -0.5,
-            low: 0.0,
-        })
-        + HALF_LN_2PI_M_HALF
-        + tail;
-
-    if steps > 0 {
-        stirling + neg(ln_sum(recurrence_product_dd(y, steps)))
-    } else {
-        stirling
-    }
 }
 
 /// `ln Γ(y)` for positive `y`, the Ziv fast leg, with its absolute error bound
@@ -1902,21 +1750,651 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     (lgamma_stirling_fast(z, tail), LGAMMA_FAST_ERR)
 }
 
-/// `ln|Γ(z)|` as a double-double via the accurate path, the Ziv fallback.
-///
-/// `#[cold] #[inline(never)]` for the same reason as the f32 `lgamma_dd`: it is
-/// the rarely-taken accurate leg, so keeping it out of line stops it from
-/// bloating [`lgamma`]'s hot body.
-#[cold]
-#[inline(never)]
-fn lgamma_dd(z: f64) -> DoubleDouble {
-    if z < 0.5 {
-        // Reflection ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z); `1 − z` is exact.
-        LN_PI + neg(ln_sum(abs_sinpi_dd(z)) + lgamma_pos_dd(DoubleDouble::from_sum(1.0, -z)))
+// ── Triple-double accurate `ln|Γ|` path ──────────────────────────────────────
+//
+// A double-double accurate leg would be ≈2⁻¹⁰⁵ relative — its `ln` (`ln_dd`) and
+// `|sin πz|` (`abs_sinpi_dd`) cap there.  `lgamma`'s corpus
+// has ties as far as 64 bits past the round bit (the published worst case
+// `0x1.129b17eed6bebp+579`), i.e. a relative band of ≈2⁻¹¹⁶ is needed, and the
+// reflection's `sin(πz)` cancellation near a negative integer amplifies the
+// deficit further.  A double-double path straddles ~268 k of those near-ties and
+// mis-rounds them by 1 ulp.
+//
+// The fix mirrors `tgamma`: lift the whole accurate assembly to triple-double,
+// reusing the [`TripleDouble`] ops above.  The two transcendental ingredients —
+// a triple-double `ln` ([`ln_td`], ≈2⁻¹⁵⁰) and a triple-double `ln|sin πz|`
+// (via [`sinpi_kernel_td`], ≈2⁻¹⁵⁰ relative even for tiny `sin`) — are ported
+// from CORE-MATH's `as_logd_accurate` / `as_sinpipid_accurate` (the same design
+// CORE-MATH's correctly-rounded `lgamma` uses).  The central table, Stirling
+// tail, recurrence product, and reflection are then the double-double assembly
+// lifted limb-for-limb to triple-double.
+
+// CORE-MATH-faithful `(f64, f64)` double-double primitives, used by the ported
+// `ln`/`sin` so the transcription is 1:1 (their fold ordering differs from the
+// `DoubleDouble` operators').
+
+/// `fasttwosum`: exact `a + b` as `(sum, err)`, requires `|a| ≥ |b|`.
+#[inline]
+fn fast_two_sum(a: f64, b: f64) -> (f64, f64) {
+    let s = a + b;
+    let z = s - a;
+    (s, b - z)
+}
+
+/// `muldd`: `(xh+xl)·(ch+cl)` as a double-double pair (CORE-MATH ordering).
+#[inline]
+fn c_muldd(xh: f64, xl: f64, ch: f64, cl: f64) -> (f64, f64) {
+    let ahhh = ch * xh;
+    let l = crate::fast_mul_add(ch, xl, cl * xh) + crate::fma(ch, xh, -ahhh);
+    (ahhh, l)
+}
+
+/// `sumdd`: `(xh+xl)+(yh+yl)` as a double-double pair (2Sum on the high words).
+#[inline]
+fn c_sumdd(xh: f64, xl: f64, yh: f64, yl: f64) -> (f64, f64) {
+    let (sh, sl) = if xh.abs() > yh.abs() {
+        fast_two_sum(xh, yh)
     } else {
-        lgamma_pos_dd(DoubleDouble { high: z, low: 0.0 })
+        fast_two_sum(yh, xh)
+    };
+    (sh, sl + (xl + yl))
+}
+
+/// `fastsum`: `(xh+xl)+(yh+yl)` with `|xh| ≥ |yh|` assumed.
+#[inline]
+fn c_fastsum(xh: f64, xl: f64, yh: f64, yl: f64) -> (f64, f64) {
+    let (sh, sl) = fast_two_sum(xh, yh);
+    (sh, (xl + yl) + sl)
+}
+
+/// `polydd`: Horner `Σ c[k]·xᵏ` over a double-double `x`, with `seed` injected
+/// at the top coefficient — a 1:1 port of CORE-MATH's `polydd`.
+#[inline]
+fn c_polydd(xh: f64, xl: f64, c: &[DoubleDouble], seed: (f64, f64)) -> (f64, f64) {
+    let n = c.len();
+    let (mut ch, mut cl) = fast_two_sum(c[n - 1].high, seed.0);
+    cl += seed.1 + c[n - 1].low;
+    for k in (0..n - 1).rev() {
+        let (mh, ml) = c_muldd(xh, xl, ch, cl);
+        let (sh, sl) = c_fastsum(c[k].high, c[k].low, mh, ml);
+        ch = sh;
+        cl = sl;
+    }
+    (ch, cl)
+}
+
+include!("gamma_td_tables.rs");
+
+/// Three words of `ln 2` (`0x1.62e42fefa38p-1 + 0x1.ef35793c76p-45 + …`).
+const LN2_TD: [f64; 3] = [
+    0.6931471805598903,
+    5.49792301870721e-14,
+    1.1612227229362532e-26,
+];
+
+/// Natural logarithm of a positive `f64` as a triple-double (≈2⁻¹⁵⁰ relative),
+/// ported from CORE-MATH's `as_logd_accurate`.
+///
+/// Two-level table reduction `r = R1[i1]·R2[i2]` brings `x·r` into a narrow band
+/// about 1; a degree-8 double-double minimax of `ln(1+t)/t` evaluated at
+/// `t = x·r − 1` supplies the fractional log, and the triple-double table
+/// `H1[i1] + H2[i2]` plus `e·ln 2` supplies `−ln r + e·ln 2`.
+#[inline]
+fn ln_td(x: f64) -> TripleDouble {
+    let mut bits = x.to_bits();
+    let mut ex = (bits >> 52) as i64;
+    if ex == 0 {
+        // Subnormal: normalize so the implicit bit lands in place.
+        let k = bits.leading_zeros() as i64;
+        bits <<= k - 11;
+        ex -= k - 12;
+    }
+    let e = ex - 0x3ff;
+    let mantissa = bits & (!0u64 >> 12);
+    let ed = e as f64;
+
+    let i = (mantissa >> (52 - 5)) as usize;
+    let d = (mantissa & (!0u64 >> 17)) as i64;
+    let (b0, b1) = LOGD_B[i];
+    let j = (mantissa
+        .wrapping_add((b0 as u64) << 33)
+        .wrapping_add(((b1 as i64) * (d >> 16)) as u64)
+        >> (52 - 10)) as usize;
+    let m = f64::from_bits(mantissa | (0x3ffu64 << 52));
+
+    let i1 = j >> 5;
+    let i2 = j & 0x1f;
+    let r = LOGD_R1[i1] * LOGD_R2[i2];
+    let o = r * m;
+    let dxl0 = crate::fma(r, m, -o);
+    let dxh0 = o - 1.0;
+
+    // tail = dxh·(c6 + dxh·(c7 + dxh·c8)) in f64, then dd Horner of c0..c5.
+    let tail = dxh0 * (LOGD_C[6].high + dxh0 * (LOGD_C[7].high + dxh0 * LOGD_C[8].high));
+    let (dxh, dxl) = fast_two_sum(dxh0, dxl0);
+    let (fh, fl) = c_polydd(dxh, dxl, &LOGD_C[..6], (tail, 0.0));
+    let (fh, fl) = c_muldd(dxh, dxl, fh, fl);
+
+    // L = e·ln2 + (H1[i1] + H2[i2]) + (fh, fl), assembled as a triple-double.
+    let s2 = LOGD_H1[i1][2] + LOGD_H2[i2][2];
+    let s1 = LOGD_H1[i1][1] + LOGD_H2[i2][1];
+    let s0 = LOGD_H1[i1][0] + LOGD_H2[i2][0];
+    let mut l0 = LN2_TD[0] * ed;
+    let l1 = LN2_TD[1] * ed;
+    let l2 = LN2_TD[2] * ed;
+    l0 += s2;
+    let (l1, l2) = c_sumdd(l1, l2, s1, s0);
+    let (l1, l2) = c_sumdd(l1, l2, fh, fl);
+
+    let (l0, l1) = fast_two_sum(l0, l1);
+    let (l1, l2) = fast_two_sum(l1, l2);
+    TripleDouble {
+        high: l0,
+        mid: l1,
+        low: l2,
     }
 }
+
+/// `ln(1 + r)` for a small double-double `r` (`|r| ≲ 2⁻⁵¹`), as a triple-double.
+///
+/// The Mercator series `r − r²/2 + r³/3 − r⁴/4` carried in triple-double: `r`
+/// itself is a *double-double* (so its ≈2⁻¹⁰⁵ relative error rides the already
+/// tiny `r`, giving ≈2⁻¹⁵⁶ absolute), `r²` and beyond shrink fast.  Used by the
+/// `ln_sum_td*` correctors, where forming `r` as a bare `f64` (≈2⁻⁵³ relative)
+/// would cap the whole logarithm at ≈2⁻¹⁰⁷ — the deficit that mis-rounds the
+/// hardest `ln Γ` near-ties.
+#[inline]
+fn ln1p_small_td(r: DoubleDouble) -> TripleDouble {
+    /// Scale a triple-double by an exact power of two (`±2ᵏ`): limb-wise, no error.
+    #[inline]
+    fn scale2(t: TripleDouble, c: f64) -> TripleDouble {
+        TripleDouble {
+            high: t.high * c,
+            mid: t.mid * c,
+            low: t.low * c,
+        }
+    }
+    /// `1/3` as a triple-double.
+    const THIRD_TD: TripleDouble = TripleDouble {
+        high: 0.3333333333333333,
+        mid: 1.850371707708594e-17,
+        low: 1.0271626370065257e-33,
+    };
+
+    let r_td = dd_to_td(r);
+    let r2 = td_mul(r_td, r_td);
+    let r3 = td_mul(r2, r_td);
+    let r4 = td_mul(r2, r2);
+    // r − r²/2 + r³/3 − r⁴/4
+    td_add(
+        td_add(r_td, scale2(r2, -0.5)),
+        td_add(td_mul(r3, THIRD_TD), scale2(r4, -0.25)),
+    )
+}
+
+/// `ln(s)` for a positive double-double `s`, as a triple-double.
+///
+/// `ln(s) = ln(s.high) + ln(1 + s.low/s.high)`, with `r = s.low/s.high` formed as
+/// a double-double so the correction reaches triple-double (see [`ln1p_small_td`]).
+#[inline]
+fn ln_sum_td(s: DoubleDouble) -> TripleDouble {
+    let r = DoubleDouble::from_quotient(s.low, s.high);
+    td_add(ln_td(s.high), ln1p_small_td(r))
+}
+
+/// `ln|sin(πz)|` as a triple-double (≈2⁻¹⁵⁰ absolute) for the reflection —
+/// sharp even where `sin` nearly vanishes (`z` near an integer, or tiny positive
+/// `z`), which is where the reflection cancels hardest.
+///
+/// Reduces `z = q/2 + r` with `q = round(2z)`, so `r = z − q/2 ∈ [−¼, ¼]` is
+/// **exact** (metallic's `sinpi` reduction; `q/2` has at most one fractional
+/// bit).  `q` even gives `|sin πz| = |sin πr| = |r|·π·S(r²)`, whose logarithm is
+/// `ln|r| + ln(π·S(r²))` — summing the logs (rather than logging the product)
+/// keeps full relative accuracy and never forms the subnormal product `π·r` for
+/// tiny `r`.  `q` odd gives `|sin πz| = |cos πr| = C(r²)` (near 1).  `S`/`C` are
+/// the triple-double even Taylor series [`SINPI_OVER_ARG_TD`] / [`COSPI_TD`].
+#[inline]
+fn ln_abs_sinpi_td(z: f64) -> TripleDouble {
+    let q = (2.0 * z).round_ties_even();
+    // `q·½` exact (power-of-two scale), `z − q·½` Sterbenz-exact ⇒ `r` exact.
+    let half_q = q * 0.5;
+    let r = z - half_q;
+    // SAFETY: the reflection's `z > −LGAMMA_FAST_BOUND` keeps `|q| < 2⁵³`.
+    let qi = unsafe { q.to_int_unchecked::<i64>() };
+
+    let w = TripleDouble {
+        high: r * r,
+        mid: crate::fma(r, r, -(r * r)),
+        low: 0.0,
+    };
+    if qi & 1 == 0 {
+        // ln|sin πr| = ln|r| + ln(π·S(r²)).  `ln_td(|r|)` normalizes a subnormal
+        // `r`; the second argument stays ≈π, so neither log underflows.
+        let pi_s = dd_mul_td(PI_TD_DD, poly_td(w, &SINPI_OVER_ARG_TD));
+        td_add_exact(ln_td(r.abs()), ln_sum_td3(pi_s))
+    } else {
+        // ln|cos πr| = ln(C(r²)); C(w) ≥ 0 for r ∈ [−¼, ¼].
+        ln_sum_td3(poly_td(w, &COSPI_TD))
+    }
+}
+
+/// `π` as a double-double, the `sin(πr) = π·r·S(r²)` rescale.
+const PI_TD_DD: DoubleDouble = DoubleDouble {
+    high: core::f64::consts::PI,
+    low: 1.2246467991473532e-16,
+};
+
+/// `sin(πr)/(πr)` as a triple-double even Taylor series in `w = r²`, for
+/// `r ∈ [−¼, ¼]` (`w ≤ 1/16`); truncation < 2⁻¹⁶⁸ at the endpoint.
+const SINPI_OVER_ARG_TD: [TripleDouble; 21] = [
+    TripleDouble {
+        high: 1.0,
+        mid: 0.0,
+        low: 0.0,
+    },
+    TripleDouble {
+        high: -1.6449340668482264,
+        mid: -3.040672350398476e-17,
+        low: 2.0006049269525252e-33,
+    },
+    TripleDouble {
+        high: 0.8117424252833536,
+        mid: 3.561384032141524e-17,
+        low: -9.020459843327219e-34,
+    },
+    TripleDouble {
+        high: -0.19075182412208422,
+        mid: 4.4195856292634144e-18,
+        low: -1.5664245988646337e-34,
+    },
+    TripleDouble {
+        high: 0.0261478478176548,
+        mid: 6.311763718038651e-19,
+        low: -5.004171934089695e-37,
+    },
+    TripleDouble {
+        high: -0.0023460810354558235,
+        mid: -1.6959772863819877e-19,
+        low: -6.121199439511702e-37,
+    },
+    TripleDouble {
+        high: 0.000148428793031071,
+        mid: 7.156938521930286e-21,
+        low: -9.996802908339523e-38,
+    },
+    TripleDouble {
+        high: -6.975873661656381e-06,
+        mid: 2.3386829645434924e-22,
+        low: -1.5026633244874147e-38,
+    },
+    TripleDouble {
+        high: 2.5312174041370274e-07,
+        mid: 2.3636074197084703e-23,
+        low: -6.8662972705713e-41,
+    },
+    TripleDouble {
+        high: -7.304711822217775e-09,
+        mid: 1.7231504593537484e-25,
+        low: 3.6851553309678205e-42,
+    },
+    TripleDouble {
+        high: 1.7165384749821432e-10,
+        mid: 8.501706692936653e-27,
+        low: -2.4889025346966105e-43,
+    },
+    TripleDouble {
+        high: -3.3481335350440666e-12,
+        mid: -4.013513666328584e-29,
+        low: -2.0572829401713883e-45,
+    },
+    TripleDouble {
+        high: 5.507458912150965e-14,
+        mid: 2.6402920002328606e-30,
+        low: -1.1940507600572708e-46,
+    },
+    TripleDouble {
+        high: -7.743082723388031e-16,
+        mid: 9.117209625456688e-33,
+        low: 5.62431761652651e-50,
+    },
+    TripleDouble {
+        high: 9.411473315855849e-18,
+        mid: 1.144790299439467e-34,
+        low: -6.548303302225723e-51,
+    },
+    TripleDouble {
+        high: -9.987905210635048e-20,
+        mid: -2.744333377375952e-37,
+        low: -1.9157217662285112e-53,
+    },
+    TripleDouble {
+        high: 9.334912237173012e-22,
+        mid: 1.1236931034629124e-38,
+        low: 2.8780049101048212e-55,
+    },
+    TripleDouble {
+        high: -7.742175705864341e-24,
+        mid: -5.831148442283437e-40,
+        low: -1.1373057521766634e-56,
+    },
+    TripleDouble {
+        high: 5.736652509054491e-26,
+        mid: -5.453971825111099e-42,
+        low: -1.1011350569757404e-58,
+    },
+    TripleDouble {
+        high: -3.820410988588699e-28,
+        mid: 2.241773591586702e-44,
+        low: 6.139689917900757e-61,
+    },
+    TripleDouble {
+        high: 2.2991429943259248e-30,
+        mid: 1.0425931084949483e-46,
+        low: 1.7382904149003762e-63,
+    },
+];
+
+/// `cos(πr)` as a triple-double even Taylor series in `w = r²`, for
+/// `r ∈ [−¼, ¼]`; truncation < 2⁻¹⁶⁸ at the endpoint.
+const COSPI_TD: [TripleDouble; 21] = [
+    TripleDouble {
+        high: 1.0,
+        mid: 0.0,
+        low: 0.0,
+    },
+    TripleDouble {
+        high: -4.934802200544679,
+        mid: -3.1326477543698557e-16,
+        low: -1.8650088507299044e-32,
+    },
+    TripleDouble {
+        high: 4.0587121264167685,
+        mid: -2.6602000824298645e-16,
+        low: 2.014167336649301e-32,
+    },
+    TripleDouble {
+        high: -1.3352627688545895,
+        mid: 3.1815237892149862e-18,
+        low: 5.906074742709794e-35,
+    },
+    TripleDouble {
+        high: 0.2353306303588932,
+        mid: -1.2583065576724427e-18,
+        low: -4.5037547406807254e-36,
+    },
+    TripleDouble {
+        high: -0.02580689139001406,
+        mid: 1.170191067939226e-18,
+        low: 1.7340804921377575e-35,
+    },
+    TripleDouble {
+        high: 0.0019295743094039231,
+        mid: -9.669517939986956e-20,
+        low: 1.709681160020918e-36,
+    },
+    TripleDouble {
+        high: -0.0001046381049248457,
+        mid: -2.421206183964864e-21,
+        low: 9.69937149134531e-39,
+    },
+    TripleDouble {
+        high: 4.303069587032947e-06,
+        mid: -2.864010082936791e-22,
+        low: 1.940388060339291e-38,
+    },
+    TripleDouble {
+        high: -1.3878952462213771e-07,
+        mid: -7.479362090417238e-24,
+        low: 4.603188099598512e-40,
+    },
+    TripleDouble {
+        high: 3.604730797462501e-09,
+        mid: -1.833556774402799e-25,
+        low: -1.0966413832737333e-41,
+    },
+    TripleDouble {
+        high: -7.700707130601354e-11,
+        mid: 4.7314468253686385e-27,
+        low: -2.659200680586134e-43,
+    },
+    TripleDouble {
+        high: 1.3768647280377414e-12,
+        mid: -1.6034234137163717e-29,
+        low: 1.218768492831274e-45,
+    },
+    TripleDouble {
+        high: -2.0906323353147685e-14,
+        mid: -4.965817957054884e-32,
+        low: -5.323711901373863e-48,
+    },
+    TripleDouble {
+        high: 2.729327261598196e-16,
+        mid: -1.0546803731213643e-32,
+        low: -6.603073847407724e-49,
+    },
+    TripleDouble {
+        high: -3.0962506152968648e-18,
+        mid: -2.0544495622285676e-35,
+        low: -3.433020559596951e-52,
+    },
+    TripleDouble {
+        high: 3.080521038267094e-20,
+        mid: -2.074209525567597e-36,
+        low: 1.5305411449931345e-52,
+    },
+    TripleDouble {
+        high: -2.7097614970525195e-22,
+        mid: -1.0123443978297014e-38,
+        low: -6.427559308117769e-55,
+    },
+    TripleDouble {
+        high: 2.122561428350162e-24,
+        mid: -1.6735864646986398e-40,
+        low: 6.121588520437455e-57,
+    },
+    TripleDouble {
+        high: -1.4899602855495925e-26,
+        mid: 2.4650998870129573e-43,
+        low: -5.925682653920526e-60,
+    },
+    TripleDouble {
+        high: 9.426486276736292e-29,
+        mid: 1.4720348161796537e-45,
+        low: 1.2961067524086363e-61,
+    },
+];
+
+/// `ln(s)` for a positive triple-double `s`, as a triple-double.
+///
+/// `ln(s) = ln(s.high) + ln(1 + (s.mid+s.low)/s.high)`, with the offset
+/// `r = (mid+low)/high` formed as a double-double (an exact `mid+low` numerator
+/// over `high`) so [`ln1p_small_td`] reaches triple-double — the bare-`f64` `r`
+/// would cap the logarithm at ≈2⁻¹⁰⁷.
+#[inline]
+fn ln_sum_td3(s: TripleDouble) -> TripleDouble {
+    let num = DoubleDouble::from_sum(s.mid, s.low);
+    let r = num / s.high;
+    td_add(ln_td(s.high), ln1p_small_td(r))
+}
+
+/// `∏_{j=0}^{n−1} (y + j)` as a triple-double for a positive double-double `y`,
+/// on four parallel lanes — the triple-double, dd-base analogue of
+/// [`recurrence_product_dd`].  Each factor `y + j` is an exact double-double
+/// (the [`Add`] folds the bottom bits of `y.high` into the low word), folded
+/// into a triple-double lane by [`dd_mul_td`].
+#[inline]
+fn recurrence_product_dd_td(y: DoubleDouble, n: i64) -> TripleDouble {
+    let factor = |j: i64| {
+        y + DoubleDouble {
+            high: j as f64,
+            low: 0.0,
+        }
+    };
+
+    let mut p = [TD_ONE; 4];
+    let mut j = 0;
+    while j + 4 <= n {
+        p[0] = dd_mul_td(factor(j), p[0]);
+        p[1] = dd_mul_td(factor(j + 1), p[1]);
+        p[2] = dd_mul_td(factor(j + 2), p[2]);
+        p[3] = dd_mul_td(factor(j + 3), p[3]);
+        j += 4;
+    }
+    while j < n {
+        p[0] = dd_mul_td(factor(j), p[0]);
+        j += 1;
+    }
+    td_mul(td_mul(p[0], p[1]), td_mul(p[2], p[3]))
+}
+
+/// `0` as a triple-double.
+const TD_ZERO: TripleDouble = TripleDouble {
+    high: 0.0,
+    mid: 0.0,
+    low: 0.0,
+};
+
+/// `ln Γ(2.875 + d)` for `d ∈ [−½, ½]` as a triple-double — `ln` of the central
+/// `Γ` minimax [`TGAMMA_TD`] (which has no zero on `[2.375, 3.375]`, so `ln_sum_td3`
+/// of it stays well-conditioned), reusing the table `tgamma` already carries.
+#[inline]
+fn lgamma_central_td(d: DoubleDouble) -> TripleDouble {
+    ln_sum_td3(poly_td(dd_to_td(d), &TGAMMA_TD))
+}
+
+/// `± ln ∏` of the ≤ 5 central-cell recurrence factors, in triple-double — the
+/// triple-double analogue of [`lgamma_recurrence_log`].
+#[inline]
+fn lgamma_recurrence_log_td(y: DoubleDouble, i: i64) -> TripleDouble {
+    if i > 0 {
+        let yc = y + DoubleDouble {
+            high: -(i as f64),
+            low: 0.0,
+        };
+        ln_sum_td3(recurrence_product_dd_td(yc, i))
+    } else if i < 0 {
+        td_neg(ln_sum_td3(recurrence_product_dd_td(y, -i)))
+    } else {
+        TD_ZERO
+    }
+}
+
+/// `½` of the near-root window: within `|y − 1| < ⅛` or `|y − 2| < ⅛` the
+/// result-anchored Taylor series replaces the cancelling central form.
+const LGAMMA_ROOT_WINDOW: f64 = 0.125;
+
+/// `ln Γ(y)` as a triple-double for a positive double-double `y` (`y.high ≥ ½`).
+///
+/// `ln Γ` has zeros at `z = 1, 2`; within `⅛` of either, the
+/// `ln Γ(1+x) = Σ cₖ xᵏ` / `ln Γ(2+x)` *result-anchored* series ([`LGAMMA_ROOT1_TD`]
+/// / [`LGAMMA_ROOT2_TD`]) carries the small value with no cancellation — a
+/// triple-double cannot survive the otherwise ~28-bit loss as `y → 1, 2`.  Off
+/// the roots and below `LGAMMA_FAST_CUTOFF`, reduce onto the central cell and read
+/// the direct minimax [`lgamma_central_td`] plus the ≤ 5-factor recurrence log.
+/// Above the cutoff there are no roots, so reduce upward to the Stirling region
+/// `t = y + steps ≥ LGAMMA_CUTOFF` via `ln Γ(y) = ln Γ(t) − ln ∏_{j=0}^{steps−1}(y+j)`
+/// and apply Stirling `(t−½)·(ln t − 1) + (½ln 2π − ½) + tail(1/t²)`, kept sharp
+/// by the triple-double product [`recurrence_product_dd_td`].
+#[inline]
+fn lgamma_pos_td(y: DoubleDouble) -> TripleDouble {
+    if y.high < LGAMMA_FAST_CUTOFF {
+        // Result-anchored series within ⅛ of a root (`x = y − 1` or `y − 2` exact).
+        if (y.high - 1.0).abs() < LGAMMA_ROOT_WINDOW {
+            let x = dd_to_td(
+                y + DoubleDouble {
+                    high: -1.0,
+                    low: 0.0,
+                },
+            );
+            return poly_td(x, &LGAMMA_ROOT1_TD);
+        }
+        if (y.high - 2.0).abs() < LGAMMA_ROOT_WINDOW {
+            let x = dd_to_td(
+                y + DoubleDouble {
+                    high: -2.0,
+                    low: 0.0,
+                },
+            );
+            return poly_td(x, &LGAMMA_ROOT2_TD);
+        }
+        let (i, d) = lgamma_center_reduce(y);
+        // `td_add_exact`: the recurrence log cancels the central `ln Γ` near the
+        // roots `z = 1, 2` (where `ln Γ → 0`).
+        return td_add_exact(lgamma_central_td(d), lgamma_recurrence_log_td(y, i));
+    }
+
+    let steps = (LGAMMA_CUTOFF - y.high).ceil().max(0.0) as i64;
+    let t = y + DoubleDouble {
+        high: steps as f64,
+        low: 0.0,
+    };
+
+    // tail = P(u)/t with u = 1/t², in triple-double.
+    let inv_t = td_recip(dd_to_td(t));
+    let u = td_mul(inv_t, inv_t);
+    let tail = td_mul(poly_td(u, &LGAMMA_TAIL_TD), inv_t);
+
+    // lnΓ(t) = (t−½)·(ln t − 1) + (½ln(2π) − ½) + tail.
+    let ln_t_m1 = td_add_f64(ln_sum_td(t), -1.0);
+    let t_m_half = dd_to_td(
+        t + DoubleDouble {
+            high: -0.5,
+            low: 0.0,
+        },
+    );
+    let stirling = td_add(
+        td_add(td_mul(ln_t_m1, t_m_half), HALF_LN_2PI_M_HALF_TD),
+        tail,
+    );
+
+    if steps > 0 {
+        // `td_add_exact`: `ln Γ(t) − ln ∏` cancels heavily when `y` is small (the
+        // Stirling lead and the recurrence log are both ≈ the same large value).
+        td_add_exact(
+            stirling,
+            td_neg(ln_sum_td3(recurrence_product_dd_td(y, steps))),
+        )
+    } else {
+        stirling
+    }
+}
+
+/// `½·ln(2π) − ½` as a triple-double.
+const HALF_LN_2PI_M_HALF_TD: TripleDouble = TripleDouble {
+    high: 0.4189385332046728,
+    mid: -3.8782941580672414e-17,
+    low: -1.323971596849807e-33,
+};
+
+/// `ln|Γ(z)|` as a triple-double via the accurate path, the Ziv fallback.
+///
+/// `#[cold] #[inline(never)]` for the same reason as before: the rarely-taken
+/// accurate leg is bulky (the ported triple-double `ln` / `sin` plus the
+/// triple-double recurrence) and inlining it would only bloat [`lgamma`]'s hot
+/// body.
+#[cold]
+#[inline(never)]
+fn lgamma_dd(z: f64) -> TripleDouble {
+    if z < 0.5 {
+        // Reflection ln|Γ(z)| = ln π − ln|sin(πz)| − ln Γ(1−z); `1 − z` is exact.
+        // `ln|sin πz|` keeps full *relative* accuracy near the negative integers,
+        // where this difference cancels hardest.
+        let ln_sin = ln_abs_sinpi_td(z);
+        let pos = lgamma_pos_td(DoubleDouble::from_sum(1.0, -z));
+        // `td_add_exact`: the reflection `ln π − ln|sin πz| − ln Γ(1−z)` cancels
+        // hard near the negative integers and wherever `ln Γ` crosses zero.
+        td_add_exact(LN_PI_TD, td_neg(td_add_exact(ln_sin, pos)))
+    } else {
+        lgamma_pos_td(DoubleDouble { high: z, low: 0.0 })
+    }
+}
+
+/// `ln π` as a triple-double.
+const LN_PI_TD: TripleDouble = TripleDouble {
+    high: 1.1447298858494002,
+    mid: 1.0265951162707826e-17,
+    low: -1.3722612652165766e-34,
+};
 
 /// The natural logarithm of the absolute value of the gamma function
 #[must_use]
@@ -1938,12 +2416,27 @@ pub fn lgamma(z: f64) -> f64 {
     }
 
     // Ziv two-step: a lean leg (central table or lean Stirling) gated against the
-    // accurate double-double path.  The leg returns its own absolute error bound —
+    // accurate triple-double path.  The leg returns its own absolute error bound —
     // the tight [`LGAMMA_TABLE_ERR`] in the moderate band, the looser
     // [`LGAMMA_FAST_ERR`] for Stirling.  Restricted to `|z| < LGAMMA_FAST_BOUND`,
     // where those gates certify the leg; either gate also defers a result that
     // cancels toward zero (it then spans many ulps), to the accurate path.
-    if z > -LGAMMA_FAST_BOUND && z < LGAMMA_FAST_BOUND {
+    //
+    // The reflection (`z < ½`) leg's `ln|sin πz|` uses a double-double `sin`; its
+    // low word degrades once `sin(πz) = π|r|` (with `r = z − round(2z)/2` exact)
+    // approaches the subnormal range, where the gate — which only budgets the
+    // `ln Γ(1−z)` leg — can no longer see that error and would certify a wrong
+    // value (e.g. tiny `z`, or `z` extremely close to a negative integer).  Skip
+    // the fast leg there and resolve `ln|sin πz|` on the relatively-accurate
+    // triple-double accurate path.
+    let sin_is_reliable = z >= 0.5 || {
+        // `q·½` is exact (`q` integer-valued, ½ a power of two) and `z − q·½` is
+        // Sterbenz-exact, so `r` is the exact reduced residual.
+        let half_q = (2.0 * z).round_ties_even() * 0.5;
+        let r = z - half_q;
+        core::f64::consts::PI * r.abs() >= LGAMMA_SIN_RELIABLE
+    };
+    if sin_is_reliable && z > -LGAMMA_FAST_BOUND && z < LGAMMA_FAST_BOUND {
         let (value, gate) = lgamma_fast(z);
         let lo = value.high + (value.low - gate);
         let hi = value.high + (value.low + gate);
@@ -1952,8 +2445,7 @@ pub fn lgamma(z: f64) -> f64 {
         }
     }
 
-    let value = lgamma_dd(z);
-    value.high + value.low
+    td_round(lgamma_dd(z))
 }
 
 #[cfg(test)]
@@ -2063,6 +2555,70 @@ mod ziv_soundness {
             "TGAMMA_ZIV_EPS = 2^{:.2} does not cover the fast leg's 2^{:.2}",
             TGAMMA_ZIV_EPS.log2(),
             worst.log2()
+        );
+    }
+
+    /// The [`lgamma`] **reflection** fast leg (`z < ½`) must be sound *wherever it
+    /// is allowed to run* — i.e. where `lgamma`'s `LGAMMA_SIN_RELIABLE` guard lets
+    /// the double-double `sin(πz)` through.  Its gate budgets only the
+    /// `ln Γ(1−z)` leg, so the guard's job is to keep the `ln|sin πz|` slack
+    /// inside that gate; this checks the *absolute* error of the un-rounded fast
+    /// pair against a 300-bit MPFR `ln|Γ|` stays under the returned gate (the
+    /// erf-style soundness check).  Without the guard, tiny `z` and near-integer
+    /// `z` violate this by many ulps (the bug this guard fixes).
+    #[test]
+    fn lgamma_reflection_fast_leg_is_sound() {
+        // Sample the reflection band (−256, ½): representation-uniform magnitudes
+        // across the exponent range, both signs of the offset from an integer.
+        let mut worst_ratio = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for k in 0..300_000u64 {
+            let h = mix(k);
+            // |z| ∈ [2⁻⁶⁰, 256), value-uniform in the exponent.
+            let e = 1023 - (h % 60);
+            let mag = f64::from_bits((e << 52) | (h >> 12)) * ((h >> 1 & 0xff) as f64 + 1.0);
+            let z = if h & 1 == 0 { mag } else { -mag };
+            if !(z > -256.0 && z < 0.5) || z == 0.0 {
+                continue;
+            }
+            // Apply the same reliability guard `lgamma` uses; only inputs that pass
+            // it ever reach the gate.
+            let half_q = (2.0 * z).round_ties_even() * 0.5;
+            let r = z - half_q;
+            if !(core::f64::consts::PI * r.abs() >= LGAMMA_SIN_RELIABLE) {
+                continue;
+            }
+            // Skip non-positive integers (poles) — handled by the special ladder.
+            if z <= 0.0 && (z - z.round()).abs() == 0.0 {
+                continue;
+            }
+
+            let (value, gate) = lgamma_fast(z);
+            if !value.high.is_finite() {
+                continue;
+            }
+            let got = Float::with_val(300, value.high) + Float::with_val(300, value.low);
+            let truth = Float::with_val(300, z).ln_abs_gamma().0;
+            if !truth.is_finite() {
+                continue;
+            }
+            // The gate certifies when `value ± gate` round alike; soundness needs
+            // the true error well inside `gate` so a confident `lo == hi` can't sit
+            // on the wrong side of a boundary.
+            let abs_err = Float::with_val(300, &got - &truth).abs().to_f64();
+            let ratio = abs_err / gate;
+            if ratio > worst_ratio {
+                worst_ratio = ratio;
+                worst_x = z;
+            }
+        }
+        println!(
+            "lgamma reflection fast leg: worst |err|/gate = {worst_ratio:.3} at z={worst_x:e}"
+        );
+        assert!(
+            worst_ratio < 0.5,
+            "reflection fast leg error reaches {worst_ratio:.3}× its gate at z={worst_x:e} \
+             — the LGAMMA_SIN_RELIABLE guard is unsound"
         );
     }
 }
