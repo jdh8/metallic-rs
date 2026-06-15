@@ -1222,22 +1222,37 @@ pub fn expm1(x: f64) -> f64 {
         return expm1_small(x);
     }
 
-    // General path: `expm1(x) = 2^q · mantissa − 1` as a double-double.  `|x| ≥ ¼`,
-    // so the `− 1` cancels at most ~2 bits and the double-double carries the result.
-    // Fast leg: the two-level lean mantissa, accepted by a Ziv test.  Its error is
-    // ≈2⁻⁶⁴ on the [1, 2) mantissa, so on the result it is bounded by
-    // `2^q · EXP_TWO_LEVEL_ZIV_EPS`.
-    let neg_one = DoubleDouble {
-        high: -1.0,
-        low: 0.0,
+    // General path: `expm1(x) = 2^q · (th + fl) − 1`, with the `− 1` done in
+    // *mantissa space* as `(th + fl) − 2^(−q)` and a single closing `fast_ldexp` by
+    // `q` — the cancellation (≤ ~2 bits for `|x| ≥ ¼`) and the rounding both ride
+    // the [1, 2) mantissa.  This skips the full-magnitude `mantissa · 2^q` scale and
+    // the general 2Sum the old `… + neg_one` form needed, and the raw
+    // [`exp_two_level_fold`] avoids the renormalize branch of [`exp_two_level_fast`]
+    // (so `th + fl` may sit just outside [1, 2) and `q` reach 1024 — both fine for
+    // the exponent-only `fast_ldexp`).  `off = −2^(−q)` by bit pattern (as in
+    // [`expm1_general`]/CORE-MATH); the three-way branch mirrors CORE-MATH's
+    // `cr_expm1`: `off` leads the Fast2Sum for `q < 53` (dominant or exact against
+    // the mantissa), trails it for `53 ≤ q < 75` (sub-ulp but still gate-relevant),
+    // and is dropped for `q ≥ 75` (`2^(−q) < 2⁻⁷⁵ ≪` the gate, and its bit pattern
+    // would overflow to ∞ at `q = 1024`).  The lean mantissa is ≈2⁻⁶⁴ on `th + fl`,
+    // so the unchanged `EXP_TWO_LEVEL_ZIV_EPS` gate still bounds the
+    // (subtraction-preserving) absolute error.
+    let (t, dx) = exp_two_level_reduce(x);
+    let (th, fl, q) = exp_two_level_fold(t, dx);
+    let off = f64::from_bits(((2048 + 1023 - q) as u64) << 52);
+    let s = if q < 53 {
+        fast_sum(off, th)
+    } else if q < 75 {
+        fast_sum(th, off)
+    } else {
+        DoubleDouble { high: th, low: 0.0 }
     };
-    let (mantissa, qf) = exp_two_level_fast(x);
-    let result = mantissa * crate::exp2i(qf) + neg_one;
-    let eps = crate::exp2i(qf) * EXP_TWO_LEVEL_ZIV_EPS;
-    let lo = result.high + (result.low - eps);
-    let hi = result.high + (result.low + eps);
+    let high = s.high;
+    let low = fl + s.low;
+    let lo = high + (low - EXP_TWO_LEVEL_ZIV_EPS);
+    let hi = high + (low + EXP_TWO_LEVEL_ZIV_EPS);
     if lo == hi {
-        return lo;
+        return fast_ldexp(lo, q);
     }
 
     expm1_general(x)
