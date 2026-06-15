@@ -240,17 +240,16 @@ const FRAC_1_24: DoubleDouble = DoubleDouble {
 /// 2/π as f64, for the medium-range quotient `round(x·2/π)`.
 const FRAC_2_PI_F64: f64 = 0.6366197723675814;
 
-/// π/2 in five words (≈2⁻¹⁹⁹ relative); each of `PIO2_1..PIO2_4` has ≥21 low
+/// π/2 in four words (≈2⁻¹⁵⁶ relative); each of `PIO2_1..PIO2_4` has ≥21 low
 /// mantissa bits clear, so `q·PIO2_k` is exact for `|q| < 2²¹` (the medium range
-/// `|x| < 2²⁰`).  `PIO2_5` carries the full remainder.  The extra words push the
-/// reduction past the ≈117-bit ceiling of a 3-word split, so the reduced angle
-/// stays relative-accurate (≈2⁻¹⁰⁰) even when `x` lies within ≈2⁻⁶⁰ of a multiple
-/// of π/2 — which is what keeps the relative Ziv gate sound there.
+/// `|x| < 2²⁰`).  The first three words are subtracted exactly (capturing every
+/// residual), the fourth folds into the low part, leaving the reduced angle
+/// accurate to ≈2⁻¹³⁰ — past the ≈117-bit ceiling of a 3-word split, which is what
+/// keeps the relative Ziv gate sound near a multiple of π/2.
 const PIO2_1: f64 = 1.5707963267341256;
 const PIO2_2: f64 = 6.077100506303966e-11;
 const PIO2_3: f64 = 2.0222662487111665e-21;
 const PIO2_4: f64 = 8.478427660348229e-32;
-const PIO2_5: f64 = 2.0670321098263988e-43;
 
 /// π/2 as a double-double, for the Payne–Hanek reconstruction.
 const PIO2: DoubleDouble = DoubleDouble {
@@ -723,27 +722,25 @@ const fn select_cos_dint(q: i64, s: Dint, c: Dint) -> Dint {
 /// Argument reduction: `x ≥ 0` finite → `(quadrant, r)` with `r ∈ [-π/4, π/4]`.
 #[inline]
 fn rem_pio2(x: f64) -> (i64, DoubleDouble) {
-    // Medium range: Cody–Waite with the 3-word π/2 (q small enough that q·PIO2_1,
-    // q·PIO2_2 are exact).  Handles `q = 0` (no reduction) too.
+    // Medium range: Cody–Waite with the 4-word π/2 (q small enough that
+    // q·PIO2_1..PIO2_4 are exact).  Handles `q = 0` (no reduction) too.
     if x < 1_048_576.0 {
         let q = (x * FRAC_2_PI_F64).round_ties_even();
-        // Subtract `q·π/2` word by word, accumulating in a renormalized
-        // double-double.  Each `q·PIO2_k` (k ≤ 4) is exact (cleared low bits),
-        // and every step's high add is an exact 2Sum, so the only error is one
-        // rounding of the low word per step (≈2⁻¹⁰⁶ relative) plus the 5-word π/2
-        // tail (≈2⁻¹⁹⁹) — the reduced angle keeps full relative precision through
-        // the deep cancellation near a multiple of π/2.
-        let sub = |acc: DoubleDouble, t: f64| -> DoubleDouble {
-            let s = DoubleDouble::from_sum(acc.high, t);
-            fast_sum(s.high, s.low + acc.low)
-        };
-        let mut r = DoubleDouble::from_sum(x, q * -PIO2_1);
-        r = sub(r, q * -PIO2_2);
-        r = sub(r, q * -PIO2_3);
-        r = sub(r, q * -PIO2_4);
-        r = sub(r, q * -PIO2_5);
+        // Subtract `q·π/2` word by word.  Each `q·PIO2_k` (k ≤ 4) is exact
+        // (cleared low bits, |q| < 2²¹), so the three 2Sums capture every
+        // residual of the first three words exactly; the fourth word folds into
+        // the accumulated low part and the tail beyond PIO2_4 (≈2⁻¹²² after the
+        // `q` scale) is dropped.  This flat fold — versus renormalizing the pair
+        // after each word — keeps `r` accurate to ≈2⁻¹³⁰, so the relative Ziv
+        // gate stays sound for any |r| ≳ 2⁻⁷⁰, far below the medium range's
+        // worst-case cancellation; tinier residuals fall through to the
+        // `payne_hanek_dint` accurate path.
+        let a = DoubleDouble::from_sum(x, q * -PIO2_1);
+        let b = DoubleDouble::from_sum(a.high, q * -PIO2_2);
+        let c = DoubleDouble::from_sum(b.high, q * -PIO2_3);
+        let lo = crate::fma(-q, PIO2_4, a.low + b.low + c.low);
         // SAFETY: |q| < 2²⁰.
-        return (unsafe { q.to_int_unchecked() }, r);
+        return (unsafe { q.to_int_unchecked() }, fast_sum(c.high, lo));
     }
 
     payne_hanek(x)
