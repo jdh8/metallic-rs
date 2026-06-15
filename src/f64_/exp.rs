@@ -1016,20 +1016,25 @@ pub fn exp2(x: f64) -> f64 {
         return 0.0;
     }
 
-    // Fast path: the two-level lean mantissa.  Index `t = round(4096·x)`, residual
+    // Fast path: the un-normalized two-level fold `2ˣ = (th + fl)·2^q`, gated
+    // exactly like `exp`/`exp10`.  Index `t = round(4096·x)`, residual
     // `dx = (4096·x − t)·ln2/4096`; `sigma = 4096·x − t` is exact (4096 is a power
-    // of two).
+    // of two).  `th ∈ [1, 2)` dominates `|fl| ≲ ln2/8192`, so the raw `th + (fl ± ε)`
+    // gate resolves the rounding without `exp_two_level_mantissa`'s renormalizing
+    // `fast_sum` + branch (that step exists only for the reuse consumers that add an
+    // `e⁻ˣ` term).  `q ≥ −1021` keeps `(th + fl)·2^q` comfortably normal so
+    // `fast_ldexp` is exact and the subnormal boundary stays on the accurate path.
     let scaled4 = (x * 4096.0).round_ties_even();
     // SAFETY: `|x| < 1075`, so `|scaled4| < 2^22`.
     let t = unsafe { scaled4.to_int_unchecked::<i64>() };
     let sigma4 = crate::fma(x, 4096.0, -scaled4);
     let dx = crate::fma(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
-    let (product, qf) = exp_two_level_mantissa(t, dx);
-    if qf >= -1021 {
-        let lo = product.high + (product.low - EXP_TWO_LEVEL_ZIV_EPS);
-        let hi = product.high + (product.low + EXP_TWO_LEVEL_ZIV_EPS);
+    let (th, fl, q) = exp_two_level_fold(t, dx);
+    if q >= -1021 {
+        let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
+        let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);
         if lo == hi {
-            return fast_ldexp(lo, qf);
+            return fast_ldexp(lo, q);
         }
     }
 
