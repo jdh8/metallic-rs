@@ -1605,24 +1605,73 @@ fn atan_fast(x: f64) -> Option<f64> {
 
 /// Relative half-width of the second-tier Ziv gate on the double-double accurate
 /// kernel.  [`atan_fast`]'s gate inherently defers ~5% (it tests f64 rounding near
-/// midpoints), so that miss bulk must be cheap: the ≈2⁻¹⁰² [`atan_dd`] kernel
+/// midpoints), so that miss bulk must be cheap: the ≈2⁻¹⁰² double-double kernel
 /// resolves all of it here, and only the genuine hard-to-round points (≈2⁻¹¹⁶ from
 /// a midpoint) clear this 2⁻⁹⁰ gate to escalate to the slow 128-bit [`atan_dint_mag`].
 const ATAN_DD_ZIV_EPS: f64 = 8.077935669463161e-28; // 2⁻⁹⁰
 
+/// `atan(a)` as a double-double for `a ∈ [0, 1]`, via the fine [`ATAN_FAST_TABLE`]
+/// reduction — the cheap refine tier for [`atan_fast`]'s Ziv misses.
+///
+/// The fine table keeps the residual `|h| ≤ tan(π/512)`, so the odd series
+/// `atan(h) = h·(1 − h²/3 + …)` needs only 8 double-double terms (vs the 16 of the
+/// coarse-cell [`atan_dd`] over `|u| ≤ 1/16`), halving the dominant poly cost while
+/// staying ≈2⁻¹⁰² — well inside the [`ATAN_DD_ZIV_EPS`] gate.  Below `ATAN_SMALL`
+/// the cell is `i = 0` (`h = a`, angle 0); otherwise the same bit-trick index as
+/// the fast path picks the cell.
+///
+/// As in the fast path, the tangent is the single `f64` `A[i].high`; `A[i].low` is
+/// CORE-MATH's *angle defect* `atan(A[i].high) − i·π/256`, so the cell angle is
+/// `i·π/256 + A[i].low = atan(A[i].high)`, reconstructed with the same truncated
+/// `ATAN_STEP_HI/LO` the defect was generated against (not a fresh π/256, whose
+/// low word would double-count the defect).
+fn atan_fine_dd(a: f64) -> DoubleDouble {
+    let at = a.to_bits(); // a ≥ 0
+    let (h, angle) = if at < ATAN_SMALL {
+        (DoubleDouble { high: a, low: 0.0 }, ZERO)
+    } else {
+        let bucket = ((at >> 51) - 2030) as usize;
+        let mbits = at & (u64::MAX >> 13);
+        let ut = mbits >> 35;
+        let ut2 = (ut * ut) >> 16;
+        let c = ATAN_FAST_IDX[bucket];
+        let i = (((c[0] << 16) + ut * c[1] - ut2 * c[2]) >> 25) as usize;
+        let tab = ATAN_FAST_TABLE[i];
+        let ta = DoubleDouble {
+            high: tab.high,
+            low: 0.0,
+        };
+        let ad = DoubleDouble { high: a, low: 0.0 };
+        // h = (a − tan c)/(1 + a·tan c), all double-double (tan c = A[i].high).
+        let h = (ad + neg(ta)) * (ONE + ad * ta).recip();
+        // angle = atan(A[i].high) = i·π/256 + A[i].low.
+        let ih = i as f64;
+        let angle = DoubleDouble::from_product(ih, ATAN_STEP_HI)
+            + DoubleDouble {
+                high: crate::fast_mul_add(ih, ATAN_STEP_LO, tab.low),
+                low: 0.0,
+            };
+        (h, angle)
+    };
+    // atan(h) = h·(1 − h²/3 + …); 8 terms reach ≈2⁻¹²¹ over |h| ≤ tan(π/512).
+    angle + h * poly_dd(h * h, &ATAN_COEFFS[..8])
+}
+
 /// Correctly-rounded magnitude `atan(|x|)`, the accurate fallback to [`atan_fast`].
 ///
-/// Cheap double-double tier ([`atan_dd`], reflecting `π/2 − atan(1/a)` for `a > 1`)
-/// behind a second Ziv gate; only the hard-to-round points escalate to the sound
-/// 128-bit [`atan_dint_mag`].  Cold and never inlined so the rare-miss bulk stays
-/// out of [`atan`]'s hot path.
+/// Cheap double-double tier behind a second Ziv gate; only the hard-to-round points
+/// escalate to the sound 128-bit [`atan_dint_mag`].  `a ≤ 1` (the bulk of the fast
+/// path's misses, where the result is small and its gate deferred most) takes the
+/// lean fine-table [`atan_fine_dd`]; `a > 1` is rare here, so it reflects through the
+/// general coarse [`atan_dd`].  Cold and never inlined so the miss bulk stays out of
+/// [`atan`]'s hot path.
 #[cold]
 #[inline(never)]
 fn atan_accurate(a: f64) -> f64 {
     let m = if a > 1.0 {
         FRAC_PI_2 + neg(atan_dd(DoubleDouble { high: a, low: 0.0 }.recip()))
     } else {
-        atan_dd(DoubleDouble { high: a, low: 0.0 })
+        atan_fine_dd(a)
     };
     ziv_at(m, ATAN_DD_ZIV_EPS).unwrap_or_else(|| atan_dint_mag(a).to_f64())
 }
