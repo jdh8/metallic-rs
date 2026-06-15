@@ -188,6 +188,20 @@ fn combine_fast(m: DoubleDouble, q: i64, add: bool) -> DoubleDouble {
 /// cancels to a value too small for `2⁻⁶²` to resolve (only `|x| ≲ 2⁻¹⁰`).
 const HYP_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
 
+/// Reduction-exponent cutoff above which `cosh`/`sinh` drop the `e⁻ˣ` term and
+/// return `½eˣ` directly.
+///
+/// `eˣ = m·2^q`, so the `e⁻ˣ` correction to the `[1, 2)` mantissa is
+/// `c = 2⁻²q/m ≈ m·e⁻²ˣ`.  At `q = 35` (`|x| ≳ 35·ln2 ≈ 24.3`) that is `≤ 2⁻⁷⁰` —
+/// far below both the fast leg's own `≈2⁻⁶⁴·⁷` slip and the [`HYP_ZIV_EPS`] gate —
+/// so `½(eˣ ± e⁻ˣ)` rounds identically to `½eˣ` and the gate margin is unchanged.
+/// Dropping the term there skips [`combine_fast`]'s division and double-double add
+/// on the ~96% of a value-uniform `[−710, 710]` sweep that lands above the cutoff;
+/// the rare Ziv straddle still defers to the accurate path, which forms the full
+/// `e⁻ˣ`.  (`q ≥ 33` already suffices for soundness; `35` keeps the leg's full
+/// margin so the fallback rate is byte-for-byte the combine path's.)
+const HYP_HALF_EXP_Q: i64 = 35;
+
 /// Hyperbolic cosine
 #[must_use]
 #[inline]
@@ -208,9 +222,15 @@ pub fn cosh(x: f64) -> f64 {
     }
 
     // cosh(x) = ½(eˣ + e⁻ˣ) = 2^(q−1)·(m + 2⁻²q/m); the sum never cancels.  Fast
-    // path: lean `eˣ` mantissa accepted by a Ziv test, else the accurate one.
+    // path: lean `eˣ` mantissa accepted by a Ziv test, else the accurate one.  For
+    // `q ≥ HYP_HALF_EXP_Q` the `e⁻ˣ` term is below the gate, so `m` alone (= ½eˣ)
+    // is gated and the `combine_fast` division is skipped.
     let (m, q) = exp_two_level_fast(x);
-    let mantissa = combine_fast(m, q, true);
+    let mantissa = if q >= HYP_HALF_EXP_Q {
+        m
+    } else {
+        combine_fast(m, q, true)
+    };
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
     let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
     if lo == hi {
@@ -307,9 +327,15 @@ pub fn sinh(x: f64) -> f64 {
 
     // |x| ≥ ¼: sinh(x) = ½(eˣ − e⁻ˣ) = 2^(q−1)·(m − 2⁻²q/m); the residual
     // cancellation (`t < 0.6·m`) is mild enough for the double-double.  Fast path:
-    // lean mantissa accepted by a Ziv test, as in `cosh`.
+    // lean mantissa accepted by a Ziv test, as in `cosh`.  For `q ≥ HYP_HALF_EXP_Q`
+    // the `e⁻ˣ` term is below the gate, so `m` alone (= ½eˣ) is gated and the
+    // `combine_fast` division is skipped.
     let (m, q) = exp_two_level_fast(s);
-    let mantissa = combine_fast(m, q, false);
+    let mantissa = if q >= HYP_HALF_EXP_Q {
+        m
+    } else {
+        combine_fast(m, q, false)
+    };
     let lo = mantissa.high + (mantissa.low - HYP_ZIV_EPS);
     let hi = mantissa.high + (mantissa.low + HYP_ZIV_EPS);
     if lo == hi {
