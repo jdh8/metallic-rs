@@ -38,19 +38,15 @@ fn ln_sum_fast(s: DoubleDouble) -> DoubleDouble {
 const IHYP_ZIV_EPS: f64 = 1.084_202_172_485_504_4e-19; // 2^-63
 
 /// Correctly-rounded `atanh(s) = ½·ln(u)` for `u = (1 + s)/(1 − s)` and
-/// `0 < s < 1`, via a two-step Ziv test.
+/// `ATANH_SMALL ≤ s < 1`, via a two-step Ziv test.  (Smaller `s` takes the cheap
+/// [`atanh_small`] series instead, so this leg is never reached there.)
 ///
 /// The lean `½·[ln_sum_fast]` is accepted unless it straddles a rounding
-/// boundary.  On a straddle the accurate leg is chosen by magnitude: for
-/// `s < ATANH_SMALL` the result-anchored [`atanh_small_accurate`] (the dd `ln`
-/// argument otherwise loses the small part to its leading `1`), otherwise the
-/// sound 128-bit [`super::dint::ln_dd_scaled`].  Keeping the lean fast leg here
-/// (rather than a series fast leg) holds the straddle rate to the baseline's
-/// `≈0.5%`: the lean leg is `<2⁻⁶⁶` absolute, so its Ziv gate is far tighter than
-/// a plain-`f64` series', avoiding heavy fallback into the degree-22 accurate
-/// series over `atanh`'s wide small-`|x|` band.
+/// boundary; on a straddle the sound 128-bit [`super::dint::ln_dd_scaled`] takes
+/// over.  The lean leg is `<2⁻⁶⁶` absolute, so its Ziv gate holds the straddle
+/// rate to `≈0.5%`.
 #[inline]
-fn atanh_rounded(u: DoubleDouble, s: f64) -> f64 {
+fn atanh_rounded(u: DoubleDouble) -> f64 {
     let DoubleDouble { high, low } = ln_sum_fast(u) * 0.5;
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
@@ -58,11 +54,7 @@ fn atanh_rounded(u: DoubleDouble, s: f64) -> f64 {
         return lo;
     }
 
-    if s < ATANH_SMALL {
-        atanh_small_accurate(s)
-    } else {
-        super::dint::ln_dd_scaled(u.high, u.low, -1)
-    }
+    super::dint::ln_dd_scaled(u.high, u.low, -1)
 }
 
 /// Correctly-rounded `ln(x + c)` for the `acosh`/`asinh` argument, where
@@ -669,6 +661,47 @@ const ATANH_R_DD: [(f64, f64); 23] = [
     (0.02127659574468085, 5.167261417803255e-19),
 ];
 
+/// `1/3` as a double-double — the exact leading coefficient of `atanh`'s series
+/// (`ATANH_R_DD[0]`), carried in full precision by [`atanh_small_eval`] so the
+/// dominant `x³/3` term commits no `f64` rounding.
+const FRAC_1_3_DD: DoubleDouble = DoubleDouble {
+    high: 0.333_333_333_333_333_3,
+    low: 1.850_371_707_708_594e-17,
+};
+
+/// Plain-`f64` `R2(v) = (R(v) − 1/3)/v = ∑_{k≥0} vᵏ/(2k+5)` for `atanh`'s
+/// small-`|x|` fast leg (`v = x²`, `R = (atanh(x) − x)/x³`).  The exact Taylor
+/// coefficients `1/(2k+5)` (the high words of [`ATANH_R_DD`] shifted down one);
+/// degree 10 leaves a truncation `≈2⁻⁶³` relative on `R` at `v = ATANH_SMALL² ≈
+/// 0.035`.  Only this small `v·R2` correction to the double-double `1/3` rides
+/// the `f64` rounding, so the leg's slip stays near `2⁻⁵⁹·|x|³`.
+#[allow(clippy::unreadable_literal)]
+const ATANH_R2_FAST: [f64; 11] = [
+    0.2,
+    0.14285714285714285,
+    0.1111111111111111,
+    0.09090909090909091,
+    0.07692307692307693,
+    0.06666666666666667,
+    0.058823529411764705,
+    0.05263157894736842,
+    0.047619047619047616,
+    0.043478260869565216,
+    0.04,
+];
+
+/// Ziv gate for `atanh`'s small-`|x|` series fast leg, `err = |x|·(x⁴·REL +
+/// FLOOR)` (CORE-MATH's `atanh` shape).  Because [`atanh_small_eval`] carries the
+/// exact `x` and `x³/3`, its polynomial slip rides the `x⁵` remainder
+/// (`REL·x⁵`); the `FLOOR·|x|` term covers the `≈2⁻¹⁰⁶·|x|` loss when the anchor
+/// fold `s.low + tail.low` drops `tail.low` near a half-ulp tie (where the
+/// dropped bits decide the rounding) — without it the tightest near-ties at tiny
+/// `|x|` mis-round.  Both calibrated to ≥2× the MPFR-measured slip by
+/// `ziv_soundness::atanh_small_leg_is_sound`.
+const ATANH_SMALL_ZIV_REL: f64 = 8.881_784_197_001_252e-16; // 2⁻⁵⁰
+/// Absolute-error floor of the [`ATANH_SMALL_ZIV_REL`] gate; see there.
+const ATANH_SMALL_ZIV_FLOOR: f64 = 1.972_152_263_052_530_6e-31; // 2⁻¹⁰²
+
 /// `S(v) = (asinh(x) − x)/x³` (`v = x²`), the Maclaurin coefficients
 /// `(−1)ⁿ (2n)! / (4ⁿ (n!)² (2n+1))` shifted down past the leading `x`, as a
 /// double-double Horner table for the accurate leg.  Degree 13 leaves a
@@ -712,17 +745,66 @@ const ASINH_S_FAST: [f64; 9] = [
 /// (`2⁻⁵³·⁷·x³`).
 const ASINH_SMALL_ZIV_SCALE: f64 = 1.776_356_839_400_250_5e-15; // 2⁻⁴⁹
 
+/// The un-rounded double-double of `atanh`'s small-`|x|` fast leg, `x + x³·R(x²)`
+/// with `R(v) = 1/3 + v·R2(v)`.
+///
+/// `x²` and `x³` are carried as double-doubles and the leading `1/3` enters as
+/// the exact [`FRAC_1_3_DD`], so only the small `v·R2(v)` correction (R2 from
+/// [`ATANH_R2_FAST`], plain `f64`) rounds — leaving the dominant `x³/3` term and
+/// the anchor `x` exact.  The slip therefore stays near `2⁻⁵⁹·|x|³`, well inside
+/// the [`ATANH_SMALL_ZIV_REL`] gate's `x⁵` term.  Shared with `ziv_soundness`.
+#[inline]
+fn atanh_small_eval(x: f64) -> DoubleDouble {
+    let v = DoubleDouble::from_product(x, x); // x² exact
+    let x3 = v * x; // x³ to double-double
+    // R(v) = 1/3 + v·R2(v); the f64 correction is ≲ 0.012, far under 1/3.
+    let r = FRAC_1_3_DD.add_ordered(DoubleDouble {
+        high: v.high * crate::poly(v.high, &ATANH_R2_FAST),
+        low: 0.0,
+    });
+    let tail = x3 * r;
+    let s = fast_sum(x, tail.high);
+    DoubleDouble {
+        high: s.high,
+        low: s.low + tail.low,
+    }
+}
+
+/// Correctly-rounded `atanh(|x|)` for `0 < |x| < ATANH_SMALL` via the cheap
+/// result-anchored series fast leg `x + x³·R(x²)` — no `(1 + x)/(1 − x)` division
+/// and no `ln`, the analogue of CORE-MATH's direct `|x| < ¼` branch and a mirror
+/// of [`asinh_small`].  The gate is the `x⁵`-shaped [`ATANH_SMALL_ZIV_REL`]; on a
+/// straddle the result-anchored [`atanh_small_accurate`] takes over.
+#[inline]
+fn atanh_small(x: f64) -> f64 {
+    let DoubleDouble { high, low } = atanh_small_eval(x);
+    let x2 = x * x;
+    let err = x * crate::fast_mul_add(x2 * x2, ATANH_SMALL_ZIV_REL, ATANH_SMALL_ZIV_FLOOR);
+    let lo = high + (low - err);
+    let hi = high + (low + err);
+    if lo == hi {
+        return lo;
+    }
+    atanh_small_accurate(x)
+}
+
 /// Correctly-rounded `atanh(|x|)` for `0 < |x| < ATANH_SMALL`, anchored at the
 /// result via the odd series `atanh(x) = x + x³·R(x²)`.
 ///
-/// This is the accurate leg reached from [`atanh_rounded`] on a Ziv straddle.
+/// This is the accurate leg reached from [`atanh_small`] on a Ziv straddle.
 /// The correction `c = x³·R(x²)` is built as a double-double (its `≈2⁻¹⁰⁴`
 /// relative error rides the tiny `c`), then [`round_anchored`] adds the exact
 /// `x` and breaks the ½-ulp ties.  Like `log1p`'s small-`|x|` leg, anchoring at
 /// the *result* keeps the precision on the tiny `x³·R`, where the double-double
 /// argument of the general `ln` path would instead lose `≈−log2|x|` bits of the
 /// small part to its leading `1`.
-#[inline]
+///
+/// `#[cold]`/never-inlined so the degree-22 double-double Horner stays out of
+/// [`atanh_small`]'s hot path — keeping it lean matters in the value-uniform
+/// bench, where mixing it in line pollutes the cache for the `(1 + x)/(1 − x)`
+/// leg too.
+#[cold]
+#[inline(never)]
 fn atanh_small_accurate(x: f64) -> f64 {
     let v = DoubleDouble::from_product(x, x);
     let (high, low) = ATANH_R_DD[ATANH_R_DD.len() - 1];
@@ -871,10 +953,11 @@ fn ratio_1ps(s: f64) -> DoubleDouble {
 
 /// Inverse hyperbolic tangent
 ///
-/// `atanh(x) = ½·ln((1 + x)/(1 − x))` for `|x| < 1`, odd.  Both `1 ± x` are
-/// formed exactly as double-doubles (2Sum) and divided in double-double, so the
-/// log argument keeps full precision; [`atanh_rounded`] then gives the logarithm
-/// (and routes small `|x|` to the result-anchored [`atanh_small_accurate`]).
+/// `atanh(x) = ½·ln((1 + x)/(1 − x))` for `|x| < 1`, odd.  For `|x| < ATANH_SMALL`
+/// the cheap result-anchored series [`atanh_small`] applies (no division, no
+/// `ln`); otherwise both `1 ± x` are formed exactly as double-doubles (2Sum) and
+/// divided in double-double — so the log argument keeps full precision — and
+/// [`atanh_rounded`] gives the logarithm.
 #[must_use]
 #[inline]
 pub fn atanh(x: f64) -> f64 {
@@ -887,14 +970,117 @@ pub fn atanh(x: f64) -> f64 {
                 return x;
             }
 
-            // (1 + |x|)/(1 − |x|) in double-double, then ½·ln of it.  The lean
-            // fast leg is gated; on a straddle the accurate leg is the
-            // result-anchored series for small |x|, else the `dint` log.
-            let u = ratio_1ps(s);
-            atanh_rounded(u, s).copysign(x)
+            let magnitude = if s < ATANH_SMALL {
+                // Cheap direct series, gated; straddle → result-anchored series.
+                atanh_small(s)
+            } else {
+                // (1 + |x|)/(1 − |x|) in double-double, then ½·ln of it.  The
+                // lean fast leg is gated; on a straddle the `dint` log takes over.
+                atanh_rounded(ratio_1ps(s))
+            };
+            magnitude.copysign(x)
         }
         Some(Ordering::Equal) => f64::INFINITY.copysign(x),
         // |x| > 1 is outside the domain; NaN (the `None` case) propagates.
         _ => f64::NAN,
+    }
+}
+
+/// MPFR-certified soundness of the small-`|x|` fast-leg Ziv gates.  A gate must
+/// exceed the leg's true error with margin (here ≥2×), or a confident `lo == hi`
+/// could certify a value on the wrong side of a rounding boundary.  Run with
+/// `--features mpfr`.
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Worst-case `|leg(x) − f(x)| / gate(x)` over `[lo, hi]` vs a 250-bit MPFR
+    /// reference `f`, with `leg` the (folded) double-double the Ziv test actually
+    /// sees and `gate` its half-width.  A ratio `< 0.5` everywhere certifies the
+    /// 2× soundness margin.  Returns `(worst_ratio, worst_x)`.
+    fn worst_ratio(
+        lo: f64,
+        hi: f64,
+        n: u64,
+        leg: impl Fn(f64) -> DoubleDouble,
+        gate: impl Fn(f64) -> f64,
+        f: impl Fn(&Float) -> Float,
+    ) -> (f64, f64) {
+        let (lb, hb) = (lo.to_bits(), hi.to_bits());
+        let mut worst = 0.0_f64;
+        let mut worst_x = lo;
+        for i in 0..n {
+            let b = lb + mix(i) % (hb - lb);
+            let x = f64::from_bits(b);
+            let e = leg(x);
+            let got = Float::with_val(250, e.high) + Float::with_val(250, e.low);
+            let truth = f(&Float::with_val(250, x));
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / gate(x);
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        (worst, worst_x)
+    }
+
+    /// The [`atanh_small`] gate must cover [`atanh_small_eval`]'s true error
+    /// (folded `high + low`, exactly as the Ziv test reads it) over its operating
+    /// range `[2⁻²⁷, ATANH_SMALL)` — including the tiny-`|x|` near-ties where the
+    /// `FLOOR·|x|` term carries the anchor fold's dropped `tail.low`.
+    #[test]
+    fn atanh_small_leg_is_sound() {
+        let gate = |x: f64| {
+            let x2 = x * x;
+            x * crate::fast_mul_add(x2 * x2, ATANH_SMALL_ZIV_REL, ATANH_SMALL_ZIV_FLOOR)
+        };
+        let (worst, x) = worst_ratio(
+            7.450_580_596_923_828e-9,
+            ATANH_SMALL,
+            8_000_000,
+            atanh_small_eval,
+            gate,
+            |x| x.clone().atanh(),
+        );
+        println!("atanh_small_eval: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "atanh_small gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Same check for `asinh`'s small-`|x|` fast leg ([`ASINH_S_FAST`]), gate
+    /// `ASINH_SMALL_ZIV_SCALE · |x|³`.
+    #[test]
+    fn asinh_small_leg_is_sound() {
+        let leg = |x: f64| {
+            let v = x * x;
+            let tail = (x * v) * crate::poly(v, &ASINH_S_FAST);
+            fast_sum(x, tail)
+        };
+        let (worst, x) = worst_ratio(
+            7.450_580_596_923_828e-9,
+            ASINH_SMALL,
+            8_000_000,
+            leg,
+            |x| ASINH_SMALL_ZIV_SCALE * (x * x * x),
+            |x| x.clone().asinh(),
+        );
+        println!("asinh_small leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "asinh_small gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
     }
 }
