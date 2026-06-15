@@ -228,6 +228,20 @@ const LN2_OVER_4096_LO: f64 = 4.444912105723013e-13;
 /// leg's `2⁻⁶⁴` budget.
 const EXP_FAST3_COEFFS: [f64; 4] = [1.0, 0.5, 0.16666666666666666, 0.041666666666666664];
 
+/// Degree-3 plain-`f64` coefficients of `(10ᵟ − 1)/δ = ∑ ln10ᵏ⁺¹·δᵏ/(k+1)!`,
+/// low-degree first — the base-10 counterpart of [`EXP_FAST3_COEFFS`] for
+/// [`exp10`]'s fast leg.  Reducing `10ˣ` directly in base 10 (`δ = x −
+/// t·log₁₀(2)/4096`, `|δ| ≤ log₁₀(2)/8192 ≈ 2⁻¹⁴·⁷`) and baking `ln10` into the
+/// polynomial avoids forming the double-double `x·ln10` the old base-`e` reduction
+/// needed.  The `δ⁴` truncation contributes `≈2⁻⁷⁵` to `fl` — far under the leg's
+/// `2⁻⁶⁴` budget, so exact Taylor coefficients suffice (no minimax tweak).
+const EXP10_FAST3_COEFFS: [f64; 4] = [
+    2.302585092994046,
+    2.650949055239199,
+    2.034678592293476,
+    1.171255148912267,
+];
+
 /// Ziv gate for [`exp`]'s two-level fast leg.
 ///
 /// [`exp_two_level_fast`] is ≈2⁻⁶⁴ relative (theoretical worst ≈2⁻⁶⁴·⁷, measured
@@ -487,6 +501,17 @@ fn exp_two_level_reduce(x: f64) -> (i64, f64) {
 /// the reuse consumers (`exp2`/`expm1`/`sinh`/`cosh`).
 #[inline]
 fn exp_two_level_fold(t: i64, dx: f64) -> (f64, f64, i64) {
+    two_level_fold(t, dx, &EXP_FAST3_COEFFS)
+}
+
+/// Shared core of the lean two-level fold: returns `(th, fl, q)` with
+/// `(th + fl)·2`<sup>`q`</sup> the function value, where `th = 2`<sup>`j/4096`</sup>`
+/// ∈ [1, 2)`, `q = t >> 12`, `j = t & 4095`.  `dx` is the reduced residual and
+/// `coeffs` the polynomial for `(bᵈˣ − 1)/dx` (base `e` for [`exp`]/[`exp2`] via
+/// [`EXP_FAST3_COEFFS`], base 10 for [`exp10`] via [`EXP10_FAST3_COEFFS`], where
+/// `dx = δ` is the base-10 residual and `coeffs` carries `ln10`).
+#[inline]
+fn two_level_fold<const N: usize>(t: i64, dx: f64, coeffs: &[f64; N]) -> (f64, f64, i64) {
     let i0 = ((t >> 6) & 63) as usize;
     let i1 = (t & 63) as usize;
     let q = t >> 12;
@@ -501,10 +526,10 @@ fn exp_two_level_fold(t: i64, dx: f64) -> (f64, f64, i64) {
         low: t1l,
     };
 
-    // `exp(dx) − 1 = dx · p(dx)`; fold `th·(exp(dx) − 1)` into the table low word.
-    // Dropping the `tl·(exp(dx) − 1) ≈ 2⁻⁶⁶` cross term keeps the leg under its
+    // `bᵈˣ − 1 = dx · p(dx)`; fold `th·(bᵈˣ − 1)` into the table low word.
+    // Dropping the `tl·(bᵈˣ − 1) ≈ 2⁻⁶⁶` cross term keeps the leg under its
     // Ziv budget thanks to the finer table.
-    let p = crate::poly(dx, &EXP_FAST3_COEFFS);
+    let p = crate::poly(dx, coeffs);
     let fl = crate::fma(table.high * dx, p, table.low);
     (table.high, fl, q)
 }
@@ -1061,31 +1086,29 @@ pub fn exp10(x: f64) -> f64 {
         return 0.0;
     }
 
-    // 10^x = exp(x·ln10).  Two-level reduce the base-`e` exponent `w = x·ln10`:
-    // `t = round(4096·x·log2(10))`, residual `dx = w − t·ln2/4096`, `|dx| ≤ ln2/8192`.
-    // Unlike `exp`/`exp2`, `w` is not exact, so it is carried as a double-double to
-    // form `dx`; the cheap two-level fold (degree-3 f64 tail, no dd × dd) then
-    // replaces the N=128 `dd × dd` table-fold the old reduction routed through.
+    // Reduce `10ˣ` directly in base 10 (like the accurate path, and CORE-MATH's
+    // fast leg): `t = round(4096·x·log2(10))`, residual `δ = x − t·log₁₀(2)/4096`,
+    // `|δ| ≤ log₁₀(2)/8192`.  The fold then evaluates `10^δ` with [`EXP10_FAST3_COEFFS`]
+    // (`ln10` baked in), so no double-double `x·ln10` is formed — `δ` costs two FMAs
+    // instead of the old base-`e` reduction's `from_product` + four-FMA chain.
     let scaled = (x * N_LOG2_10_4096).round_ties_even();
 
-    // SAFETY: `|x| < 324`, so `|scaled| < 2^22`.
+    // SAFETY: `|x| < 324`, so `|scaled| < 324·N_LOG2_10_4096 < 2²³`.
     let t = unsafe { scaled.to_int_unchecked::<i64>() };
 
-    // `w = x·ln10` as a double-double (`from_product` gives the exact `x·LN10_HI`
-    // tail; `LN10_LO` finishes the low word).
-    let w = DoubleDouble::from_product(x, LN10_HI);
-    let wl = crate::fma(x, LN10_LO, w.low);
-
-    // `dx = (w.high − scaled·HI) + (wl − scaled·LO)` as one f64.  `scaled·HI` is
-    // exact (`HI` has 24 trailing zero bits, `|scaled| < 2²²`) and cancels against
-    // `w.high` down to `|dx|` scale (Sterbenz), so the FMA is exact.
-    let hi = crate::fma(-scaled, LN2_OVER_4096_HI, w.high);
-    let dx = hi + crate::fma(-scaled, LN2_OVER_4096_LO, wl);
+    // `δ = (x − scaled·HI) + scaled·MID` as one f64 (`log₁₀(2)/4096 = HI − MID − LO`,
+    // so the residual *adds* `MID`/`LO`, mirroring the accurate path's `dx0 + dxl`).
+    // `scaled·HI` is exact (`HI` has 23 trailing zero bits, `|scaled| < 2²³`) and
+    // cancels against `x` down to `|δ|` scale (Sterbenz), so the first FMA is exact;
+    // the second carries `MID`.  The dropped `scaled·LO ≈ 2⁻⁷⁸` rides far below the
+    // leg's budget.
+    let dh = crate::fma(-scaled, LOG10_2_OVER_4096_HI, x);
+    let delta = crate::fma(scaled, LOG10_2_OVER_4096_MID, dh);
 
     // Fast path: the two-level lean fold, gated like `exp`.  `q ≥ −1021` keeps the
     // subnormal transition (where the mantissa's normalization can shift `q`) on the
     // accurate path.
-    let (th, fl, q) = exp_two_level_fold(t, dx);
+    let (th, fl, q) = two_level_fold(t, delta, &EXP10_FAST3_COEFFS);
     if q >= -1021 {
         let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
         let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);

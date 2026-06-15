@@ -128,6 +128,13 @@ print(f"\nconst EXP_FAST3_COEFFS: [f64; 4] = [")
 for k in range(4):
     print(f"    {hexf(f64(mpf(1) / factorial(k + 1)))},")
 print("];")
+# Base-10 counterpart for exp10's fast leg, reduced directly in base 10:
+# p10(d) = (10^d - 1)/d = sum ln10^(k+1)·d^k/(k+1)!, degree 3 over |d| <= log10(2)/8192.
+# Baking ln10 into the poly avoids forming the DD x·ln10; truncation ~2^-75 in result.
+print(f"\nconst EXP10_FAST3_COEFFS: [f64; 4] = [")
+for k in range(4):
+    print(f"    {hexf(f64(ln10 ** (k + 1) / factorial(k + 1)))},")
+print("];")
 for name, denom in (("EXP2_T0", 64), ("EXP2_T1", N2)):
     print(f"\nconst {name}: [(f64, f64); 64] = [")
     for i in range(64):
