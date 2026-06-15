@@ -539,13 +539,21 @@ fn payne_hanek(x: f64) -> (i64, DoubleDouble) {
     // round-to-nearest: a negative signed fraction means the integer rounded up.
     let quadrant = q.wrapping_sub((frac >> 127) as i64);
 
-    // r = (frac / 2¹²⁸) · π/2 ∈ [-π/4, π/4], as a double-double.
-    let hi = frac as f64;
-    let lo = (frac - hi as i128) as f64;
-    let scale = crate::exp2i(-128);
+    // r = (frac / 2¹²⁸) · π/2 ∈ [-π/4, π/4], as a double-double.  Split the
+    // 128-bit signed `frac` into two limbs (`frac = h·2⁶⁴ + l` in two's
+    // complement) and convert with native `i64`/`u64` → `f64`: a direct
+    // `frac as f64` (and the residual's `as i128`) lowers to the slow
+    // `__floattidf`/`__fixdfti` compiler-rt libcalls.  `hf` carries the top
+    // ≈53 bits; `lf` folds `h`'s lost low bits and `l` into the next ≈53, so the
+    // pair keeps the same ≈2⁻¹⁰⁶ precision the i128 casts gave.
+    let h = (frac >> 64) as i64;
+    let l = frac as u64;
+    let hf = h as f64;
+    let hr = h.wrapping_sub(hf as i64);
+    let lf = crate::fma(hr as f64, crate::exp2i(64), l as f64);
     let r = DoubleDouble {
-        high: hi * scale,
-        low: lo * scale,
+        high: hf * crate::exp2i(-64),
+        low: lf * crate::exp2i(-128),
     } * PIO2;
 
     (quadrant, r)
