@@ -473,8 +473,49 @@ pub fn tanh(x: f64) -> f64 {
         return tanh_small(s).copysign(x);
     }
 
+    // |x| ∈ [⅛, 20): tanh = E/(E + 2), E = e²ˣ − 1 = m·2^q − 1.  Fast path: the
+    // lean `e²ˣ` mantissa ([`exp_two_level_fast`]), the same `E/(E + 2)` as the
+    // accurate leg, accepted by a Ziv test; else [`tanh_accurate`].
+    let (m, q) = exp_two_level_fast(2.0 * s);
+    let result = tanh_combine(m, q);
+    let lo = result.high + (result.low - TANH_ZIV_EPS);
+    let hi = result.high + (result.low + TANH_ZIV_EPS);
+    if lo == hi {
+        return lo.copysign(x);
+    }
+
     tanh_accurate(s).copysign(x)
 }
+
+/// Form `tanh = E/(E + 2)` from `e²ˣ = 2`<sup>`q`</sup>`·m`, with `E = e²ˣ − 1`.
+/// Shared by [`tanh`]'s fast leg and [`tanh_accurate`] — only the source of
+/// `(m, q)` (lean vs ≈2⁻¹⁰⁷ mantissa) differs.
+///
+/// `E/(E + 2)` never cancels for `2x ≥ ¼` (`E ≥ 0.28`, `E + 2` the larger), so
+/// the double-double carries the result.  The `− 1` is exact only in the low
+/// word once `q` is large (`tanh → 1`), but there the result error rides
+/// `(1 − tanh²)/2 → 0`, so the leg stays accurate.
+#[inline]
+fn tanh_combine(m: DoubleDouble, q: i64) -> DoubleDouble {
+    let e = m * crate::exp2i(q)
+        + DoubleDouble {
+            high: -1.0,
+            low: 0.0,
+        };
+    e * (e + DoubleDouble {
+        high: 2.0,
+        low: 0.0,
+    })
+    .recip()
+}
+
+/// Ziv gate for [`tanh`]'s fast leg, as an absolute bound on the result.
+///
+/// `tanh = 1 − 2/(e²ˣ + 1)`, so a relative error `δ` in `e²ˣ` propagates as
+/// `δ·(1 − tanh²)/2 ≤ δ/2`.  The fast `e²ˣ` mantissa slips ≈2⁻⁶⁴·⁷ relative
+/// (the [`HYP_ZIV_EPS`] leg), so the result is good to ≈2⁻⁶⁵·⁷ absolute; the
+/// `E/(E + 2)` double-double adds only ≈2⁻¹⁰⁶.  `2⁻⁶²` keeps a >10× margin.
+const TANH_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
 
 /// Upper limit of `tanh`'s result-anchored small-`|x|` series leg.
 const TANH_SMALL: f64 = 0.125;
@@ -596,18 +637,7 @@ fn tanh_accurate(x: f64) -> f64 {
     }
 
     let (m, q) = exp_two_level_mantissa_accurate(2.0 * x);
-    let e = m * crate::exp2i(q)
-        + DoubleDouble {
-            high: -1.0,
-            low: 0.0,
-        };
-    let result = e
-        * (e + DoubleDouble {
-            high: 2.0,
-            low: 0.0,
-        })
-        .recip();
-    round_general_signed64(result, 0)
+    round_general_signed64(tanh_combine(m, q), 0)
 }
 
 /// Upper limit of the result-anchored small-`|x|` series leg for `atanh`
