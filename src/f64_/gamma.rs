@@ -350,6 +350,48 @@ fn poly_td(u: TripleDouble, coeffs: &[TripleDouble]) -> TripleDouble {
     buf[0]
 }
 
+/// Evaluate `Σ coeffs[k]·xᵏ` at the double-double `x`, reading each
+/// [`TripleDouble`] coefficient as its leading double-double (`high + mid`) —
+/// the cheap double-double analogue of [`poly_td`], Estrin-scheme.
+///
+/// Used by the root-anchored fast leg ([`lgamma_root_fast`]): it walks the same
+/// result-anchored series the accurate path evaluates in triple-double, but in a
+/// double-double tier that is far cheaper and still ≈2⁻¹⁰⁰ relative — enough for
+/// the relative Ziv gate to certify the tiny `ln Γ` near `z = 1, 2`.  The in-place
+/// fold is safe for the same reason as [`poly_td`]'s (each write reads only
+/// higher indices).
+#[inline]
+fn poly_dd_of_td(x: DoubleDouble, coeffs: &[TripleDouble]) -> DoubleDouble {
+    /// Scratch capacity; the largest caller ([`LGAMMA_ROOT1_TD`]) has 42 terms.
+    const CAP: usize = 44;
+
+    let n = coeffs.len();
+    debug_assert!(n <= CAP);
+    let mut buf = [ZERO; CAP];
+    for (b, c) in buf[..n].iter_mut().zip(coeffs) {
+        *b = DoubleDouble {
+            high: c.high,
+            low: c.mid,
+        };
+    }
+
+    let mut len = n;
+    let mut power = x;
+    while len > 1 {
+        let half = len.div_ceil(2);
+        for i in 0..half {
+            buf[i] = if 2 * i + 1 < len {
+                buf[2 * i] + power * buf[2 * i + 1]
+            } else {
+                buf[2 * i]
+            };
+        }
+        len = half;
+        power = power * power;
+    }
+    buf[0]
+}
+
 /// `∏_{m=0}^{n−1} (z + first + step·m)` as a triple-double, on four parallel lanes
 ///
 /// The triple-double analogue of [`recurrence_product_z`]: each factor
@@ -1305,6 +1347,16 @@ fn lgamma_stirling_ziv(t: f64, inv_t: f64) -> f64 {
 /// `ln Γ` is O(1), which is exactly this moderate band.
 const LGAMMA_TABLE_ERR: f64 = 2.168404344971009e-19; // 2^-62
 
+/// *Relative* Ziv gate for the root-anchored fast leg ([`lgamma_root_fast`])
+///
+/// Near `z = 1, 2` the result is tiny, so [`LGAMMA_TABLE_ERR`]'s *absolute* gate
+/// is useless there; the dd Estrin evaluation of the result-anchored series is
+/// instead ≈2⁻¹⁰⁰ relative, with no cancellation (the linear term dominates).
+/// `2⁻⁹⁵` covers it with margin — verified `> 2×` sound across both root windows
+/// in `lgamma_root_fast_leg_is_sound` — and stays far below ½ ulp, so the gate
+/// certifies essentially every input the leg runs on.
+const LGAMMA_ROOT_ZIV_REL: f64 = crate::exp2i(-95);
+
 /// `|z|` ceiling for the [`lgamma_fast`] Ziv leg
 ///
 /// Above it the largest log multiplier `t` would push `ln_fast`'s absolute slack
@@ -1885,6 +1937,42 @@ fn lgamma_stirling_fast(z: f64, tail: f64) -> DoubleDouble {
         })
 }
 
+/// `ln Γ(z)` for `z` within [`LGAMMA_ROOT_WINDOW`] of a root (`z ≈ 1` or `z ≈ 2`),
+/// the root-anchored fast leg with its *relative* Ziv gate; `None` off the windows
+///
+/// At the roots `ln Γ → 0`, so the central-table leg's *absolute*
+/// [`LGAMMA_TABLE_ERR`] gate dwarfs the tiny result and never certifies — every
+/// such input falls to the ~3700 ns triple-double path.  The result-anchored
+/// series `ln Γ(1+x) = Σ cₖ xᵏ` (resp. `ln Γ(2+x)`) carries that small value with
+/// no cancellation (the linear term dominates); evaluated in double-double it is
+/// ≈2⁻¹⁰⁰ relative, so [`LGAMMA_ROOT_ZIV_REL`] times `|value|` certifies it.
+/// `x = z − 1` (resp. `z − 2`) is exact by Sterbenz (`z ∈ [½, 2]` resp. `[1, 4]`,
+/// supersets of the windows).  This is the same series and the same `⅛` windows
+/// the accurate [`lgamma_pos_td`] uses, lifted down to the cheap dd tier.
+#[inline]
+fn lgamma_root_fast(z: f64) -> Option<(DoubleDouble, f64)> {
+    let series = if (z - 1.0).abs() < LGAMMA_ROOT_WINDOW {
+        poly_dd_of_td(
+            DoubleDouble {
+                high: z - 1.0,
+                low: 0.0,
+            },
+            &LGAMMA_ROOT1_TD,
+        )
+    } else if (z - 2.0).abs() < LGAMMA_ROOT_WINDOW {
+        poly_dd_of_td(
+            DoubleDouble {
+                high: z - 2.0,
+                low: 0.0,
+            },
+            &LGAMMA_ROOT2_TD,
+        )
+    } else {
+        return None;
+    };
+    Some((series, LGAMMA_ROOT_ZIV_REL * series.high.abs()))
+}
+
 /// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg, with its error bound
 ///
 /// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½` (the gate comes from
@@ -1901,6 +1989,11 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
         return (LN_PI + neg(ln_fast_sum(abs_sinpi_dd(z)) + pos), gate);
     }
     if z < LGAMMA_FAST_CUTOFF {
+        // Near the roots `z = 1, 2` the central table cancels to a tiny result the
+        // absolute gate can't certify; the root-anchored series handles those.
+        if let Some(root) = lgamma_root_fast(z) {
+            return root;
+        }
         return (
             lgamma_table_fast(DoubleDouble { high: z, low: 0.0 }),
             LGAMMA_TABLE_ERR,
@@ -2840,6 +2933,54 @@ mod ziv_soundness {
             worst_ratio < 0.5,
             "reflection fast leg error reaches {worst_ratio:.3}× its gate at z={worst_x:e} \
              — the LGAMMA_SIN_RELIABLE guard is unsound"
+        );
+    }
+
+    /// The **root-anchored** fast leg (`z` within ⅛ of 1 or 2) must be sound: its
+    /// *relative* gate [`LGAMMA_ROOT_ZIV_REL`] times `|value|` has to exceed the dd
+    /// series' true absolute error with margin, or a confident `lo == hi` could
+    /// certify a value on the wrong side of a boundary.  Near the roots `ln Γ → 0`
+    /// so this gate is the only guard between the tiny result and a mis-round;
+    /// sweep both windows (skipping the exact zeros `z = 1, 2`) and require the
+    /// gate to clear `2×` the worst |err| against a 300-bit MPFR `ln|Γ|`.
+    #[test]
+    fn lgamma_root_fast_leg_is_sound() {
+        let mut worst_ratio = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for k in 0..400_000u64 {
+            let h = mix(k);
+            // Uniform over the two ⅛-windows [0.875, 1.125] ∪ [1.875, 2.125].
+            let center = if h & 1 == 0 { 1.0 } else { 2.0 };
+            let u = (h >> 1) as f64 / (1u64 << 63) as f64; // [0, 1)
+            // Bound the product to a local so this stays a plain add (no `mul_add`
+            // shape for `suboptimal_flops`); `off ∈ [−⅛, ⅛)`.
+            let off = (u - 0.5) * (LGAMMA_ROOT_WINDOW * 2.0);
+            let z = center + off;
+            if z == 1.0 || z == 2.0 {
+                continue;
+            }
+            // The exact window boundary (`|z − center| = ⅛`) falls to the table
+            // leg, like the real `lgamma_fast` does — skip it here.
+            let Some((value, gate)) = lgamma_root_fast(z) else {
+                continue;
+            };
+            let got = Float::with_val(300, value.high) + Float::with_val(300, value.low);
+            let truth = Float::with_val(300, z).ln_abs_gamma().0;
+            if !truth.is_finite() {
+                continue;
+            }
+            let abs_err = Float::with_val(300, &got - &truth).abs().to_f64();
+            let ratio = abs_err / gate;
+            if ratio > worst_ratio {
+                worst_ratio = ratio;
+                worst_x = z;
+            }
+        }
+        println!("lgamma root fast leg: worst |err|/gate = {worst_ratio:.3} at z={worst_x:e}");
+        assert!(
+            worst_ratio < 0.5,
+            "root fast leg error reaches {worst_ratio:.3}× its gate at z={worst_x:e} \
+             — LGAMMA_ROOT_ZIV_REL is unsound"
         );
     }
 
