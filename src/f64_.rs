@@ -23,7 +23,7 @@ pub use erf::{erf, erfc};
 pub use exp::{exp, exp2, exp10, expm1};
 pub use gamma::{lgamma, tgamma};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
-pub use log::{ln_dd, ln_fast, ln_fast_scaled, log, log1p, log2, log10};
+pub use log::{ln_dd, ln_dd_fast, ln_fast, ln_fast_scaled, log, log1p, log2, log10};
 pub use misc::{cbrt, fma, frexp, hypot, ldexp, round};
 pub use trig::{cos, sin, sincos, tan};
 

@@ -1175,6 +1175,30 @@ pub fn ln_fast_scaled(x: f64, k: i64) -> DoubleDouble {
     fast_sum(high, low)
 }
 
+/// Lean `ln(s)` for a finite double-double `s > 1`, as a raw unnormalized pair
+/// (the form the in-file Ziv gates consume — see [`ln_exact_assemble`]).
+///
+/// `ln(s.high + s.low) = ln(s.high) + ln(1 + s.low/s.high)`.  Rather than form
+/// the linear correction `s.low/s.high` with a hardware division, fold `s.low`
+/// straight into the exact-`z` reduction the way [`log1p`] folds its tail: with
+/// `δ = s.low·2⁻ᵉ` the true mantissa is `m + δ`, so the reduced argument gains
+/// `cell.r·δ`, whose image through `ln` is `cell.r·δ·(1 − z)` up to a dropped
+/// `cell.r·δ·z² ≲ 2⁻⁶⁷` — inside the inverse-hyperbolic gate.  The inverse-
+/// hyperbolic callers (`atanh`, and `asinh`/`acosh` via `ln_sqrt_rounded`) all
+/// pass `s > 1`, so `e ≥ 0` and `2⁻ᵉ` never overflows.
+#[inline]
+pub fn ln_dd_fast(s: DoubleDouble) -> DoubleDouble {
+    let (e, cell, z) = ln_exact_reduce(s.high);
+    let delta = s.low * crate::exp2i(-e);
+    let dz = cell.r * delta;
+    let dz = crate::fast_mul_add(-dz, z, dz);
+    let DoubleDouble { high, low } = ln_exact_assemble(e as f64, cell, z);
+    DoubleDouble {
+        high,
+        low: low + dz,
+    }
+}
+
 /// The natural logarithm
 #[must_use]
 #[inline]

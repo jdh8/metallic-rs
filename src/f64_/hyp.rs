@@ -3,7 +3,7 @@ use super::double::{
     sqrt_dd,
 };
 use super::exp::{exp_two_level_fast, exp_two_level_mantissa_accurate};
-use super::{ln_fast, ln_fast_scaled};
+use super::{ln_dd_fast, ln_fast_scaled};
 use core::cmp::Ordering;
 
 /// `1` as a double-double.
@@ -12,42 +12,29 @@ const ONE: DoubleDouble = DoubleDouble {
     low: 0.0,
 };
 
-/// Lean leading `ln(s.high) + s.low/s.high` for the inverse-hyperbolic fast leg,
-/// using the fast [`ln_fast`] kernel (<2⁻⁶⁶ absolute).  The linear correction
-/// `s.low/s.high ≈ 2⁻⁵²` is all that survives of `ln(1 + s.low/s.high)`; on a Ziv
-/// straddle the sound 128-bit [`super::dint::ln_dd_scaled`] takes over.
-#[inline]
-fn ln_sum_fast(s: DoubleDouble) -> DoubleDouble {
-    ln_fast(s.high)
-        + DoubleDouble {
-            high: s.low / s.high,
-            low: 0.0,
-        }
-}
-
 /// Ziv gate for the inverse-hyperbolic fast path, as an absolute bound on the
 /// result (`scale · ln(u)`).
 ///
-/// `ln_fast` differs from the accurate `ln_dd` by <2⁻⁶⁶ *absolute* whatever the
-/// result's magnitude — its exact-`z` reduction commits no error, so only the
-/// plain-`f64` `ln(1+z)` tail carries the lean leg's error (see `LN_ZIV_EPS` in
-/// `log.rs`) — and `½·ln` (atanh) only halves it.  `2⁻⁶³` keeps an 8× margin.
-/// Being absolute, the gate
-/// forces the accurate fallback only when `|result| ≲ 2⁻¹⁰`, where the lean kernel
-/// cannot round correctly anyway.
+/// [`super::ln_dd_fast`] differs from the accurate `ln_dd` by <2⁻⁶⁵ *absolute*
+/// whatever the result's magnitude — its exact-`z` reduction commits no error, so
+/// only the plain-`f64` `ln(1+z)` tail (see `LN_ZIV_EPS` in `log.rs`) plus the
+/// `≲2⁻⁶⁷` slip of folding `s.low` into the reduction carry the lean leg's error
+/// — and `½·ln` (atanh) only halves it.  `2⁻⁶³` keeps a >4× margin.  Being
+/// absolute, the gate forces the accurate fallback only when `|result| ≲ 2⁻¹⁰`,
+/// where the lean kernel cannot round correctly anyway.
 const IHYP_ZIV_EPS: f64 = 1.084_202_172_485_504_4e-19; // 2^-63
 
 /// Correctly-rounded `atanh(s) = ½·ln(u)` for `u = (1 + s)/(1 − s)` and
 /// `ATANH_SMALL ≤ s < 1`, via a two-step Ziv test.  (Smaller `s` takes the cheap
 /// [`atanh_small`] series instead, so this leg is never reached there.)
 ///
-/// The lean `½·[ln_sum_fast]` is accepted unless it straddles a rounding
+/// The lean `½·[super::ln_dd_fast]` is accepted unless it straddles a rounding
 /// boundary; on a straddle the sound 128-bit [`super::dint::ln_dd_scaled`] takes
-/// over.  The lean leg is `<2⁻⁶⁶` absolute, so its Ziv gate holds the straddle
+/// over.  The lean leg is `<2⁻⁶⁵` absolute, so its Ziv gate holds the straddle
 /// rate to `≈0.5%`.
 #[inline]
 fn atanh_rounded(u: DoubleDouble) -> f64 {
-    let DoubleDouble { high, low } = ln_sum_fast(u) * 0.5;
+    let DoubleDouble { high, low } = ln_dd_fast(u) * 0.5;
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
     if lo == hi {
@@ -60,15 +47,15 @@ fn atanh_rounded(u: DoubleDouble) -> f64 {
 /// Correctly-rounded `ln(x + c)` for the `acosh`/`asinh` argument, where
 /// `c = √(x² ∓ 1)` is a double-double and `x > 0`.
 ///
-/// The fast leg gates the lean `ln_sum_fast(x + c)`; on a straddle the accurate
-/// leg feeds *four* words — `x` and a triple-word `√d` — to the 128-bit `dint`
-/// log.  The double-double sqrt (≈2⁻¹⁰⁵, ≈2⁻⁵⁷ ulp through `ln`) is one bit shy
-/// of the corpus's hardest ties (≈2⁻⁶²), so a third sqrt word `corr` is refined
-/// in and carried alongside `c.high`/`c.low`.
+/// The fast leg gates the lean `super::ln_dd_fast(x + c)`; on a straddle the
+/// accurate leg feeds *four* words — `x` and a triple-word `√d` — to the 128-bit
+/// `dint` log.  The double-double sqrt (≈2⁻¹⁰⁵, ≈2⁻⁵⁷ ulp through `ln`) is one bit
+/// shy of the corpus's hardest ties (≈2⁻⁶²), so a third sqrt word `corr` is
+/// refined in and carried alongside `c.high`/`c.low`.
 #[inline]
 fn ln_sqrt_rounded(x: f64, c: DoubleDouble, d: DoubleDouble) -> f64 {
     let u = c + DoubleDouble { high: x, low: 0.0 };
-    let DoubleDouble { high, low } = ln_sum_fast(u);
+    let DoubleDouble { high, low } = ln_dd_fast(u);
     let lo = high + (low - IHYP_ZIV_EPS);
     let hi = high + (low + IHYP_ZIV_EPS);
     if lo == hi {
@@ -1080,6 +1067,56 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "asinh_small gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// The inverse-hyperbolic main leg's gate ([`IHYP_ZIV_EPS`]) must cover the
+    /// error of [`super::ln_dd_fast`] — in particular the `≲2⁻⁶⁷` slip from
+    /// folding the double-double's low word into the exact-`z` reduction (which
+    /// replaced the old `s.low/s.high` division).  Checked through `atanh`'s
+    /// consumer (`u = (1+x)/(1−x)` via [`ratio_1ps`], then `½·ln u`), where the
+    /// log argument reaches the widest magnitudes over `[ATANH_SMALL, 1)`.
+    #[test]
+    fn atanh_main_leg_is_sound() {
+        let leg = |x: f64| ln_dd_fast(ratio_1ps(x)) * 0.5;
+        let (worst, x) = worst_ratio(
+            ATANH_SMALL,
+            0.999_999_999,
+            8_000_000,
+            leg,
+            |_| IHYP_ZIV_EPS,
+            |x| x.clone().atanh(),
+        );
+        println!("atanh main leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "atanh main-leg gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Same check for the `asinh`/`acosh` middle band ([`ln_sqrt_rounded`]):
+    /// `ln(x + √(x² + 1))` via [`super::ln_dd_fast`], gate [`IHYP_ZIV_EPS`], over
+    /// `[ASINH_SMALL, LARGE_IHYP]`.
+    #[test]
+    fn asinh_main_leg_is_sound() {
+        let leg = |x: f64| {
+            let d = DoubleDouble::from_product(x, x) + ONE;
+            ln_dd_fast(sqrt_dd(d) + DoubleDouble { high: x, low: 0.0 })
+        };
+        let (worst, x) = worst_ratio(
+            ASINH_SMALL,
+            LARGE_IHYP,
+            8_000_000,
+            leg,
+            |_| IHYP_ZIV_EPS,
+            |x| x.clone().asinh(),
+        );
+        println!("asinh main leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "asinh main-leg gate covers only {:.2}× the slip at x={x:e}",
             1.0 / worst
         );
     }
