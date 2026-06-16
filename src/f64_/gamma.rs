@@ -2682,12 +2682,22 @@ mod ziv_soundness {
         // Cover the whole rescale-free range with margin: `i = round(z − 2.875)`
         // and `|i| ≤ TGAMMA_DOWNWARD_DIRECT` downward keeps `e2 == 0`, i.e.
         // `z > 2.875 − 100`.  Stay just inside for safety.
-        let (lo, hi) = ((-97.0f64).to_bits(), 171.6f64.to_bits());
+        //
+        // The band `(−97, 171.6)` straddles zero, so sample each sign half on its
+        // own bit-monotonic range — `(−97, −0)` and `(0, 171.6)` — and pick one per
+        // draw.  A single bit-walk up from `(−97).to_bits()` instead climbs *away*
+        // from zero (`0xC058… → 0xFFFF…`) into `z ≤ −97`, where the downward
+        // recurrence loops `≈|z|` times: it once fed `fast_leg` a `−2.2e14` and spun
+        // for days.  Both endpoints stay strictly interior (the `% (b − a)` excludes
+        // `b`), matching "just inside for safety".
+        let neg = ((-0.0f64).to_bits(), (-97.0f64).to_bits());
+        let pos = (0.0f64.to_bits(), 171.6f64.to_bits());
         let mut worst = 0.0_f64;
         let mut worst_x = 0.0_f64;
         for k in 0..300_000u64 {
-            let b = lo.wrapping_add(mix(k) % hi.wrapping_sub(lo));
-            let z = f64::from_bits(b);
+            let h = mix(k);
+            let (a, b) = if h & 1 == 0 { neg } else { pos };
+            let z = f64::from_bits(a + (h >> 1) % (b - a));
             // Skip non-positive integers (poles) and the near-pole / tiny-z humps
             // where Γ spans signed zeros or the 1/z corner overflows — those never
             // reach the gate (handled by the special-case ladder).
