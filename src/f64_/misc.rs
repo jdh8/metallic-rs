@@ -39,12 +39,44 @@ pub fn cbrt(x: f64) -> f64 {
         )
     };
 
-    let magnitude = (0x2A9F_7AF1_96E8_E6E8 + magnitude / 3) as u64;
-    let y = f64::from_bits(u64_sign_bit(sign) | magnitude);
-    let y = crate::fast_mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let y = crate::fast_mul_add(1.0 / 3.0, x / (y * y) - y, y);
-    let y = y * (0.5 + 1.5 * x / crate::fast_mul_add(2.0 * y, y * y, x));
+    // Seed the *inverse* cube root `c ≈ x^(−1/3)` by the magic-constant bit trick
+    // (the exponent is negated relative to a cube-root seed), then refine it with
+    // no division at all — where the old forward Newton/Halley chain spent three.
+    // The residual `h = 1 − x·c³` drives a degree-4 correction `c·(1 − h)^(−1/3)`
+    // (the series `1 + h/3 + 2h²/9 + 14h³/81 + 35h⁴/243`, exact through `h⁴`),
+    // then one cubic Newton step `c·(1 + h/3 + 2h²/9)` lands `c` at f64 accuracy.
+    let magnitude = (0x553E_F100_0000_0000 - magnitude / 3) as u64;
+    let c = f64::from_bits(u64_sign_bit(sign) | magnitude);
+    let h = crate::fma(-x, c * c * c, 1.0);
+    let c = c * crate::poly(h, &[1.0, 1.0 / 3.0, 2.0 / 9.0, 14.0 / 81.0, 35.0 / 243.0]);
+    let h = crate::fma(-x, c * c * c, 1.0);
+    let c = c * crate::fast_mul_add(h, crate::fast_mul_add(2.0 / 9.0, h, 1.0 / 3.0), 1.0);
 
+    // Forward result `y = x·c² ≈ x^(1/3)`, then one Newton step in plain `f64` —
+    // the division-free fast leg.  `1/y² = c²` exactly in the limit (`y·c = 1`),
+    // so the Newton correction is `dy = −(y³ − x)·c²/3` with no division; `y³ − x`
+    // is formed with an exact FMA so its leading cancellation survives.  The
+    // result rides as a double-double `(high, low) = fast_sum(y, dy)`; the Ziv
+    // gate accepts it unless it straddles a rounding boundary, where the accurate
+    // double-double leg takes over.  This keeps the costly `from_quotient`/`/y`
+    // divisions off the common path entirely.
+    let c2 = c * c;
+    let y = x * c2;
+    let y2 = DoubleDouble::from_product(y, y);
+    let resid = crate::fma(y, y2.high, -x) + y * y2.low; // y³ − x
+    let dy = (-1.0 / 3.0 * c2) * resid;
+    let DoubleDouble { high, low } = fast_sum(y, dy);
+    let err = CBRT_ZIV_EPS * high.abs();
+    let lo = high + (low - err);
+    let hi = high + (low + err);
+    if lo == hi {
+        return coefficient * lo;
+    }
+
+    // Accurate leg: the correctly-rounded double-double Newton finish.  First
+    // polish `y` to ~1 ulp with one more division-free Newton step, so this rare
+    // last-resort path starts from a tighter seed than the gated leg's ~3-ulp `y`.
+    let y = crate::fast_mul_add(-(1.0 / 3.0) * c2, crate::fma(y, y * y, -x), y);
     let quotient = DoubleDouble::from_quotient(x, y) / y;
     let sum = fast_sum(2.0 * y, quotient.high);
     let sum = DoubleDouble {
@@ -54,6 +86,14 @@ pub fn cbrt(x: f64) -> f64 {
 
     coefficient * (sum.high + sum.low)
 }
+
+/// Ziv gate for `cbrt`'s division-free fast leg, as a *relative* bound on the
+/// result.  The fast leg is one plain-`f64` Newton step from a ~3-ulp seed, so
+/// its error rides the Newton residual `≈(3 ulp)² ≈ 2⁻¹⁰⁰` plus the `f64`
+/// rounding of `dy`; `2⁻⁹⁵` keeps a >20× margin (certified by
+/// `ziv_soundness::cbrt_fast_leg_is_sound`).  On a straddle the accurate
+/// double-double leg rounds correctly.
+const CBRT_ZIV_EPS: f64 = 2.524_354_896_707_238_4e-29; // 2⁻⁹⁵
 
 /// Hypotenuse of a right-angled triangle with sides `x` and `y`
 ///
@@ -480,3 +520,66 @@ const _: () = {
         n -= 1;
     }
 };
+
+/// MPFR-certified soundness of `cbrt`'s fast-leg Ziv gate.  The gate may only
+/// confirm a rounding when its half-width [`CBRT_ZIV_EPS`] truly exceeds the
+/// fast leg's error; otherwise a confident `lo == hi` could certify a value on
+/// the wrong side of a boundary.  Run with `--features mpfr`.
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Replicates [`cbrt`]'s positive-`x` division-free fast leg (seed →
+    /// refinement → one Newton step), returning the gated double-double.
+    fn cbrt_fast_dd(x: f64) -> DoubleDouble {
+        let magnitude = (0x553E_F100_0000_0000 - (x.to_bits() as i64) / 3) as u64;
+        let c = f64::from_bits(magnitude);
+        let h = crate::fma(-x, c * c * c, 1.0);
+        let c = c * crate::poly(h, &[1.0, 1.0 / 3.0, 2.0 / 9.0, 14.0 / 81.0, 35.0 / 243.0]);
+        let h = crate::fma(-x, c * c * c, 1.0);
+        let c = c * crate::fast_mul_add(h, crate::fast_mul_add(2.0 / 9.0, h, 1.0 / 3.0), 1.0);
+        let c2 = c * c;
+        let y = x * c2;
+        let y2 = DoubleDouble::from_product(y, y);
+        let resid = crate::fma(y, y2.high, -x) + y * y2.low;
+        let dy = (-1.0 / 3.0 * c2) * resid;
+        fast_sum(y, dy)
+    }
+
+    /// Worst `|leg(x) − cbrt(x)| / (CBRT_ZIV_EPS · |result|)` over `[0.5, 4)` —
+    /// one full period of the magic-constant seed (every mantissa × exponent
+    /// mod 3, the only inputs the relative error depends on).  A ratio `< 0.5`
+    /// certifies the 2× soundness margin.
+    #[test]
+    fn cbrt_fast_leg_is_sound() {
+        let (lb, hb) = (0.5f64.to_bits(), 4.0f64.to_bits());
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..30_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb));
+            let e = cbrt_fast_dd(x);
+            let got = Float::with_val(250, e.high) + Float::with_val(250, e.low);
+            let truth = Float::with_val(250, x).cbrt();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / (CBRT_ZIV_EPS * e.high.abs());
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("cbrt fast leg: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "cbrt gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+}
