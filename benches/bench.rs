@@ -209,8 +209,18 @@ pub fn run<T>(criterion: &mut criterion::Criterion, name: &str, mut f: impl FnMu
 /// `criterion_group!` can list it), to derive the bench name from `$callback`
 /// via `stringify!`, and to accept a variable number of input ranges —
 /// everything else is the [`draw`] and [`run`] functions.
+///
+/// The first form derives the criterion name from `$callback` via `stringify!`.
+/// A second form takes an explicit `$label` string literal instead — used for
+/// per-band split benches that call the same function over different ranges and
+/// so need distinct names (e.g. `"metallic::tgamma_reflect"`).
 #[macro_export]
 macro_rules! bench {
+    ($name:ident, $label:literal, $callback:expr $(, $arg:expr)* $(,)?) => {
+        fn $name(criterion: &mut criterion::Criterion) {
+            bench::run(criterion, $label, || $callback($(bench::draw($arg)),*));
+        }
+    };
     ($name:ident, $callback:expr $(, $arg:expr)* $(,)?) => {
         fn $name(criterion: &mut criterion::Criterion) {
             bench::run(criterion, stringify!($callback), || $callback($(bench::draw($arg)),*));
