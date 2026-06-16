@@ -3,12 +3,12 @@ name: program-math-functions
 description: >-
   Methodology and metallic-rs conventions for implementing math-library
   functions from scratch in Rust — exp, log, sin, pow, erf, and friends. Use
-  when adding or improving a function under src/f32/ or src/f64/, doing argument
-  reduction, generating minimax/Remez polynomial or rational coefficients
-  (rminimax/Sollya, Remez.jl), choosing a polynomial evaluation scheme, applying
-  error-free transforms and compensated arithmetic (true FMA available), or
-  making a function correctly rounded (≤ 0.5 ulp; Table Maker's Dilemma,
-  CORE-MATH, RLIBM). Covers f32 and f64.
+  when adding or improving a function under src/f32_/ or src/f64_/, doing
+  argument reduction, generating minimax/Remez polynomial or rational
+  coefficients (rminimax/Sollya, Remez.jl), choosing a polynomial evaluation
+  scheme, applying error-free transforms and compensated arithmetic (true FMA
+  available), or making a function correctly rounded (≤ 0.5 ulp; Table Maker's
+  Dilemma, CORE-MATH, RLIBM). Covers f32 and f64.
 ---
 
 # Programming math functions
@@ -21,7 +21,7 @@ sibling C project [metallic](https://github.com/jdh8/metallic) ports *from here*
 adapting for WASM (no scalar FMA, round-to-nearest only); this skill is the Rust
 source of that lineage, distilled from
 <https://jdh8.org/how-to-program-math-functions/> and the conventions already in
-`src/f32/` and `src/f64/`.
+`src/f32_/` and `src/f64_/`.
 
 **Performance target: beat CORE-MATH.** CORE-MATH is the correctly-rounded
 reference implementation. Matching its throughput is the floor; the real goal is
@@ -56,64 +56,76 @@ below are pointers, not the whole story.
 These are facts about *this* repo; follow them so a new function looks like the
 existing ones.
 
-**Layout.** Per-type modules: `src/f32/` and `src/f64/`, each with `mod.rs`
-(public functions) and `kernel.rs` (inner approximations). The public function
-`foo` lives in `mod.rs` as a `pub fn`; its inner approximation lives in
-`kernel.rs` as a `pub fn` (e.g. `exp_slope`, `atanh`, `log2`, `exp2`, `rem_pio2`
-in `src/f32/kernel.rs` and `src/f64/kernel.rs`). f32 is mature (~28 functions);
-f64 is being built out — follow the f32 kernels and the shared `Sum` type as
-models.
+**Layout.** Per-type modules `src/f32_/` and `src/f64_/` (trailing underscore —
+the bare names `f32`/`f64` would clash with the primitive types), each a
+`name.rs` + `name/` pair, **no `mod.rs`**. Functions are grouped by family into
+files — `exp.rs`, `log.rs`, `trig.rs`, `hyp.rs`, `gamma.rs`, `misc.rs`, … — and
+`src/f64_/double.rs` holds the double-double type and bit helpers. A family file
+holds *both* the public function and its inner approximations; the public API is
+re-exported flat, libm-style, at the crate root: `crate::exp2`, `crate::log2`
+(f64 keeps the bare C name), `crate::exp2f` (f32 gets the `f` suffix). Both
+precision trees are built out and correctly rounded — study the existing family
+files and the shared `DoubleDouble` type as models.
 
-**Polynomials.** Coefficients are evaluated with `crate::poly(x, &[c0, c1, …])`
-(an alias for `fast_polynomial::poly_array`), **low-degree term first** (`c[0]`
-is the lowest). `fast_polynomial` already evaluates with a shallow,
-Estrin/SIMD-friendly scheme, so you usually do *not* hand-roll Horner and do not
-need to choose Horner-vs-Estrin yourself. Rationals use
-`fast_polynomial::rational_array`.
+**Polynomials.** Evaluate with `crate::poly(x, &[c0, c1, …])` (alias for
+`fast_polynomial::poly_array`), **low-degree term first**; rationals use
+`fast_polynomial::rational_array`. You do *not* hand-roll Horner or choose
+Horner-vs-Estrin — see [reference/approximation.md](reference/approximation.md)
+§ Evaluation schemes for why.
 
 **Bit-level helpers.**
 - `f64::to_bits()` / `f64::from_bits()` (and the f32 pair) type-pun a bit
   pattern — this is how you read/inject exponent and significand bits (replaces
   C `reinterpret`).
-- `kernel::fast_ldexp(x, n)` multiplies by 2ⁿ by adding `n << MANTISSA bits` to
-  the bit pattern (fast `scalbn` for in-range results).
+- `fast_ldexp(x, n)` (in `src/f64_/double.rs`) multiplies by 2ⁿ by adding
+  `n << MANTISSA bits` to the bit pattern (fast `scalbn` for in-range results).
 - `crate::exp2i(n)` is a `const` 2ⁿ.
-- `normalize()` (in each `mod.rs`) breaks a float into `(Sign, Magnitude)` —
-  NaN / ∞ / Zero / Normal / Subnormal — so one path handles all magnitudes.
+- `normalize()` (in `src/f32_/misc.rs` and `src/f64_/misc.rs`) breaks a float
+  into `(Sign, Magnitude)` — NaN / ∞ / Zero / Normal / Subnormal — so one path
+  handles all magnitudes.
 
-**Double-double (hi + lo).** `src/f64/kernel.rs` defines the `Sum { high, low }`
-type with `fast_sum` (Fast2Sum), `Sum::from_sum` (2Sum), `Sum::from_product`,
-and `Sum::from_quotient`, plus `Mul`/`Div` operators. Use this where extra
-precision is genuinely needed (reduction residual, final add-back) — not
-everywhere.
+**Double-double (hi + lo).** `src/f64_/double.rs` defines the
+`DoubleDouble { high, low }` type with `fast_sum` (Fast2Sum), `from_sum` (2Sum),
+`from_product`, `from_quotient`, `recip`, plus `Add`/`Mul`/`Div` operators. Carry
+it only where extra precision genuinely pays — see the laziness ladder below
+(rung 3).
 
-**FMA is available and exact — use it.** Unlike the WASM sibling, Rust's
-`f64::mul_add` is a *true*, correctly-rounded fused multiply-add on every target
-(hardware when `target_feature=fma`, correct software FMA otherwise). The crate
-wraps it as `crate::fma` (f64) and `crate::fmaf` (f32) — **call those, never
-`f64::mul_add` directly** (clippy denies the builtin), and never hand-write a raw
-`a * b + c` (clippy denies `suboptimal_flops`). FMA-based error-free transforms
-are the default here:
-
-- `let e = crate::fma(a, b, -(a * b));` gives the exact product tail.
-  `Sum::from_product` already does this. Prefer it over a Dekker split.
-- **Hazard:** the `crate::fast_mul_add` helper (re-exported at the crate root)
-  degrades to `x * y + a` when the `fma` target feature is *off*, trading
-  accuracy for speed. It is therefore **not** an error-free transform. In EFTs
-  and compensation steps use `crate::fma` / `crate::fmaf`; reserve
-  `crate::fast_mul_add` for hot polynomial-style spots where a lost low bit
-  doesn't matter. Recommend building with `-Ctarget-cpu=native` (see README) so
-  the helper maps to hardware FMA.
-
-  **Rule:** exact FMA → `crate::fma` / `crate::fmaf`; otherwise →
-  `crate::fast_mul_add`, never a raw `a * b + c`. (No f32 `fast_mul_add` exists
-  yet — f32 hot paths promote to f64 and call `crate::fast_mul_add`; add a
-  `fast_mul_addf` mirroring `fmaf` if a true f32-precision one is ever needed.)
+**FMA is true and exact — use it.** Rust's `f64::mul_add` is a correctly-rounded
+FMA on every target; the crate wraps it as `crate::fma` / `crate::fmaf`.
+**Rule:** error-free transforms and compensation → `crate::fma` / `crate::fmaf`;
+hot polynomial spots where a lost low bit is fine → `crate::fast_mul_add`; never
+the clippy-denied builtin and never a raw `a * b + c`. The `fast_mul_add` helper
+degrades to `x * y + c` without the `fma` target feature, so it is **not** an
+error-free transform. Full treatment and the EFT recipes:
+[reference/exact-arithmetic.md](reference/exact-arithmetic.md). (CLAUDE.md
+restates this rule in always-loaded context.)
 
 **Coefficient arrays.** Minimax coefficients go in a slice passed to
 `crate::poly`, low-degree first. Keep the generator command in a `///` doc
 comment above the array so the coefficients are reproducible (see
 [reference/coefficients.md](reference/coefficients.md)).
+
+## Do the least that clears ½ ulp
+
+Correct rounding is the only non-negotiable; everything else is the *least* code
+that provably reaches it. Stop at the first rung that holds — the rest of this
+skill cross-references these rungs instead of repeating "only where needed":
+
+1. **Reuse before writing** — an existing kernel or helper (`exp_slope`,
+   `atanh`, `rem_pio2`, `ln_fast`, the `DoubleDouble` type) before a new one.
+2. **`crate::poly` before hand-rolling** Horner/Estrin — `fast_polynomial`
+   already gives a shallow, SIMD-friendly chain.
+3. **Plain `f64` before a `DoubleDouble`** — carry a hi+lo pair only where
+   cancellation bites: the reduction residual and the final add-back.
+4. **Polynomial before rational** — a division is a real cost; reach for
+   `rational_array` only when a polynomial needs an uncomfortable degree.
+5. **Published worst cases before generating your own** — use CORE-MATH /
+   Lefèvre–Muller tables; generate (slow — see
+   [reference/correct-rounding.md](reference/correct-rounding.md)) only when no
+   table covers the function.
+6. **Add precision only when the budget forces it** — fold a low word, add a
+   Ziv level, or raise a degree *after* a ulp failure or an error bound demands
+   it, never pre-emptively.
 
 ## Procedure for a new function
 
@@ -124,17 +136,18 @@ comment above the array so the coefficients are reproducible (see
    with. Start with `f32`; it is exhaustively verifiable (see step 7).
 
 2. **Reduce the argument** to a small interval where a low-degree polynomial
-   converges fast, and **carry the reduction error** in a hi+lo pair (`Sum`, or an
-   ad-hoc `(hi, lo)`). `exp2` subtracts the rounded integer `n` and works on
-   `x - n`; trig calls `kernel::rem_pio2` (Payne–Hanek over huge arguments)
-   returning a quadrant and a reduced angle; `log2` extracts the exponent by an
-   integer subtract centred on √2⁄2. See
+   converges fast, and **carry the reduction error** in a hi+lo pair
+   (`DoubleDouble`, or an ad-hoc `(hi, lo)`) — but only where cancellation bites
+   (ladder rung 3). `exp2` subtracts the rounded integer `n` and works on
+   `x - n`; trig calls `rem_pio2` (`src/{f32_,f64_}/trig.rs`, Payne–Hanek over
+   huge arguments) returning a quadrant and a reduced angle; `log2` extracts the
+   exponent by an integer subtract centred on √2⁄2. See
    [reference/approximation.md](reference/approximation.md).
 
 3. **Pick the approximant form** by symmetry (the heart of the article):
    through-origin ⇒ `f(x) = x·g(x)`, approximate `g`; even ⇒ `f(x) = g(x²)`; odd
    ⇒ `f(x) = x·g(x²)`. Approximating `g` keeps the degree low and makes the
-   symmetry *exact*. Decide polynomial vs rational.
+   symmetry *exact*. Decide polynomial vs rational (rung 4).
 
 4. **Generate the coefficients** over the reduced interval with the right error
    weight (usually relative). Prefer **rminimax/ratapprox**, which optimises
@@ -144,30 +157,33 @@ comment above the array so the coefficients are reproducible (see
    [reference/coefficients.md](reference/coefficients.md).
 
 5. **Evaluate** with `crate::poly` / `rational_array` and add the **compensation
-   terms** that buy the last bits — fold the low word back in with
-   `crate::fma` or a `Sum`. See
+   terms** that buy the last bits — fold the low word back in with `crate::fma`
+   or a `DoubleDouble`, but only when the error budget forces it (rung 6). See
    [reference/exact-arithmetic.md](reference/exact-arithmetic.md) and
    [reference/approximation.md](reference/approximation.md).
 
 6. **Reconstruct** by undoing the reduction, usually via exponent injection:
-   `kernel::fast_ldexp(m, n)` or `crate::exp2i`. Handle subnormal outputs and the
+   `fast_ldexp(m, n)` or `crate::exp2i`. Handle subnormal outputs and the
    over/underflow ends explicitly (clamp before reduction).
 
 7. **Verify against an oracle.** For `f32`, the test harness sweeps **all 2³² bit
    patterns** and compares to the correctly-rounded `core-math` result — a clean
-   sweep *proves* correct rounding (`tests/f32_univariate.rs`). For `f64`, sample
-   widely (and use `rug` for ground truth) and track max ulp; rely on published
-   hard-to-round tables for the correctly-rounded claim. See
+   sweep *proves* correct rounding (`tests/f32_univariate.rs`). For `f64`, you
+   cannot brute-force: lean on the published worst cases (rung 5), sample widely
+   (and use `rug` for ground truth), and track max ulp. See
    [reference/correct-rounding.md](reference/correct-rounding.md).
 
 8. **Build, test, commit atomically.** Per `CLAUDE.md`: `cargo fmt`, then
-   `cargo test` — **NOT `--all-features`** (the `core-math` feature *replaces*
-   metallic functions with CORE-MATH, so it would test the wrong code). Update
-   `CHANGELOG.md`. One function (or one coherent improvement) per commit, each
-   building and passing tests on its own. `cargo bench` (criterion) to confirm no
-   regression vs core-math / std / libm.
+   `cargo test` — **NOT `--all-features`** (the `_no_fma` feature disables FMA
+   and would exercise a different code path, producing misleading results).
+   Update `CHANGELOG.md`. One function (or one coherent improvement) per commit,
+   each building and passing tests on its own. `cargo bench` (criterion) to
+   confirm no regression vs core-math / std / libm.
 
-## Worked skeleton: `f64::kernel::exp2`
+## Worked skeleton: a reduction → reconstruct `exp2`
+
+Simplified to show the procedure's bones (the shipped `src/f64_/exp.rs::exp2`
+adds Ziv refinement on top):
 
 ```rust
 pub fn exp2(x: f64) -> f64 {
@@ -185,7 +201,7 @@ pub fn exp2(x: f64) -> f64 {
 }
 ```
 
-And `f64::kernel::log2`, the canonical multiplicative-reduction model:
+And `log2` (`src/f64_/log.rs`), the canonical multiplicative-reduction model:
 
 ```rust
 pub fn log2(x: f64) -> f64 {
@@ -198,8 +214,9 @@ pub fn log2(x: f64) -> f64 {
 }
 ```
 
-Study `exp2`, `log2`, `atanh`, `sin`, `cos`, and `rem_pio2` in `src/f32/kernel.rs`
-and `src/f64/kernel.rs` as the canonical models before writing your own.
+Study `exp2`, `log2`, `atanh`, `sin`, `cos`, and `rem_pio2` in `src/f32_/` and
+`src/f64_/` (e.g. `exp.rs`, `log.rs`, `trig.rs`, `hyp.rs`) as the canonical models
+before writing your own.
 
 ## External references
 

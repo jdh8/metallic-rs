@@ -12,42 +12,30 @@ Shrink the domain to an interval where a low-degree polynomial converges fast,
 using an identity, then reconstruct. Two flavours:
 
 **Additive** — subtract a multiple of a period/scale. `exp2` uses `x = n + r` with
-`r ∈ [-½, ½]`, so `2ˣ = 2ⁿ · 2ʳ` (`src/f64/kernel.rs`):
+`r ∈ [-½, ½]`, so `2ˣ = 2ⁿ · 2ʳ` (see the worked `exp2` skeleton in
+[SKILL.md](../SKILL.md)). `exp`-style reductions that subtract `n·ln2` carry `ln2`
+as a hi+lo pair so `n * ln2_hi` is exact and the residual
+`r = (x - n·ln2_hi) - n·ln2_lo` keeps its low bits.
 
-```rust
-let n = x.round_ties_even();
-let r = x - n;                 // r ∈ [-½, ½]
-// 2^r via crate::poly(r, &[...]); then ×2^n via fast_ldexp
-```
-
-`exp`-style reductions that subtract `n·ln2` carry `ln2` as a hi+lo pair so
-`n * ln2_hi` is exact and the residual `r = (x - n·ln2_hi) - n·ln2_lo` keeps its
-low bits.
-
-Trig uses `kernel::rem_pio2(x)` (`src/f32/kernel.rs`), returning the quadrant `q`
-(so the caller picks sin/cos and the sign) and the reduced angle as an `f64`. Below
-`π·2²⁷` it does the cheap two-word subtract; above it, a Payne–Hanek reduction with
-the 256-bit value of 2/π in a `[u64; 4]` and 128-bit integer arithmetic. Getting
-the *reduction* accurate over huge arguments is the hard part of trig — that lives
-in `rem_pio2`, not in the sin/cos kernels.
+Trig uses `rem_pio2(x)` (`src/{f32_,f64_}/trig.rs`), returning the quadrant `q`
+(so the caller picks sin/cos and the sign) and the reduced angle. Below `π·2²⁷` it
+does the cheap two-word subtract; above it, a Payne–Hanek reduction with the
+256-bit value of 2/π in a `[u64; 4]` and 128-bit integer arithmetic. Getting the
+*reduction* accurate over huge arguments is the hard part of trig — that lives in
+`rem_pio2`, not in the sin/cos kernels.
 
 **Multiplicative / exponent extraction** — for `log`, pull the binary exponent out
-directly. `log2` (`src/f64/kernel.rs`) subtracts a bias centred on √2⁄2 so the
-reduced mantissa lands near 1, minimising `|x - 1|`:
-
-```rust
-let i = x.to_bits() as i64;
-let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> EXP_SHIFT; // ≈ √2/2 bias
-let x = f64::from_bits((i - (exponent << EXP_SHIFT)) as u64);            // mantissa near 1
-// log2(x) = exponent + 2·log2(e)·atanh((x-1)/(x+1))
-```
+directly. `log2` (`src/f64_/log.rs`) subtracts a bias centred on √2⁄2 so the
+reduced mantissa lands near 1, minimising `|x - 1|` (see the `log2` skeleton in
+[SKILL.md](../SKILL.md)).
 
 **Always carry the reduction residual in a hi+lo pair** when the reduction can
-cancel catastrophically (large-argument `exp`/trig). The low word is what keeps the
-final result faithfully/correctly rounded.
+cancel catastrophically (large-argument `exp`/trig) — that low word is what keeps
+the final result faithfully/correctly rounded. Everywhere else, plain `f64` is
+enough (laziness ladder rung 3).
 
 Subnormal inputs: normalise first so one code path handles all magnitudes — see
-`normalize()` and the `Magnitude` enum in each `mod.rs`.
+`normalize()` and the `Magnitude` enum in `src/{f32_,f64_}/misc.rs`.
 
 ## Symmetry transforms (the core trick)
 
@@ -57,15 +45,15 @@ symmetry is exact. From the article:
 | `f` is…            | identity              | approximate            | example kernel        |
 |--------------------|-----------------------|------------------------|-----------------------|
 | through the origin | `f(x) = x·g(x)`       | `g`                    | `atanh`               |
-| even               | `f(x) = g(x²)`        | `g`, in `x²`           | `kernel::cos`         |
-| odd                | `f(x) = x·g(x²)`      | `g`, in `x²`           | `kernel::sin`         |
+| even               | `f(x) = g(x²)`        | `g`, in `x²`           | `cos`                 |
+| odd                | `f(x) = x·g(x²)`      | `g`, in `x²`           | `sin`                 |
 
 Two payoffs: the degree in the working variable roughly halves (a poly in `x²`),
 and the symmetry becomes **structurally exact** — an odd `f` written as `x·g(x²)`
 is exactly zero at 0 and exactly antisymmetric, with no even-degree term able to
 leak in from coefficient rounding.
 
-`kernel::sin` (odd ⇒ `x·g(x²)`, `src/f32/kernel.rs`):
+The f32 `sin` kernel (odd ⇒ `x·g(x²)`, `src/f32_/trig.rs`):
 
 ```rust
 pub fn sin(x: f64) -> f32 {
@@ -79,7 +67,7 @@ pub fn sin(x: f64) -> f32 {
 }
 ```
 
-`kernel::cos` (even ⇒ `g(x²)`, value ≈ 1 near origin):
+The f32 `cos` kernel (even ⇒ `g(x²)`, value ≈ 1 near origin):
 
 ```rust
 pub fn cos(x: f64) -> f32 {
@@ -119,9 +107,10 @@ the function (= relative error); Sollya/Remez take an explicit weight. See
 A rational `P(x)/Q(x)` can hit a given accuracy at lower total degree than a single
 polynomial, especially near a singularity or a steep region — `atan`'s kernel uses
 `fast_polynomial::rational_array`, and `erf`/`atan`-type functions often want a true
-rational. The cost is a division. Reach for rational when a polynomial needs an
-uncomfortably high degree; otherwise prefer a polynomial. rminimax generates either
-(`--num`/`--den`); see [coefficients.md](coefficients.md).
+rational. The cost is a division, so this is laziness ladder rung 4: reach for a
+rational only when a polynomial needs an uncomfortably high degree; otherwise prefer
+a polynomial. rminimax generates either (`--num`/`--den`); see
+[coefficients.md](coefficients.md).
 
 ## Evaluation schemes
 
@@ -135,12 +124,13 @@ friendly scheme internally, so:
   order `poly_array` expects.
 - **Compensated / two-word** evaluation is still your job when the last few terms
   decide the final bit: fold a low word back in with `crate::fast_mul_add` or a
-  `Sum`, as the kernels do with the `crate::fast_mul_add(y, x, x)` tail. You rarely
-  need this for
-  the whole polynomial — only the leading term(s) and the add-back.
+  `DoubleDouble`, as the kernels do with the `crate::fast_mul_add(y, x, x)` tail.
+  You rarely need this for the whole polynomial — only the leading term(s) and the
+  add-back.
 
 Guidance: get it correct with `crate::poly` first; only restructure (split
-even/odd, carry a `Sum`) if a benchmark or a ulp failure says so.
+even/odd, carry a `DoubleDouble`) if a benchmark or a ulp failure says so (laziness
+ladder rung 6).
 
 ## Reconstruction
 
@@ -148,7 +138,7 @@ Undo the reduction. Exponent injection is the common case — multiply by 2ⁿ b
 adding to the bit pattern rather than doing a float multiply:
 
 ```rust
-kernel::fast_ldexp(mantissa, n)   // adds n << (MANTISSA_DIGITS - 1) to the bit pattern
+fast_ldexp(mantissa, n)   // src/f64_/double.rs: adds n << (MANTISSA_DIGITS - 1) to the bit pattern
 // or, for a const power:  crate::exp2i(n)
 ```
 

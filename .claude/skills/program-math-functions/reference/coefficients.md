@@ -54,8 +54,8 @@ Flags worth knowing (`./ratapprox --help` for the full list):
   `HP, SG, D, DE, DD, TD, QD` (half, single, double, double-extended, double-double,
   triple-double, quad). Defaults to `D`. **This is the machine-representable
   feature** — set `SG` for an **f32** kernel, `D` for an **f64** kernel, `DD` if you
-  will carry a double-double (`Sum`) coefficient. A single value applies to all
-  coefficients.
+  will carry a double-double (`DoubleDouble`) coefficient. A single value applies to
+  all coefficients.
 - `--weight="…"` — error weight. **Default is the reciprocal of the function**, i.e.
   relative error — what you almost always want, and what odd functions *require*
   (see "Relative vs absolute error" in [approximation.md](approximation.md)). Use
@@ -113,8 +113,8 @@ the interval. This is also the number you compare against your ulp budget.
 
 1. Generate with `--dispCoeff=hex` (or `Float64`/`@sprintf "%a"` in Julia) so the
    literals are exact.
-2. Write them into the `crate::poly(x, &[ … ])` slice, **low-degree term first**
-   (`c[0]` lowest) — that is the order `poly_array` expects. Existing kernels use
+2. Write them into the `crate::poly(x, &[ … ])` slice **low-degree first** (see
+   [approximation.md](approximation.md) § Evaluation schemes). Existing kernels use
    decimal literals; **prefer hex floats via the `hexf` family** (`hexf-parse` is
    already a dev-dependency) wherever exact round-tripping matters, e.g.
    `hexf_parse::parse_hexf64("0x1.62e42fefa39efp-1", false)` or a `hexf::hexf64!`
@@ -124,5 +124,5 @@ the interval. This is also the number you compare against your ulp budget.
 4. Keep the generator command in a `///` doc comment above the slice (function,
    domain, degrees, format) so the coefficients are reproducible — the repo has no
    coefficient-generation scripts checked in, so the command *is* the record. See
-   the doc comments on `exp_slope`, `atanh`, and `exp2` in the kernels for the
-   house style.
+   the doc comments on `exp_slope`, `atanh`, and `exp2` in `src/f32_/`/`src/f64_/`
+   for the house style.

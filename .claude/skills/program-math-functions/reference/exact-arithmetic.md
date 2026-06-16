@@ -2,9 +2,9 @@
 
 The bits you lose to rounding are the bits between a "looks fine" function and a
 correctly-rounded one. This file collects the tools for tracking and controlling
-that error. In metallic-rs they appear as the `Sum` double-double type, the
-`crate::fma`-based error-free transforms, and the hand-compensated tails in the
-kernels.
+that error. In metallic-rs they appear as the `DoubleDouble` double-double type,
+the `crate::fma`-based error-free transforms, and the hand-compensated tails in
+the kernels.
 
 ## Rounding modes
 
@@ -32,8 +32,7 @@ this, because only an even-significand value can be the exact midpoint of two
 target numbers — round-to-odd never produces such a midpoint, so the final RN step
 is unambiguous. This is the trick behind correctly-rounded `fma`/`sqrt` and behind
 RLIBM-ALL's "two extra bits, round-to-odd" construction. In Rust you reach for it
-when collapsing a `Sum`/double-double back to a single `f64` near a rounding
-boundary.
+when collapsing a `DoubleDouble` back to a single `f64` near a rounding boundary.
 
 - *When double rounding is odd* — <https://hal.inria.fr/inria-00070603v2/document>
 - GCC's use of it — <https://www.exploringbinary.com/gcc-avoids-double-rounding-errors-with-round-to-odd/>
@@ -52,7 +51,7 @@ let s = a * b;
 let e = crate::fma(a, b, -s);   // s + e == a * b exactly
 ```
 
-This is exactly what `Sum::from_product` does (`src/f64/kernel.rs`):
+This is exactly what `DoubleDouble::from_product` does (`src/f64_/double.rs`):
 
 ```rust
 pub fn from_product(x: f64, y: f64) -> Self {
@@ -70,18 +69,18 @@ pub fn from_product(x: f64, y: f64) -> Self {
 > low bit is acceptable, not for EFTs.
 
 **Fast2Sum** (Dekker) — requires `|a| >= |b|` (or `exp(a) >= exp(b)`). This is
-`fast_sum` in `src/f64/kernel.rs`:
+`fast_sum` in `src/f64_/double.rs`:
 
 ```rust
-pub const fn fast_sum(a: f64, b: f64) -> Sum {
+pub const fn fast_sum(a: f64, b: f64) -> DoubleDouble {
     let high = a + b;
     let low = a - high + b;   // high + low == a + b exactly
-    Sum { high, low }
+    DoubleDouble { high, low }
 }
 ```
 
 **2Sum** (Knuth/Møller) — no ordering requirement, branchless. This is
-`Sum::from_sum`:
+`DoubleDouble::from_sum`:
 
 ```rust
 pub const fn from_sum(x: f64, y: f64) -> Self {
@@ -109,16 +108,16 @@ in `f64` and cast back at the end.
 
 ## Double-double (hi + lo) values
 
-A value too precise for one `f64` is carried as `Sum { high, low }` with
+A value too precise for one `f64` is carried as `DoubleDouble { high, low }` with
 `|low| <= ½ ulp(high)` when normalized. metallic-rs has a real type for this
-(`src/f64/kernel.rs`) with `Mul`/`Div` operators:
+(`src/f64_/double.rs`) with `Mul`/`Div` operators:
 
-- `Sum::from_product`, `Sum::from_quotient` build a normalized pair from a single
-  product/quotient.
-- `Sum * Sum`, `Sum * f64`, `Sum / f64` propagate the low word. These "break
-  normality" deliberately — they are intermediate-format operations; renormalize
-  (`from_sum`) only when you need a clean pair, since the cost usually outweighs
-  the gain for < 1 ulp work.
+- `DoubleDouble::from_product`, `from_quotient` build a normalized pair from a
+  single product/quotient; `recip` is one Newton step for `1/self`.
+- `DoubleDouble * DoubleDouble`, `* f64`, `/ f64` propagate the low word. These
+  "break normality" deliberately — they are intermediate-format operations;
+  renormalize (`from_sum`) only when you need a clean pair, since the cost usually
+  outweighs the gain for < 1 ulp work.
 - Hand-compensated tails: add the polynomial result to the low word *before* the
   high word, so the largest-magnitude term rounds last (compensated summation by
   hand). The `crate::fast_mul_add(y, x, x)` tails in `atanh`/`sin` fold the low
@@ -127,8 +126,9 @@ A value too precise for one `f64` is carried as `Sum { high, low }` with
 ## Practical guidance
 
 - Decide where you need extra precision and use a hi+lo pair *only there* (usually:
-  the argument-reduction residual, and the final add-back). Carrying `Sum`
-  everywhere is slow and rarely necessary for < 1 ulp.
+  the argument-reduction residual, and the final add-back) — this is rung 3 of the
+  laziness ladder in [SKILL.md](../SKILL.md). Carrying `DoubleDouble` everywhere is
+  slow and rarely necessary for < 1 ulp.
 - Keep the largest-magnitude term for last in a hand-compensated sum.
 - In EFTs and compensation, always use `crate::fma` / `crate::fmaf` (true FMA),
   never `crate::fast_mul_add`.
