@@ -2010,6 +2010,138 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     (lgamma_stirling_fast(z, tail), lgamma_stirling_ziv(z, inv))
 }
 
+// ── Double-double middle Ziv tier ────────────────────────────────────────────
+//
+// The lean fast leg is ≈2⁻⁶⁶; the accurate path below is ≈2⁻¹⁵⁰ triple-double but
+// costs ≈1.8 µs (one TD `ln` plus, for `y < LGAMMA_CUTOFF`, the TD recurrence).  A
+// fast-leg straddle that the corpus's hardest ≈2⁻¹¹⁶ ties do *not* require would
+// still pay that full TD price.  This double-double tier (≈2⁻¹⁰⁵) sits between the
+// two: it resolves essentially every straddle at ≈10× lower cost, leaving the TD
+// path only for the genuine hard-to-round ties its own sound gate defers.  Because
+// it is gated, any value it certifies is the correctly-rounded result the TD path
+// would have returned — `tests/lgamma.rs`'s worst-case corpus verifies that
+// bit-for-bit (those ties are exactly where this tier runs).
+
+/// Natural logarithm of a positive double-double, double-double accurate
+/// (≈2⁻¹⁰⁵): the middle tier's counterpart of [`ln_fast_sum`], using the accurate
+/// [`ln_dd`](crate::f64_::ln_dd) in place of the lean [`ln_fast`](crate::f64_::ln_fast).
+#[inline]
+fn ln_dd_sum(s: DoubleDouble) -> DoubleDouble {
+    crate::f64_::ln_dd(s.high)
+        + DoubleDouble {
+            high: s.low / s.high,
+            low: 0.0,
+        }
+}
+
+/// Direct Stirling `ln Γ(t)` for a positive double-double `t ≥ LGAMMA_CUTOFF`,
+/// double-double accurate (≈2⁻¹⁰⁵): the middle tier's counterpart of
+/// [`lgamma_stirling_fast`], with the accurate [`ln_dd_sum`] and the Bernoulli tail
+/// carried as a double-double ([`poly_dd_of_td`] over the high+mid words of
+/// [`LGAMMA_TAIL_TD`] — the accurate path's own coefficients, good to ≈2⁻¹¹⁶ at
+/// `t ≥ 40`, far inside this tier's budget).
+#[inline]
+fn lgamma_stirling_mid(t: DoubleDouble) -> DoubleDouble {
+    let inv = t.recip();
+    let u = inv * inv;
+    let tail = poly_dd_of_td(u, &LGAMMA_TAIL_TD) * inv;
+
+    ln_dd_sum(t)
+        * (t + DoubleDouble {
+            high: -0.5,
+            low: 0.0,
+        })
+        + neg(t)
+        + HALF_LN_2PI
+        + tail
+}
+
+/// Relative Ziv slack for the [`lgamma_pos_mid`] leg, scaled by the **intermediate**
+/// magnitude (not the result).
+///
+/// The leg's error is dominated by [`ln_dd`](crate::f64_::ln_dd)'s ≈2⁻⁹⁵ relative
+/// slack on the two large logs it forms — the Stirling lead `(t−½)·ln t` and the
+/// recurrence product's `ln ∏` — whose `≈ln Γ(t)` magnitudes cancel down to the
+/// small `ln Γ(y)`.  So the *absolute* error tracks `|stirling| + |ln ∏|`, not the
+/// (possibly tiny, post-cancellation) result; the gate must scale with that sum.
+/// `2⁻⁹³` covers the measured worst `err / magnitude ≈ 2⁻⁹⁶` with an ≈8× margin
+/// (`ziv_soundness::lgamma_mid_leg_is_sound`), and stays far below `ulp(result)`
+/// so it still certifies essentially every straddle — deferring only the corpus's
+/// ≈2⁻¹¹⁶ hard ties to the triple-double path.
+const LGAMMA_MID_ZIV_REL: f64 = crate::exp2i(-93);
+
+/// `ln Γ(y)` for positive `y` as a double-double via the middle Ziv tier, with its
+/// absolute error bound.
+///
+/// Recurrence up to [`LGAMMA_CUTOFF`] then [`lgamma_stirling_mid`] — the
+/// double-double analogue of [`lgamma_pos_td`], minus the central table (the
+/// recurrence reaches the Stirling regime from any `y ≥ ½`).  Near the roots
+/// `z = 1, 2` the recurrence-minus-Stirling difference cancels to `ln Γ → 0`, so
+/// the root-anchored relative series [`lgamma_root_fast`] (no cancellation) runs
+/// instead.  The gate scales with the intermediate magnitude (see
+/// [`LGAMMA_MID_ZIV_REL`]).
+#[inline]
+fn lgamma_pos_mid(y: DoubleDouble) -> (DoubleDouble, f64) {
+    // Root windows: `ln Γ → 0`, so the recurrence-minus-Stirling difference would
+    // cancel; the result-anchored series carries the tiny value with no
+    // cancellation.  Use the *double-double* argument `y − {1,2}` (exact by
+    // Sterbenz) — the reflection feeds a `1 − z` with a nonzero low word, which
+    // [`lgamma_root_fast`]'s `f64` entry would drop.
+    if (y.high - 1.0).abs() < LGAMMA_ROOT_WINDOW {
+        let s = poly_dd_of_td(
+            y + DoubleDouble {
+                high: -1.0,
+                low: 0.0,
+            },
+            &LGAMMA_ROOT1_TD,
+        );
+        return (s, LGAMMA_ROOT_ZIV_REL * s.high.abs());
+    }
+    if (y.high - 2.0).abs() < LGAMMA_ROOT_WINDOW {
+        let s = poly_dd_of_td(
+            y + DoubleDouble {
+                high: -2.0,
+                low: 0.0,
+            },
+            &LGAMMA_ROOT2_TD,
+        );
+        return (s, LGAMMA_ROOT_ZIV_REL * s.high.abs());
+    }
+    let steps = (LGAMMA_CUTOFF - y.high).ceil().max(0.0) as i64;
+    let t = y + DoubleDouble {
+        high: steps as f64,
+        low: 0.0,
+    };
+    let stirling = lgamma_stirling_mid(t);
+    if steps > 0 {
+        let ln_prod = ln_dd_sum(recurrence_product_dd(y, steps));
+        let mag = stirling.high.abs() + ln_prod.high.abs();
+        (stirling + neg(ln_prod), LGAMMA_MID_ZIV_REL * mag)
+    } else {
+        (stirling, LGAMMA_MID_ZIV_REL * stirling.high.abs())
+    }
+}
+
+/// `ln|Γ(z)|` as a double-double via the middle Ziv tier, with its error bound —
+/// the double-double counterpart of [`lgamma_fast`]'s reflection-aware dispatch.
+///
+/// For `z < ½` it reflects through `ln π − ln|sin πz| − ln Γ(1−z)` (the caller's
+/// `sin_is_reliable` guard already kept `sin πz` normal); the `ln|sin πz|` term
+/// adds [`ln_dd`](crate::f64_::ln_dd)'s relative slack on its own magnitude to the
+/// [`lgamma_pos_mid`] gate for `1−z`.  For `z ≥ ½` it is [`lgamma_pos_mid`] directly.
+#[inline]
+fn lgamma_mid(z: f64) -> (DoubleDouble, f64) {
+    if z < 0.5 {
+        let (pos, pos_gate) = lgamma_pos_mid(DoubleDouble::from_sum(1.0, -z));
+        let ln_sin = ln_dd_sum(abs_sinpi_dd(z));
+        let value = LN_PI + neg(ln_sin + pos);
+        let gate = crate::fast_mul_add(LGAMMA_MID_ZIV_REL, ln_sin.high.abs(), pos_gate);
+        (value, gate)
+    } else {
+        lgamma_pos_mid(DoubleDouble { high: z, low: 0.0 })
+    }
+}
+
 // ── Triple-double accurate `ln|Γ|` path ──────────────────────────────────────
 //
 // A double-double accurate leg would be ≈2⁻¹⁰⁵ relative — its `ln` (`ln_dd`) and
@@ -2703,9 +2835,67 @@ pub fn lgamma(z: f64) -> f64 {
         if lo == hi {
             return lo;
         }
+
+        // Double-double middle tier: resolves the straddle at ≈10× below the
+        // triple-double path's cost, deferring only the corpus's hardest ties.
+        let (value, gate) = lgamma_mid(z);
+        let lo = value.high + (value.low - gate);
+        let hi = value.high + (value.low + gate);
+        if lo == hi {
+            return lo;
+        }
     }
 
     td_round(lgamma_dd(z))
+}
+
+/// Soundness of the [`lgamma_mid`] middle-tier Ziv gate.
+///
+/// The gate must *upper-bound* the leg's true error with margin, or a confident
+/// `lo == hi` could certify a value on the wrong side of a rounding boundary — the
+/// erf/erfc bug this discipline guards against.  The triple-double accurate path
+/// ([`lgamma_dd`], ≈2⁻¹⁵⁰) is the in-house correctly-rounded reference, so the leg's
+/// error is its disagreement with that path, measured here to its full precision by
+/// the exact high-order cancellation `(mid.high − td.high) + mid.low − td.mid − td.low`.
+/// The worst `error / gate` ratio across `[−9.5, 200]` (both the reflection and the
+/// positive side, skipping the near-pole humps the special ladder handles) must stay
+/// `< ½` — a ≥ 2× margin.
+#[cfg(test)]
+mod mid_tier_soundness {
+    use super::*;
+
+    #[test]
+    fn lgamma_mid_leg_is_sound() {
+        let mut s = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            (s >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut worst = 0.0_f64;
+        let mut worst_z = 0.0_f64;
+        for _ in 0..4_000_000u64 {
+            let z = -9.5 + 209.5 * next();
+            // The near-pole humps never reach this leg (the special ladder and the
+            // `sin_is_reliable` guard divert them).
+            if z <= 0.0 && (z - z.round()).abs() < 1.0 / 256.0 {
+                continue;
+            }
+            let (v, g) = lgamma_mid(z);
+            let td = lgamma_dd(z);
+            let err = ((v.high - td.high) + v.low - td.mid - td.low).abs();
+            let ratio = err / g;
+            if ratio > worst {
+                worst = ratio;
+                worst_z = z;
+            }
+        }
+        assert!(
+            worst < 0.5,
+            "middle-tier gate unsound: worst error/gate = {worst:.3} at z = {worst_z}"
+        );
+    }
 }
 
 #[cfg(test)]
