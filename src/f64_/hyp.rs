@@ -1,16 +1,9 @@
 use super::double::{
     DoubleDouble, fast_ldexp, fast_sum, round_anchored, round_general_signed64, round_general64,
-    sqrt_dd,
 };
 use super::exp::{exp_two_level_fast, exp_two_level_mantissa_accurate};
 use super::{ln_dd_fast, ln_fast_scaled};
 use core::cmp::Ordering;
-
-/// `1` as a double-double.
-const ONE: DoubleDouble = DoubleDouble {
-    high: 1.0,
-    low: 0.0,
-};
 
 /// Ziv gate for the inverse-hyperbolic fast path, as an absolute bound on the
 /// result (`scale · ln(u)`).
@@ -23,6 +16,19 @@ const ONE: DoubleDouble = DoubleDouble {
 /// absolute, the gate forces the accurate fallback only when `|result| ≲ 2⁻¹⁰`,
 /// where the lean kernel cannot round correctly anyway.
 const IHYP_ZIV_EPS: f64 = 1.084_202_172_485_504_4e-19; // 2^-63
+
+/// Smallest `|result|` for which the [`ln_sqrt_kernel`] lean leg may certify.
+///
+/// `acosh(x) → 0` as `x → 1`, where the log argument `x + √(x²−1) → 1`; once it is
+/// within ≈2⁻⁸ of 1 the lean [`super::ln_dd_fast`]'s closing renormalization
+/// degrades (its low word loses bits — see `ln_fast`), so the leg's error climbs
+/// toward the [`IHYP_ZIV_EPS`] gate.  A result below `2⁻⁶` corresponds to an
+/// argument within ≈2⁻⁶ of 1, comfortably outside that zone; below it the leg
+/// escalates to the accurate path (which `acosh` near 1 takes regardless — the
+/// absolute gate already forces it for `|result| ≲ 2⁻¹⁰`).  `asinh`'s kernel never
+/// produces a result this small (its smallest, `asinh(ASINH_SMALL) ≈ 0.0624`, is
+/// well above), so this floor only ever guards `acosh`.
+const IHYP_LEAN_FLOOR: f64 = 0.015625; // 2^-6
 
 /// Correctly-rounded `atanh(s) = ½·ln(u)` for `u = (1 + s)/(1 − s)` and
 /// `ATANH_SMALL ≤ s < 1`, via a two-step Ziv test.  (Smaller `s` takes the cheap
@@ -44,30 +50,72 @@ fn atanh_rounded(u: DoubleDouble) -> f64 {
     super::dint::ln_dd_scaled(u.high, u.low, -1)
 }
 
-/// Correctly-rounded `ln(x + c)` for the `acosh`/`asinh` argument, where
-/// `c = √(x² ∓ 1)` is a double-double and `x > 0`.
+/// The raw fast-leg pair of `ln(x + √(x² ∓ 1))`, plus the square-root pair
+/// `c = √(x²∓1)` and the exact `d = x² ∓ 1` for the accurate fallback.
 ///
-/// The fast leg gates the lean `super::ln_dd_fast(x + c)`; on a straddle the
-/// accurate leg feeds *four* words — `x` and a triple-word `√d` — to the 128-bit
-/// `dint` log.  The double-double sqrt (≈2⁻¹⁰⁵, ≈2⁻⁵⁷ ulp through `ln`) is one bit
-/// shy of the corpus's hardest ties (≈2⁻⁶²), so a third sqrt word `corr` is
-/// refined in and carried alongside `c.high`/`c.low`.
+/// Mirrors CORE-MATH's lean common path: bare-FMA arithmetic (one hardware `sqrt`,
+/// one division, one `Fast2Sum`) builds the log argument in place of the old
+/// `sqrt_dd` + double-double argument add.  `sub` picks `acosh` (`x² − 1`, `x > 1`)
+/// vs `asinh` (`x² + 1`, `x > 0`).
+///
+/// `x²` is exact (`from_product`).  For `acosh` (`x² − 1`, `x > 1` ⇒ `x² ≥ 1`) the
+/// `−1` is an *exact* high-word step while `x² < 2⁵³` (1 is a multiple of `ulp(x²)`),
+/// so `d`'s low word is just `from_product`'s residual — no double-double add; only
+/// the cold huge-`x` tail (the kernel reaches `2²⁷`) needs the 2Sum.  For `asinh`
+/// (`x² + 1`) adding 1 generally crosses into a coarser binade and would drop `x²`'s
+/// low bits, so the 2Sum is needed across the band.  `√d` is one `sqrt` of the high
+/// word plus a single-word Newton correction `(d − sh²)/(2·sh)`, the residual
+/// `d.low − fma(sh,sh,−dh)` being exact.  The argument's leader is the larger of `x`
+/// and `√d` (so a `Fast2Sum`, not a general 2Sum, is valid), and the sqrt's low word
+/// folds into the low.  (`sub` is a const at each inlined call site, so the branch
+/// below folds away.)
 #[inline]
-fn ln_sqrt_rounded(x: f64, c: DoubleDouble, d: DoubleDouble) -> f64 {
-    let u = c + DoubleDouble { high: x, low: 0.0 };
-    let DoubleDouble { high, low } = ln_dd_fast(u);
-    let lo = high + (low - IHYP_ZIV_EPS);
-    let hi = high + (low + IHYP_ZIV_EPS);
-    if lo == hi {
-        return lo;
-    }
+fn ln_sqrt_fast(x: f64, sub: bool) -> (DoubleDouble, DoubleDouble, DoubleDouble) {
+    let p = DoubleDouble::from_product(x, x);
+    let d = if sub && p.high < 9_007_199_254_740_992.0 {
+        DoubleDouble {
+            high: p.high - 1.0,
+            low: p.low,
+        }
+    } else {
+        let s = DoubleDouble::from_sum(p.high, if sub { -1.0 } else { 1.0 });
+        DoubleDouble {
+            high: s.high,
+            low: s.low + p.low,
+        }
+    };
+    let dh = d.high;
 
-    // Refine `c = √d` with a third word so the argument reaches past the
-    // double-double sqrt's ≈2⁻¹⁰⁵ (≈2⁻⁵⁷ ulp), enough for the hardest ties
-    // (≈2⁻⁶²).  `corr = (d − c²)/(2c)`: the residual `d − c²` sits ≈106 bits below
-    // the argument — below double-double range — so it is extracted by *exact*
-    // cancellation (`from_product` for `c.high²` and the cross term, 2Sum chains
-    // keeping every residual), not the flat `c·c` (which rounds back to `d`).
+    let sh = dh.sqrt();
+    let sl = (d.low - crate::fma(sh, sh, -dh)) * (0.5 / sh);
+    let c = DoubleDouble { high: sh, low: sl };
+
+    // acosh: x ≥ √(x²−1) leads; asinh: √(x²+1) > x leads.
+    let lead = if sub {
+        fast_sum(x, sh)
+    } else {
+        fast_sum(sh, x)
+    };
+    let arg = DoubleDouble {
+        high: lead.high,
+        low: lead.low + sl,
+    };
+    (c, d, ln_dd_fast(arg))
+}
+
+/// Correctly-rounded `ln(x + √(x²∓1))` accurate leg — reached only on a Ziv
+/// straddle of [`ln_sqrt_fast`].
+///
+/// Feeds *four* words — `x` and a triple-word `√d` — to the 128-bit `dint` log.
+/// The square root (≈2⁻¹⁰⁵, ≈2⁻⁵⁷ ulp through `ln`) is one bit shy of the corpus's
+/// hardest ties (≈2⁻⁶²), so a third sqrt word `corr = (d − c²)/(2c)` is refined in:
+/// the residual `d − c²` sits ≈106 bits below the argument — below double-double
+/// range — so it is extracted by *exact* cancellation (`from_product` for `c.high²`
+/// and the cross term, 2Sum chains keeping every residual), not the flat `c·c`
+/// (which rounds back to `d`).
+#[cold]
+#[inline(never)]
+fn ln_sqrt_accurate(x: f64, c: DoubleDouble, d: DoubleDouble) -> f64 {
     let p = DoubleDouble::from_product(c.high, c.high);
     let diff = DoubleDouble::from_sum(d.high, -p.high) + DoubleDouble::from_sum(d.low, -p.low);
     let cr = DoubleDouble::from_product(c.high, c.low);
@@ -82,8 +130,21 @@ fn ln_sqrt_rounded(x: f64, c: DoubleDouble, d: DoubleDouble) -> f64 {
     super::dint::ln_quad_scaled(x, c.high, c.low, corr, 0)
 }
 
-/// `2²⁷`.  Above this magnitude `asinh`/`acosh` switch from `sqrt_dd(x² ± 1)` to
-/// the sqrt-free asymptotic [`ln_2x_corrected`].
+/// Ziv-gated `ln(x + √(x²∓1))`: the lean [`ln_sqrt_fast`] leg, deferring a straddle
+/// to [`ln_sqrt_accurate`].
+#[inline]
+fn ln_sqrt_kernel(x: f64, sub: bool) -> f64 {
+    let (c, d, DoubleDouble { high, low }) = ln_sqrt_fast(x, sub);
+    let lo = high + (low - IHYP_ZIV_EPS);
+    let hi = high + (low + IHYP_ZIV_EPS);
+    if lo == hi && lo >= IHYP_LEAN_FLOOR {
+        return lo;
+    }
+    ln_sqrt_accurate(x, c, d)
+}
+
+/// `2²⁷`.  Above this magnitude `asinh`/`acosh` switch from the `√(x² ± 1)` kernel
+/// ([`ln_sqrt_kernel`]) to the sqrt-free asymptotic [`ln_2x_corrected`].
 const LARGE_IHYP: f64 = 134_217_728.0;
 
 /// Large-magnitude `asinh`/`acosh`: `ln(2·|x|) + correction`, where
@@ -157,7 +218,7 @@ fn asinh_asymptotic_pair(s: f64) -> DoubleDouble {
 
 /// `asinh(|x|)` magnitude for the kernel band `[ASINH_SMALL, LARGE_IHYP]`: the
 /// sqrt-free [`asinh_asymptotic_pair`], Ziv-tested, for `|x| ≥ ASYMP_IHYP`, else
-/// (and on a straddle) the double-double sqrt path [`ln_sqrt_rounded`].
+/// (and on a straddle) the `√(x²+1)` path [`ln_sqrt_kernel`].
 ///
 /// `acosh` deliberately does *not* share this asymptotic: its kernel band reaches
 /// only `2¹¹` and is dominated by the near-1 region, so the asymptotic's large-`x`
@@ -173,8 +234,7 @@ fn asinh_mid(s: f64) -> f64 {
             return lo;
         }
     }
-    let d = DoubleDouble::from_product(s, s) + ONE;
-    ln_sqrt_rounded(s, sqrt_dd(d), d)
+    ln_sqrt_kernel(s, false)
 }
 
 /// Combine `(m, q)` — where `eˣ = 2`<sup>`q`</sup>` · m` for `x ≥ 0` — into the
@@ -956,7 +1016,7 @@ fn asinh_small_accurate(x: f64) -> f64 {
 ///
 /// `asinh(x) = ln(x + √(x² + 1))`, odd.  For `|x| < ASINH_SMALL` the
 /// result-anchored series [`asinh_small`] applies; for `ASINH_SMALL ≤ |x| ≤ 2²⁷`
-/// the log argument is carried as a double-double and fed to [`ln_sqrt_rounded`];
+/// the log argument is built by the lean [`ln_sqrt_kernel`];
 /// for larger `|x|` it collapses to the sqrt-free [`ln_2x_corrected`]
 /// (`ln(2|x|) + 1/(4x²)`), which also avoids the `x²` overflow at the top of the
 /// range.
@@ -989,9 +1049,9 @@ pub fn asinh(x: f64) -> f64 {
 
 /// Inverse hyperbolic cosine
 ///
-/// `acosh(x) = ln(x + √(x² − 1))` for `x ≥ 1`.  For `x ≤ 2²⁷`, `x² − 1` is formed
-/// as a double-double (exact, so the cancellation near `x = 1` is harmless) and the
-/// log argument fed to [`ln_sqrt_rounded`]; larger `x` collapses to the sqrt-free
+/// `acosh(x) = ln(x + √(x² − 1))` for `x ≥ 1`.  For `x ≤ 2²⁷` the lean
+/// [`ln_sqrt_kernel`] forms `x² − 1` exactly (so the cancellation near `x = 1` is
+/// harmless) and builds the log argument; larger `x` collapses to the sqrt-free
 /// [`ln_2x_corrected`] (`ln(2x) − 1/(4x²)`), which also avoids the `x²` overflow at
 /// the top of the range.
 #[must_use]
@@ -1001,7 +1061,7 @@ pub fn acosh(x: f64) -> f64 {
     if !(x >= 1.0) {
         return f64::NAN;
     }
-    // acosh(1) = 0 exactly (and avoids 0/0 in `sqrt_dd`); +∞ → +∞ (avoids `ln_dd(∞)`).
+    // acosh(1) = 0 exactly (and avoids the kernel's `0.5/√0`); +∞ → +∞ (avoids `ln_dd(∞)`).
     if x == 1.0 {
         return 0.0;
     }
@@ -1019,12 +1079,7 @@ pub fn acosh(x: f64) -> f64 {
     // the large-`x` tail — too thin a slice to cover the threshold branch's
     // misprediction on a log-uniform argument.  (`asinh`'s band reaches `2²⁶`, so
     // there the asymptotic broadly pays.)
-    let d = DoubleDouble::from_product(x, x)
-        + DoubleDouble {
-            high: -1.0,
-            low: 0.0,
-        };
-    ln_sqrt_rounded(x, sqrt_dd(d), d)
+    ln_sqrt_kernel(x, true)
 }
 
 /// `(1 + s)/(1 − s)` as a double-double for `s ∈ (0, 1)`, formed with a single
@@ -1216,15 +1271,12 @@ mod ziv_soundness {
         );
     }
 
-    /// Same check for the `asinh`/`acosh` middle band ([`ln_sqrt_rounded`]):
-    /// `ln(x + √(x² + 1))` via [`super::ln_dd_fast`], gate [`IHYP_ZIV_EPS`], over
+    /// Same check for the `asinh` middle band ([`ln_sqrt_fast`]):
+    /// `ln(x + √(x² + 1))` via the lean bare-FMA leg, gate [`IHYP_ZIV_EPS`], over
     /// `[ASINH_SMALL, LARGE_IHYP]`.
     #[test]
     fn asinh_main_leg_is_sound() {
-        let leg = |x: f64| {
-            let d = DoubleDouble::from_product(x, x) + ONE;
-            ln_dd_fast(sqrt_dd(d) + DoubleDouble { high: x, low: 0.0 })
-        };
+        let leg = |x: f64| ln_sqrt_fast(x, false).2;
         let (worst, x) = worst_ratio(
             ASINH_SMALL,
             LARGE_IHYP,
@@ -1237,6 +1289,42 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "asinh main-leg gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Same check for the `acosh` middle band ([`ln_sqrt_fast`]):
+    /// `ln(x + √(x² − 1))` via the lean bare-FMA leg, gate [`IHYP_ZIV_EPS`], over
+    /// `(1, LARGE_IHYP]`.  As `x → 1` the log argument → 1 and `ln_dd_fast` degrades,
+    /// so production escalates below [`IHYP_LEAN_FLOOR`]; this skips exactly those
+    /// inputs (mirroring the kernel's guard) and checks the leg is sound — its
+    /// *absolute* error inside the gate with margin — wherever it actually certifies.
+    #[test]
+    fn acosh_main_leg_is_sound() {
+        let (lb, hb) = ((1.0 + f64::EPSILON).to_bits(), LARGE_IHYP.to_bits());
+        let mut worst = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for i in 0..8_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb));
+            let e = ln_sqrt_fast(x, true).2;
+            // Below the floor production takes the accurate path, so its soundness
+            // is irrelevant — check only the certifying region.
+            if !(e.high >= IHYP_LEAN_FLOOR) {
+                continue;
+            }
+            let got = Float::with_val(250, e.high) + Float::with_val(250, e.low);
+            let truth = Float::with_val(250, x).acosh();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / IHYP_ZIV_EPS;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("acosh main leg: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "acosh main-leg gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
         );
     }
