@@ -1875,6 +1875,66 @@ pub fn acos(x: f64) -> f64 {
     asin_tail(off, z, zl, r, j).unwrap_or_else(|| acos_accurate(x))
 }
 
+/// Fold the first-quadrant angle `inner = atan(small/big) ∈ [0, π/4]` into the
+/// quadrant the signs select: `π/2 − inner` when `|y| > |x|` (`swapped`), then
+/// `π − ·` when `x < 0`.  Shared by both `atan2` fast tiers; the double-double
+/// adds carry the exact `π/2`/`π` low words, so the fold costs only ≈2⁻¹⁰⁵.
+#[inline]
+fn atan2_octant(inner: DoubleDouble, swapped: bool, x_negative: bool) -> DoubleDouble {
+    let phi = if swapped {
+        FRAC_PI_2 + neg(inner)
+    } else {
+        inner
+    };
+    if x_negative { PI + neg(phi) } else { phi }
+}
+
+/// `atan(small/big)` for `0 < small ≤ big` as a lean unrounded pair, plus the
+/// absolute Ziv half-width — the plain-`f64` first tier of [`atan2_mag`],
+/// mirroring [`atan_fast`]'s fine-table reduction (one division, no
+/// double-double).
+///
+/// `q = small/big` only *picks the cell*; the reduced argument is formed from the
+/// exact `(small, big)` as `h = (small − tan c·big)/(big + tan c·small)`, so the
+/// quotient's `≲2⁻⁵³` rounding rides the `|h|·ATAN_ZIV_E` gate exactly as in
+/// CORE-MATH's `atan2`.  Because the octant fold (above) preserves the absolute
+/// error, the caller can gate the *quadrant-adjusted* pair with this half-width.
+#[inline]
+fn atan_ratio(big: f64, small: f64, q: f64) -> (DoubleDouble, f64) {
+    let qb = q.to_bits();
+    if qb < ATAN_SMALL {
+        // Small ratio: atan(q) = q + q³·P(q²).  The division's `≲2⁻⁵³` slip and
+        // the tiny correction both ride the `q·ATAN_ZIV_E` gate; `q` is the
+        // dominant word so the octant fold's 2Sum keeps it ordered.
+        let q2 = q * q;
+        let corr = (q * q2) * crate::poly(q2, &ATAN_FAST_CH2);
+        return (DoubleDouble { high: q, low: corr }, q * ATAN_ZIV_E);
+    }
+
+    // Fine cell from `q`'s bits (the quadratic index fit of `atan_fast`), reduced
+    // with the exact `(small, big)`: `h = (small − tan c·big)/(big + tan c·small)`,
+    // one division, `|h| ≤ tan(π/512)`.  `tan c·big ≈ small` in-cell, so the
+    // numerator's FMA loses no bits.
+    let bucket = ((qb >> 51) - 2030) as usize;
+    let m = qb & (u64::MAX >> 13);
+    let ut = m >> 35;
+    let ut2 = (ut * ut) >> 16;
+    // SAFETY: ATAN_SMALL ≤ q ≤ 1 ⇒ qb>>51 ∈ 2031..=2046 ⇒ bucket ∈ 1..=16, and
+    // CORE-MATH's quadratic fit keeps i ∈ 0..=64 (atan q ≤ π/4) over that range.
+    let c = unsafe { *ATAN_FAST_IDX.get_unchecked(bucket) };
+    let i = (((c[0] << 16) + ut * c[1] - ut2 * c[2]) >> 25) as usize;
+    let tab = unsafe { *ATAN_FAST_TABLE.get_unchecked(i) };
+    let ta = tab.high;
+    let h = crate::fma(-ta, big, small) / crate::fma(ta, small, big);
+    let f = crate::poly(h * h, &ATAN_FAST_CH); // atan(h)/h
+    let ih = i as f64;
+    // atan(q) = i·π/256 + atan(h); `ATAN_STEP_HI·i` is exact for i ≤ 64, and
+    // `al` collects the within-cell angle plus the cell lead's low words.
+    let ah = ATAN_STEP_HI * ih;
+    let al = crate::fma(h, f, crate::fast_mul_add(ATAN_STEP_LO, ih, tab.low));
+    (DoubleDouble { high: ah, low: al }, h.abs() * ATAN_ZIV_E)
+}
+
 /// Magnitude of `atan2(y, x)` in `[0, π]` for finite nonzero `a = |x|`, `b = |y|`.
 #[inline]
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
@@ -1897,55 +1957,62 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
         return atan2_tint_mag(a, b, x_negative);
     }
 
-    let theta = |cell: fn(DoubleDouble, DoubleDouble) -> DoubleDouble| {
-        // φ = atan(q) ∈ [0, π/4] (`q = small/big`), or π/2 − atan(q) when `swapped`.
-        let inner = if q < 9.094947017729282e-13 {
-            // Tiny ratio: atan(q) = q far below ½ ulp, and the *unscaled* IEEE
-            // quotient `small/big` is correctly rounded down into the subnormals.
-            DoubleDouble { high: q, low: 0.0 }
-        } else {
-            // Scale both legs so the larger lands in [1, 2): exact and
-            // ratio-preserving, keeping `small − c·big` / `big + c·small` clear of
-            // overflow and the small leg out of the subnormals.
-            let (_, exp) = super::frexp(big);
-            let big = super::ldexp(big, 1 - exp);
-            let small = super::ldexp(small, 1 - exp);
+    // Lean plain-`f64` tier (the bulk).  On a Ziv straddle, fall to the
+    // double-double tier below, which alone defers genuine hard-to-round points to
+    // the 192-bit `Tint` path — so the ~5% lean-leg misses cost the cheap
+    // double-double leg, not the ~600 ns accurate one.
+    //
+    // Restricted to a normal magnitude band `2⁻⁹⁶⁰ ≤ big ≤ 2¹⁰²⁰`: outside it the
+    // unscaled reduction's products (`tan c·big`, `small − tan c·big`) under/overflow
+    // and lose bits, so those rare extremes take the dd tier's scaled reduction.
+    if (crate::exp2i(-960)..=crate::exp2i(1020)).contains(&big) {
+        let (inner, e) = atan_ratio(big, small, q);
+        let v = atan2_octant(inner, swapped, x_negative);
+        let lo = v.high + (v.low - e);
+        let hi = v.high + (v.low + e);
+        if lo == hi {
+            return lo;
+        }
+    }
 
-            // Cell reduction without forming small/big as a double-double: with
-            // ratio = small/big, `u = (ratio − c)/(1 + ratio·c) = (small − c·big)/(big
-            // + c·small)`.  `k = round(8·ratio)` reuses the `q` already in hand
-            // (scaling preserves the ratio exactly), so the leg spends only that one
-            // `q` division plus this `recip` — two, versus the four of the
-            // `from_quotient` path (the `q` test, the two-division quotient, the cell
-            // `recip`).  `small − c·big` is exact (c·big ≈ small in-cell, `from_product`
-            // exact), so `u` is at least as accurate, and `|u| ≤ 1/16` as before.
-            let k = (q * 8.0).round_ties_even();
-            let c = k * 0.125;
-            // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
-            let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
+    // φ = atan(q) ∈ [0, π/4] (`q = small/big`) in double-double, ≈2⁻¹⁰² accurate.
+    let inner = if q < 9.094947017729282e-13 {
+        // Tiny ratio: atan(q) = q far below ½ ulp, and the *unscaled* IEEE
+        // quotient `small/big` is correctly rounded down into the subnormals.
+        DoubleDouble { high: q, low: 0.0 }
+    } else {
+        // Scale both legs so the larger lands in [1, 2): exact and ratio-preserving,
+        // keeping `small − c·big` / `big + c·small` clear of overflow and the small
+        // leg out of the subnormals.
+        let (_, exp) = super::frexp(big);
+        let big = super::ldexp(big, 1 - exp);
+        let small = super::ldexp(small, 1 - exp);
 
-            let num = DoubleDouble {
-                high: small,
-                low: 0.0,
-            } + neg(DoubleDouble::from_product(c, big));
-            let den = DoubleDouble {
-                high: big,
-                low: 0.0,
-            } + DoubleDouble::from_product(c, small);
-            let u = num * den.recip();
+        // Cell reduction without forming small/big as a double-double: with
+        // ratio = small/big, `u = (ratio − c)/(1 + ratio·c) = (small − c·big)/(big +
+        // c·small)`.  `k = round(8·ratio)` reuses the `q` already in hand (scaling
+        // preserves the ratio exactly).  `small − c·big` is exact (c·big ≈ small
+        // in-cell, `from_product` exact), so `u` is accurate and `|u| ≤ 1/16`.
+        let k = (q * 8.0).round_ties_even();
+        let c = k * 0.125;
+        // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
+        let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
 
-            cell(table, u)
-        };
+        let num = DoubleDouble {
+            high: small,
+            low: 0.0,
+        } + neg(DoubleDouble::from_product(c, big));
+        let den = DoubleDouble {
+            high: big,
+            low: 0.0,
+        } + DoubleDouble::from_product(c, small);
+        let u = num * den.recip();
 
-        let phi = if swapped {
-            FRAC_PI_2 + neg(inner)
-        } else {
-            inner
-        };
-        if x_negative { PI + neg(phi) } else { phi }
+        atan_cell_fast(table, u)
     };
 
-    ziv(theta(atan_cell_fast)).unwrap_or_else(|| atan2_tint_mag(a, b, x_negative))
+    ziv(atan2_octant(inner, swapped, x_negative))
+        .unwrap_or_else(|| atan2_tint_mag(a, b, x_negative))
 }
 
 /// Arctangent of `y / x`, using the signs of both to select the quadrant
