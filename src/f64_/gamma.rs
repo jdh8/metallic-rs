@@ -1977,16 +1977,46 @@ fn lgamma_root_fast(z: f64) -> Option<(DoubleDouble, f64)> {
 ///
 /// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½` (the gate comes from
 /// the [`lgamma_pos_fast`] leg that handles `1−z`; the double-double `|sin πz|` and
-/// its `ln_fast` add only <2⁻⁶⁶, well inside that gate).  `[½, 8)` reads the central
-/// table; `[8, ∞)` takes the lean direct [`lgamma_stirling_fast`] with the ten-term
-/// [`LGAMMA_TAIL_F64`] up to [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term
-/// [`LGAMMA_TAIL_F64_FAR`] on the hot `z ≥ 40` tail.  The caller restricts `|z|` to
-/// below [`LGAMMA_FAST_BOUND`].
+/// its `ln_fast` add only <2⁻⁶⁶, well inside that gate).  When `1−z` lands in the
+/// central-table band its `ln Γ(1−z)` is a table value `cell_eval(d)` plus the
+/// recurrence's `ln ∏`; that recurrence log is folded into the sine — one
+/// `ln(|sin πz|·∏^±1)` replaces two separate `ln`s (CORE-MATH's `lgamma` reflection
+/// does the same single combined log), the lone shared-kernel saving in this band.
+/// `[½, 8)` reads the central table; `[8, ∞)` takes the lean direct
+/// [`lgamma_stirling_fast`] with the ten-term [`LGAMMA_TAIL_F64`] up to
+/// [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term [`LGAMMA_TAIL_F64_FAR`] on the
+/// hot `z ≥ 40` tail.  The caller restricts `|z|` to below [`LGAMMA_FAST_BOUND`].
 #[inline]
 fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     if z < 0.5 {
-        let (pos, gate) = lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z));
-        return (LN_PI + neg(ln_fast_sum(abs_sinpi_dd_lean(z)) + pos), gate);
+        let w = DoubleDouble::from_sum(1.0, -z);
+        let sinpi = abs_sinpi_dd_lean(z);
+        if w.high < LGAMMA_FAST_CUTOFF {
+            // ln Γ(1−z) = cell_eval(d) ± ln ∏; fold the ∏ into |sin πz| so one
+            // logarithm of |sin πz|·∏^±1 covers both terms (combining is at least
+            // as accurate as the two separate logs, so the table gate still holds).
+            let (i, d) = lgamma_center_reduce(w);
+            let arg = if i > 0 {
+                sinpi
+                    * recurrence_product_dd(
+                        w + DoubleDouble {
+                            high: -(i as f64),
+                            low: 0.0,
+                        },
+                        i,
+                    )
+            } else if i < 0 {
+                sinpi * recurrence_product_dd(w, -i).recip()
+            } else {
+                sinpi
+            };
+            return (
+                LN_PI + neg(cell_eval(&LGAMMA_TABLE, d) + ln_fast_sum(arg)),
+                LGAMMA_TABLE_ERR,
+            );
+        }
+        let (pos, gate) = lgamma_pos_fast(w);
+        return (LN_PI + neg(ln_fast_sum(sinpi) + pos), gate);
     }
     if z < LGAMMA_FAST_CUTOFF {
         // Near the roots `z = 1, 2` the central table cancels to a tiny result the
