@@ -536,6 +536,21 @@ pub fn tanh(x: f64) -> f64 {
     // lean `e²ˣ` mantissa ([`exp_two_level_fast`]), the same `E/(E + 2)` as the
     // accurate leg, accepted by a Ziv test; else [`tanh_accurate`].
     let (m, q) = exp_two_level_fast(2.0 * s);
+
+    // |x| ≳ 3.683: tanh = 1 − 2/(e²ˣ + 1) with the correction 2/(e²ˣ + 1) ≤ ~1.3e-3
+    // small enough that the plain-`f64` e²ˣ high word and a single division round
+    // it correctly (Ziv-gated).  The full E/(E + 2) double-double combine below is
+    // overkill here; this mirrors CORE-MATH's cheap large-`|x|` leg.
+    if s >= TANH_LARGE {
+        let corr = 2.0 / (fast_ldexp(m.high, q) + 1.0);
+        let e = corr * TANH_LARGE_ZIV;
+        let lo = 1.0 - (corr + e);
+        let hi = 1.0 - (corr - e);
+        if lo == hi {
+            return lo.copysign(x);
+        }
+    }
+
     let result = tanh_combine(m, q);
     let lo = result.high + (result.low - TANH_ZIV_EPS);
     let hi = result.high + (result.low + TANH_ZIV_EPS);
@@ -575,6 +590,18 @@ fn tanh_combine(m: DoubleDouble, q: i64) -> DoubleDouble {
 /// (the [`HYP_ZIV_EPS`] leg), so the result is good to ≈2⁻⁶⁵·⁷ absolute; the
 /// `E/(E + 2)` double-double adds only ≈2⁻¹⁰⁶.  `2⁻⁶²` keeps a >10× margin.
 const TANH_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
+
+/// Lower bound of `tanh`'s large-`|x|` cheap leg (CORE-MATH's `0x1.76c8b4395810p+1`).
+/// Above it the correction `2/(e²ˣ + 1) ≤ 2/(e^{7.37} + 1) ≈ 1.3e-3` is small enough
+/// that the plain-`f64` `e²ˣ` high word and one division round `tanh = 1 − 2/(e²ˣ + 1)`
+/// correctly, Ziv-gated by [`TANH_LARGE_ZIV`].
+const TANH_LARGE: f64 = 3.683; // 0x1.76c8b4395810p+1
+
+/// Ziv gate for [`tanh`]'s large-`|x|` cheap leg, as a relative bound on the
+/// correction `2/(e²ˣ + 1)`.  The leg's `e²ˣ` high word is good to ≈2⁻⁵³ relative
+/// and the single division adds ≈2⁻⁵³, so the correction slips ≈2⁻⁵² relative;
+/// `2`<sup>`-49`</sup>`·1.0625` keeps a >5× margin.  CORE-MATH uses the same gate.
+const TANH_LARGE_ZIV: f64 = 1.887_379_141_862_766e-15; // 0x1.1p-49
 
 /// Upper limit of `tanh`'s result-anchored small-`|x|` series leg.
 const TANH_SMALL: f64 = 0.125;
@@ -1232,6 +1259,37 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "asinh asymptotic-leg gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// `tanh`'s large-`|x|` cheap leg ([`TANH_LARGE`]≤|x|<20) forms the correction
+    /// `corr = 2/(e²ˣ + 1)` in plain `f64` and returns `1 − corr`; its [`TANH_LARGE_ZIV`]
+    /// relative gate on `corr` must cover the slip.  Representing the leg as the exact
+    /// `1 − corr` makes [`worst_ratio`] compare `corr` against the true `1 − tanh`, so
+    /// the reported error is exactly `|corr − corr_true|`.  Tightest at the bottom of
+    /// the range, where `corr` is largest.
+    #[test]
+    fn tanh_large_leg_is_sound() {
+        let corr = |x: f64| {
+            let (m, q) = exp_two_level_fast(2.0 * x);
+            2.0 / (fast_ldexp(m.high, q) + 1.0)
+        };
+        let (worst, x) = worst_ratio(
+            TANH_LARGE,
+            20.0,
+            8_000_000,
+            |x| DoubleDouble {
+                high: 1.0,
+                low: -corr(x),
+            },
+            |x| corr(x) * TANH_LARGE_ZIV,
+            |x| x.clone().tanh(),
+        );
+        println!("tanh large leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "tanh large-leg gate covers only {:.2}× the slip at x={x:e}",
             1.0 / worst
         );
     }
