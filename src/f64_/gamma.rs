@@ -1522,21 +1522,37 @@ fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
     let fi = (d.high * 8.0).round_ties_even();
     // SAFETY: d.high ∈ [−½, ½] ⇒ fi ∈ [−4, 4].
     let cell = &table[(unsafe { fi.to_int_unchecked::<i64>() } + 4) as usize];
-    let h = DoubleDouble {
-        high: d.high - fi * 0.125,
-        low: d.low,
-    };
+    // `z` is the cell-local argument, exact (Sterbenz: `fi·⅛` lands on `d.high`'s
+    // grid).  Carry it as a plain `f64`, so the Horner leads fold with dd × f64
+    // multiplies (CORE-MATH's `polydddfst`) rather than the dd × dd the dd
+    // argument would force, and with the magnitude-ordered Fast2Sum: each `|cₖ|`
+    // dominates its `acc·z` (|z| ≤ 1/16), the same ordering the corpus certifies.
+    let z = d.high - fi * 0.125;
 
-    // P(h) = c0 + h·(c1 + h·(c2 + h·(c3 + h·tail))), tail = c4 + c5·h + … in f64.
-    let tail = crate::poly(h.high, &cell.tail);
-    let acc = cell.c3
-        + DoubleDouble {
-            high: h.high * tail,
-            low: 0.0,
-        };
-    let acc = cell.c2 + acc * h;
-    let acc = cell.c1 + acc * h;
-    cell.c0 + acc * h
+    // P(z) = c0 + z·(c1 + z·(c2 + z·(c3 + z·tail))), tail = c4 + c5·z + … in f64.
+    let tail = crate::poly(z, &cell.tail);
+    let acc = cell.c3.add_ordered(DoubleDouble {
+        high: z * tail,
+        low: 0.0,
+    });
+    let acc = cell.c2.add_ordered(acc * z);
+    let acc = cell.c1.add_ordered(acc * z);
+    let value = cell.c0.add_ordered(acc * z);
+
+    // `d.low` correction.  Positive (non-reflection) inputs reduce exactly, so
+    // `d.low = 0` and this vanishes; the reflection feeds a double-double argument
+    // whose `d.low ≲ 2⁻⁵¹` shifts `P` by `P′(z)·d.low`.  `P′(z) ≈ c1 + z·(2c2 +
+    // 3z·c3)` in `f64` is ample — its rounding rides `d.low` down to ≲2⁻⁶⁸, well
+    // inside the table gate (the dropped `4c4·z³·d.low` is ≲2⁻⁷⁰).
+    let deriv = crate::fast_mul_add(
+        z,
+        crate::fast_mul_add(z, 3.0 * cell.c3.high, 2.0 * cell.c2.high),
+        cell.c1.high,
+    );
+    DoubleDouble {
+        high: value.high,
+        low: crate::fast_mul_add(deriv, d.low, value.low),
+    }
 }
 
 /// `Γ(2.875 + d)` for `d ∈ [−½, ½]` straight from [`TGAMMA_TABLE`] — the fast leg
