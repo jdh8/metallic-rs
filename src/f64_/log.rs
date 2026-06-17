@@ -1074,6 +1074,21 @@ fn ln_exact_reduce(x: f64) -> (i64, &'static LnCell, f64) {
     (e, cell, crate::fma(cell.r, m, -1.0))
 }
 
+/// [`ln_exact_reduce`] for a `x ≥ 1` (so guaranteed normal and positive): skips
+/// the full [`normalize`]'s sign test, `classify`, and subnormal branch for a
+/// straight bit-field extract.  Used by the inverse-hyperbolic fast legs
+/// ([`ln_dd_fast`], [`ln_fast_scaled`]), whose arguments are all `≥ 1`.
+#[inline]
+fn ln_exact_reduce_normal(x: f64) -> (i64, &'static LnCell, f64) {
+    let bits = x.to_bits();
+    let e = (bits >> EXP_SHIFT) as i64 - 1023;
+    let j = ((bits >> (EXP_SHIFT - 7)) & 127) as usize;
+    let m = f64::from_bits((bits & 0x000F_FFFF_FFFF_FFFF) | 0x3FF0_0000_0000_0000);
+
+    let cell = &LN_CELLS[j];
+    (e, cell, crate::fma(cell.r, m, -1.0))
+}
+
 /// Assemble `ln(2^e·m) = e·ln2 + (l1 + l2) + ln(1+z)` from an
 /// [`ln_exact_reduce`] result, as an **unnormalized** pair: `high` is the
 /// correctly-rounded sum of the dominant terms and `low` (≲2⁻¹⁵) carries the
@@ -1170,7 +1185,7 @@ pub fn ln_fast(x: f64) -> DoubleDouble {
 /// large-|x| path (`ln(2|x|)`, `k = 1`).
 #[inline]
 pub fn ln_fast_scaled(x: f64, k: i64) -> DoubleDouble {
-    let (e, cell, z) = ln_exact_reduce(x);
+    let (e, cell, z) = ln_exact_reduce_normal(x);
     let DoubleDouble { high, low } = ln_exact_assemble((e + k) as f64, cell, z);
     fast_sum(high, low)
 }
@@ -1188,7 +1203,7 @@ pub fn ln_fast_scaled(x: f64, k: i64) -> DoubleDouble {
 /// pass `s > 1`, so `e ≥ 0` and `2⁻ᵉ` never overflows.
 #[inline]
 pub fn ln_dd_fast(s: DoubleDouble) -> DoubleDouble {
-    let (e, cell, z) = ln_exact_reduce(s.high);
+    let (e, cell, z) = ln_exact_reduce_normal(s.high);
     let delta = s.low * crate::exp2i(-e);
     let dz = cell.r * delta;
     let dz = crate::fast_mul_add(-dz, z, dz);
