@@ -159,14 +159,28 @@ pub fn hypot(x: f64, y: f64) -> f64 {
         (ldexp(big, 1 - n), ldexp(small, 1 - n), n - 1)
     };
 
-    // big_s² + small_s² in double-double (each square exact via the FMA in
-    // `from_product`), then one Newton step `h + (s2 − h²)/(2h)` on `h = √s2.high`.
-    let s2 =
-        DoubleDouble::from_product(big_s, big_s) + DoubleDouble::from_product(small_s, small_s);
-    let h = s2.high.sqrt();
-    let h2 = DoubleDouble::from_product(h, h);
-    let residual = (s2.high - h2.high) + (s2.low - h2.low);
-    let corrected = fast_sum(h, residual * (0.5 / h));
+    // `big_s² + small_s²` in double-double, each square exact via the FMA in
+    // `from_product`.  Because `big_s ≥ small_s`, the high words are ordered
+    // (`x2.high ≥ y2.high`), so the accumulated high sum `r2` needs only a
+    // Fast2Sum residual `(x2.high − r2) + y2.high` (plus the two square low
+    // words) — cheaper than the generic unordered `DoubleDouble + DoubleDouble`,
+    // and `r2` is fed straight to the square root without a renormalizing pass.
+    let x2 = DoubleDouble::from_product(big_s, big_s);
+    let y2 = DoubleDouble::from_product(small_s, small_s);
+    let r2 = x2.high + y2.high;
+    let dr2 = ((x2.high - r2) + y2.high) + (x2.low + y2.low);
+
+    // One Newton step `h + (r2 + dr2 − h²)/(2h)` on `h = √r2`.  The reciprocal
+    // `0.5/r2` is issued before the square root — both depend only on `r2` and
+    // are long-latency, so they execute concurrently rather than the divide
+    // stalling on the sqrt — and the Newton scale `0.5/h` is recovered as the
+    // multiply `h·ir2 = h·0.5/r2` (≈1.5 ulp, ample for the ≈2⁻¹⁰⁴ correction).
+    // The residual `r2 + dr2 − h²` collapses to one fused `dr2 − fma(h,h,−r2)`,
+    // since `fma(h,h,−r2) = h² − r2` is exact (CORE-MATH's `dz`/`rsqrt`).
+    let ir2 = 0.5 / r2;
+    let h = r2.sqrt();
+    let residual = dr2 - crate::fma(h, h, -r2);
+    let corrected = fast_sum(h, residual * (h * ir2));
 
     // `corrected ∈ [1, 2√2)`; normalize into [1, 2) for the subnormal-safe rounder,
     // folding the binade into the exponent `e`.  `big ≤ MAX/2` here, so the result
