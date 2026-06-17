@@ -1897,17 +1897,29 @@ fn lgamma_stirling_dd(y: DoubleDouble, inv_t: f64) -> DoubleDouble {
     let u = inv_t * inv_t;
     let tail = crate::poly(u, &LGAMMA_TAIL_F64) * inv_t;
 
-    ln_fast_sum(y)
-        * (y + DoubleDouble {
-            high: -0.5,
+    // Lean Stirling on the `f64` high word (the positive leg's
+    // [`lgamma_stirling_fast`] body: `ln_fast`, not `ln_fast_sum`'s division, and
+    // `add_ordered` folds), then fold `y.low` back as a first-order
+    // `lnΓ′(y)·y.low = digamma(y)·y.low` correction — `digamma(y) ≈ ln y − 1/(2y) −
+    // 1/(12y²)` — instead of threading the double-double `y` through the log and the
+    // renormalizing `Add`s.  The dropped `O(y.low²)` and `−1/(120y⁴)·y.low` terms are
+    // ≲2⁻⁶⁰, inside the [`lgamma_stirling_ziv`] gate.
+    let lw = crate::f64_::ln_fast(y.high);
+    let base = (lw * (y.high - 0.5))
+        .add_ordered(DoubleDouble {
+            high: -y.high,
             low: 0.0,
         })
-        + neg(y)
-        + HALF_LN_2PI
-        + DoubleDouble {
+        .add_ordered(HALF_LN_2PI)
+        .add_ordered(DoubleDouble {
             high: tail,
             low: 0.0,
-        }
+        });
+    let digamma = lw.high - inv_t * crate::fast_mul_add(u, 1.0 / 12.0, 0.5);
+    DoubleDouble {
+        high: base.high,
+        low: crate::fast_mul_add(digamma, y.low, base.low),
+    }
 }
 
 /// `ln Γ(y)` for positive `y`, the Ziv fast leg, with its absolute error bound
