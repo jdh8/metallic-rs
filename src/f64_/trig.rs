@@ -237,22 +237,6 @@ const FRAC_1_24: DoubleDouble = DoubleDouble {
     low: 2.3129646346357427e-18,
 };
 
-/// `−1/5040` as a double-double — the exact `u³` coefficient peeled from
-/// `sin(r)/r` by the `sinpi` kernel ([`sinpi_sin_kernel`]).  See [`FRAC_1_120`].
-const NEG_FRAC_1_5040: DoubleDouble = DoubleDouble {
-    high: -0.0001984126984126984,
-    low: -1.7209558293420705e-22,
-};
-
-/// `−1/720` as a double-double — the exact `u³` coefficient peeled from `cos(r)`
-/// by the `sinpi` kernel ([`sinpi_cos_kernel`]).  Peeling this term out of the
-/// `f64` tail (where the fast `cos` kernel leaves it) is what lifts the lean
-/// `cos(πr)` from ≈2⁻⁶¹·⁷ to ≈2⁻⁶⁷·⁹.  See [`FRAC_1_120`].
-const NEG_FRAC_1_720: DoubleDouble = DoubleDouble {
-    high: -0.001388888888888889,
-    low: 5.300543954373577e-20,
-};
-
 /// 2/π as f64, for the medium-range quotient `round(x·2/π)`.
 const FRAC_2_PI_F64: f64 = 0.6366197723675814;
 
@@ -911,113 +895,322 @@ const PI_DD: DoubleDouble = DoubleDouble {
     low: 1.224_646_799_147_353_2e-16,
 };
 
-/// `f64` tail of `sin(r)/r` for the lean `sinpi` kernel: the `u⁴` remainder after
-/// the four exact double-double leads `1 − u/6 + u²/120 − u³/5040` are peeled off,
-/// low-degree first in `u = r²` (coefficients `(−1)ᵏ/(2k+1)!`, `k = 4…11`).  The
-/// truncation past `u¹¹` is ≈2⁻⁹² on `[−π/4, π/4]`, so the lean `sin(πr)` is bound
-/// by the `f64` rounding of this tiny tail at ≈2⁻⁷¹ — see [`sinpi_sin_kernel`].
-const SINPI_TAIL: [f64; 8] = [
-    2.7557319223985893e-06,
-    -2.505210838544172e-08,
-    1.6059043836821613e-10,
-    -7.647163731819816e-13,
-    2.8114572543455206e-15,
-    -8.22063524662433e-18,
-    1.9572941063391263e-20,
-    -3.868170170630684e-23,
-];
-
-/// `f64` tail of `cos(r)` for the lean `sinpi` kernel: the `u⁴` remainder after the
-/// four leads `1 − u/2 + u²/24 − u³/720` are peeled off (coefficients
-/// `(−1)ᵏ/(2k)!`, `k = 4…11`).  Truncation past `u¹¹` is ≈2⁻⁸⁷.  See [`SINPI_TAIL`].
-const COSPI_TAIL: [f64; 8] = [
-    2.48015873015873e-05,
-    -2.755731922398589e-07,
-    2.08767569878681e-09,
-    -1.1470745597729725e-11,
-    4.779477332387385e-14,
-    -1.5619206968586225e-16,
-    4.110317623312165e-19,
-    -8.896791392450574e-22,
-];
-
-/// `sin(r)` for `r ∈ [−π/4, π/4]` as a double-double, ≈2⁻⁷¹ — the lean kernel for
-/// the `lgamma` reflection's `sin(πz)` ([`sinpi_dd`]).
+/// `sin(πk/128)` as a double-double, `k = 0..=64` — the grid table of the lean
+/// table-driven `|sin(πx)|` ([`abs_sinpi_dd_lean`]), CORE-MATH's `stpi`.  Indexing
+/// it at `64 − k` gives `cos(πk/128)` by the complement identity, so one table
+/// serves both the sine and cosine of the grid angle.
 ///
-/// Four exact double-double leads `1 − u/6 + u²/120 − u³/5040` (2-way Estrin) plus
-/// the `f64` [`SINPI_TAIL`], versus the accurate [`sin_kernel`]'s full 13-term
-/// double-double Estrin (≈2⁻¹²⁷).  The reflection's `ln|sin πz|` only needs
-/// `sin(πz)` to the leg's ≈2⁻⁶²–2⁻⁶⁶ budget, so this trades the accurate kernel's
-/// surplus precision for a shorter dependency chain.  Each `add_ordered` fold's
-/// running sum dominates the next term across the octant (`fold_ordering::sinpi_leads`).
-#[inline]
-fn sinpi_sin_kernel(r: DoubleDouble) -> DoubleDouble {
-    let uu = r * r;
-    let u = uu.high;
-    let u2 = uu * uu;
-    let u4 = u2.high * u2.high;
-    let a0 = ONE.add_ordered(uu * NEG_FRAC_1_6);
-    let a1 = FRAC_1_120.add_ordered(uu * NEG_FRAC_1_5040);
-    let sin_over_r = a0.add_ordered(u2 * a1).add_ordered(DoubleDouble {
-        high: u4 * crate::poly(u, &SINPI_TAIL),
+/// Generated to ≈2⁻¹⁰⁵ (200-bit MPFR, `tests/gen_sinpi_table.rs`).
+const SINPI_TABLE: [DoubleDouble; 65] = [
+    DoubleDouble {
+        high: 0.0,
         low: 0.0,
-    });
-    r * sin_over_r
-}
-
-/// `cos(r)` for `r ∈ [−π/4, π/4]` as a double-double, ≈2⁻⁶⁸ — the lean kernel for
-/// the `lgamma` reflection's `cos(πz)` ([`sinpi_dd`]).  See [`sinpi_sin_kernel`];
-/// the leads are `1 − u/2 + u²/24 − u³/720` and the tail [`COSPI_TAIL`].
-#[inline]
-fn sinpi_cos_kernel(r: DoubleDouble) -> DoubleDouble {
-    let uu = r * r;
-    let u = uu.high;
-    let u2 = uu * uu;
-    let u4 = u2.high * u2.high;
-    let b0 = ONE.add_ordered(uu * -0.5);
-    let b1 = FRAC_1_24.add_ordered(uu * NEG_FRAC_1_720);
-    b0.add_ordered(u2 * b1).add_ordered(DoubleDouble {
-        high: u4 * crate::poly(u, &COSPI_TAIL),
+    },
+    DoubleDouble {
+        high: 0.024541228522912288,
+        low: -9.186849012577878e-20,
+    },
+    DoubleDouble {
+        high: 0.049067674327418015,
+        low: -6.79610372051828e-19,
+    },
+    DoubleDouble {
+        high: 0.07356456359966743,
+        low: -2.7784941506273593e-18,
+    },
+    DoubleDouble {
+        high: 0.0980171403295606,
+        low: -1.634582362244256e-18,
+    },
+    DoubleDouble {
+        high: 0.1224106751992162,
+        low: 2.8354501489965335e-18,
+    },
+    DoubleDouble {
+        high: 0.14673047445536175,
+        low: 3.726947147046568e-18,
+    },
+    DoubleDouble {
+        high: 0.17096188876030122,
+        low: 9.19199801817591e-18,
+    },
+    DoubleDouble {
+        high: 0.19509032201612828,
+        low: -7.991079068461731e-18,
+    },
+    DoubleDouble {
+        high: 0.2191012401568698,
+        low: -3.6513812299150776e-19,
+    },
+    DoubleDouble {
+        high: 0.2429801799032639,
+        low: -8.751431529719663e-18,
+    },
+    DoubleDouble {
+        high: 0.26671275747489837,
+        low: 2.0941222578826688e-17,
+    },
+    DoubleDouble {
+        high: 0.2902846772544624,
+        low: -1.892797870777425e-17,
+    },
+    DoubleDouble {
+        high: 0.31368174039889146,
+        low: 1.4560447299968912e-17,
+    },
+    DoubleDouble {
+        high: 0.33688985339222005,
+        low: -4.200094003347509e-19,
+    },
+    DoubleDouble {
+        high: 0.35989503653498817,
+        low: -1.7601687123839282e-17,
+    },
+    DoubleDouble {
+        high: 0.3826834323650898,
+        low: -1.0050772696461588e-17,
+    },
+    DoubleDouble {
+        high: 0.40524131400498986,
+        low: 9.911140194289988e-18,
+    },
+    DoubleDouble {
+        high: 0.4275550934302821,
+        low: 9.411189816295473e-18,
+    },
+    DoubleDouble {
+        high: 0.4496113296546066,
+        low: 4.883192423203524e-18,
+    },
+    DoubleDouble {
+        high: 0.47139673682599764,
+        low: 6.516678136069013e-18,
+    },
+    DoubleDouble {
+        high: 0.49289819222978404,
+        low: -1.0257831676562186e-18,
+    },
+    DoubleDouble {
+        high: 0.5141027441932218,
+        low: -4.5712707523615624e-17,
+    },
+    DoubleDouble {
+        high: 0.5349976198870973,
+        low: -5.3683132708358134e-17,
+    },
+    DoubleDouble {
+        high: 0.5555702330196022,
+        low: 4.709410940561677e-17,
+    },
+    DoubleDouble {
+        high: 0.5758081914178453,
+        low: -3.7909495458942734e-17,
+    },
+    DoubleDouble {
+        high: 0.5956993044924334,
+        low: -1.3438641936579467e-17,
+    },
+    DoubleDouble {
+        high: 0.6152315905806268,
+        low: 2.623141776726695e-17,
+    },
+    DoubleDouble {
+        high: 0.6343932841636455,
+        low: 1.0420901929280035e-17,
+    },
+    DoubleDouble {
+        high: 0.6531728429537768,
+        low: 8.569564206002624e-18,
+    },
+    DoubleDouble {
+        high: 0.6715589548470184,
+        low: -4.048903774929669e-17,
+    },
+    DoubleDouble {
+        high: 0.6895405447370669,
+        low: -1.588932329480679e-17,
+    },
+    DoubleDouble {
+        high: 0.7071067811865476,
+        low: -4.833646656726457e-17,
+    },
+    DoubleDouble {
+        high: 0.7242470829514669,
+        low: 2.9198471334403004e-17,
+    },
+    DoubleDouble {
+        high: 0.7409511253549591,
+        low: -1.4708616952297345e-17,
+    },
+    DoubleDouble {
+        high: 0.7572088465064846,
+        low: -1.9909098777335502e-17,
+    },
+    DoubleDouble {
+        high: 0.773010453362737,
+        low: -3.256590703364977e-17,
+    },
+    DoubleDouble {
+        high: 0.7883464276266062,
+        low: 3.439699315405971e-17,
+    },
+    DoubleDouble {
+        high: 0.8032075314806449,
+        low: -3.306060980481491e-17,
+    },
+    DoubleDouble {
+        high: 0.8175848131515837,
+        low: -1.4883149812426772e-17,
+    },
+    DoubleDouble {
+        high: 0.8314696123025452,
+        low: 1.4073856984728024e-18,
+    },
+    DoubleDouble {
+        high: 0.8448535652497071,
+        low: -4.363136029687964e-17,
+    },
+    DoubleDouble {
+        high: 0.8577286100002721,
+        low: -4.818344793633662e-17,
+    },
+    DoubleDouble {
+        high: 0.8700869911087115,
+        low: -4.188851086854997e-17,
+    },
+    DoubleDouble {
+        high: 0.881921264348355,
+        low: -1.9843248405890562e-17,
+    },
+    DoubleDouble {
+        high: 0.8932243011955153,
+        low: -4.116123915190891e-18,
+    },
+    DoubleDouble {
+        high: 0.9039892931234433,
+        low: -6.609754468748431e-18,
+    },
+    DoubleDouble {
+        high: 0.9142097557035307,
+        low: -3.631618252781442e-17,
+    },
+    DoubleDouble {
+        high: 0.9238795325112867,
+        low: 1.7645047084336677e-17,
+    },
+    DoubleDouble {
+        high: 0.9329927988347388,
+        low: 4.2041415555384355e-17,
+    },
+    DoubleDouble {
+        high: 0.9415440651830208,
+        low: -2.789637954769834e-17,
+    },
+    DoubleDouble {
+        high: 0.9495281805930367,
+        low: -7.55441519280433e-18,
+    },
+    DoubleDouble {
+        high: 0.9569403357322088,
+        low: 4.05538698618757e-17,
+    },
+    DoubleDouble {
+        high: 0.9637760657954398,
+        low: 2.646395056122003e-17,
+    },
+    DoubleDouble {
+        high: 0.970031253194544,
+        low: 1.8365300348428844e-17,
+    },
+    DoubleDouble {
+        high: 0.9757021300385286,
+        low: -2.5572556081259686e-17,
+    },
+    DoubleDouble {
+        high: 0.9807852804032304,
+        low: 1.8546939997825006e-17,
+    },
+    DoubleDouble {
+        high: 0.9852776423889412,
+        low: 2.3155637027900207e-17,
+    },
+    DoubleDouble {
+        high: 0.989176509964781,
+        low: -4.098730993704711e-17,
+    },
+    DoubleDouble {
+        high: 0.99247953459871,
+        low: 3.1093055095428906e-17,
+    },
+    DoubleDouble {
+        high: 0.9951847266721969,
+        low: -4.248691367830441e-17,
+    },
+    DoubleDouble {
+        high: 0.9972904566786902,
+        low: 9.164769537110173e-18,
+    },
+    DoubleDouble {
+        high: 0.9987954562051724,
+        low: -1.2291693337075465e-17,
+    },
+    DoubleDouble {
+        high: 0.9996988186962042,
+        low: -2.985148640379975e-17,
+    },
+    DoubleDouble {
+        high: 1.0,
         low: 0.0,
-    })
-}
+    },
+];
 
-/// `sin(πx)` as a double-double for `|x| < 2⁵²`, where `x − q/2` is exact
+/// Taylor coefficients of `(cos(πd/128) − 1)/d² = C1 + d²(C2 + d²·C3)` in the grid
+/// unit `d = 128·a − round(128·a) ∈ [−½, ½]` (`Cₖ = (−1)ᵏ(π/128)^{2k}/(2k)!`); the
+/// leading `C1` is double-double, the rest `f64`.  Residual angle `|πd/128| ≤
+/// π/256`, so the dropped `d⁸` term is ≈2⁻⁶⁶.  See [`abs_sinpi_dd_lean`].
+const SINPI_C1: DoubleDouble = DoubleDouble {
+    high: -0.0003011964233730883,
+    low: -1.9120164516417576e-20,
+};
+const SINPI_C2: f64 = 1.5119880908790113e-8;
+const SINPI_C3: f64 = -3.036036034369748e-13;
+
+/// Taylor coefficients of `sin(πd/128)/d = S0 + d²(S1 + d²(S2 + d²·S3))`
+/// (`Sₖ = (−1)ᵏ(π/128)^{2k+1}/(2k+1)!`); `S0`, `S1` double-double, the rest `f64`.
+/// See [`SINPI_C1`].
+const SINPI_S0: DoubleDouble = DoubleDouble {
+    high: 0.02454369260617026,
+    low: 9.567553118338697e-19,
+};
+const SINPI_S1: DoubleDouble = DoubleDouble {
+    high: -2.4641574764489986e-6,
+    low: 1.0807811177153324e-22,
+};
+const SINPI_S2: f64 = 7.421954185344935e-11;
+const SINPI_S3: f64 = -1.064507645268961e-15;
+
+/// `sin(πx)` as a double-double for `|x| < 2⁵²`, where `x − q/2` is exact — the
+/// accurate ≈2⁻¹²² kernel for the `lgamma` middle Ziv tier ([`abs_sinpi_dd`]).
 ///
 /// Reduces `x = q/2 + r`, `r ∈ [−¼, ¼]`, and selects `±sin(πr)`/`±cos(πr)` by
-/// `q mod 4`, with `πr ∈ [−π/4, π/4]` carried as a double-double into the kernels.
-/// `accurate` picks the ≈2⁻¹²⁷ [`sin_kernel`]/[`cos_kernel`] (the `lgamma` middle
-/// Ziv tier needs it for its ≈2⁻⁹³ gate) over the lean ≈2⁻⁶⁸
-/// [`sinpi_sin_kernel`]/[`sinpi_cos_kernel`] the fast leg uses; the compiler
-/// monomorphizes the `const` flag away.
+/// `q mod 4`, with `πr ∈ [−π/4, π/4]` carried as a double-double into the full
+/// double-double [`sin_kernel`]/[`cos_kernel`] (the middle tier needs their
+/// ≈2⁻¹²² for its ≈2⁻⁹³ gate; the reflection *fast* leg takes the leaner
+/// table-driven [`abs_sinpi_dd_lean`] instead).
 #[inline]
-fn sinpi_dd<const ACCURATE: bool>(x: f64) -> DoubleDouble {
+fn sinpi_dd(x: f64) -> DoubleDouble {
     let q = (2.0 * x).round_ties_even();
     let theta = PI_DD * (x - q * 0.5);
-    let sin = |t| {
-        if ACCURATE {
-            sin_kernel(t)
-        } else {
-            sinpi_sin_kernel(t)
-        }
-    };
-    let cos = |t| {
-        if ACCURATE {
-            cos_kernel(t)
-        } else {
-            sinpi_cos_kernel(t)
-        }
-    };
     // SAFETY: `|x| < 2⁵²`, so `|q| < 2⁵³` fits an `i64`.
     match unsafe { q.to_int_unchecked::<i64>() } & 3 {
-        0 => sin(theta),
-        1 => cos(theta),
-        2 => neg(sin(theta)),
-        _ => neg(cos(theta)),
+        0 => sin_kernel(theta),
+        1 => cos_kernel(theta),
+        2 => neg(sin_kernel(theta)),
+        _ => neg(cos_kernel(theta)),
     }
 }
 
-/// `|sin(πx)|` as a double-double for `|x| < 2⁵²`, accurate ≈2⁻¹²⁷ (see
+/// `|sin(πx)|` as a double-double for `|x| < 2⁵²`, accurate ≈2⁻¹²² (see
 /// [`sinpi_dd`]) — for the `lgamma` middle Ziv tier.
 ///
 /// The lgamma reflection needs `ln|sin(πz)|` accurate even as `z` nears an
@@ -1025,17 +1218,50 @@ fn sinpi_dd<const ACCURATE: bool>(x: f64) -> DoubleDouble {
 /// kernel's leading term keeps full relative accuracy.
 #[inline]
 pub(super) fn abs_sinpi_dd(x: f64) -> DoubleDouble {
-    let v = sinpi_dd::<true>(x);
+    let v = sinpi_dd(x);
     if v.high < 0.0 { neg(v) } else { v }
 }
 
-/// `|sin(πx)|` as a double-double for `|x| < 2⁵²`, the lean ≈2⁻⁶⁸ kernel (see
-/// [`sinpi_dd`]) — for the `lgamma` reflection *fast* leg, whose ≈2⁻⁶²–2⁻⁶⁶ gate
-/// has ample room for it (the middle tier still uses the accurate [`abs_sinpi_dd`]).
+/// `|sin(πx)|` as a double-double for `|x| < 2⁵²`, the lean table-driven kernel
+/// (≈2⁻⁶⁶) — for the `lgamma` reflection *fast* leg, whose ≈2⁻⁶²–2⁻⁶⁶ gate has
+/// ample room for it (the middle tier still uses the accurate [`abs_sinpi_dd`]).
+///
+/// Mirrors CORE-MATH's `as_sinpipid`.  `|sin(πx)| = sin(π·a)` with the period-1
+/// even reduction `a = |x − round(x)| ∈ [0, ½]`; then `a = (k + d)/128` against the
+/// [`SINPI_TABLE`] grid (`k = round(128·a)`, `d ∈ [−½, ½]`), and angle addition
+///
+/// `sin(π(k+d)/128) = sin(πk/128)·cos(πd/128) + cos(πk/128)·sin(πd/128)`
+///
+/// folds the tiny residual angle `πd/128 ∈ [−π/256, π/256]` through the short
+/// [`SINPI_S0`]/[`SINPI_C1`] polynomials — far cheaper than a full-octant kernel.
+/// Factoring `d` back out last keeps the leading `sin(π·a) ≈ π·a` exact as `a → 0`
+/// (the near-integer case the gate cares about).  The result is non-negative
+/// (`a ∈ [0, ½] ⇒ π·a ∈ [0, π/2]`), so no sign fixup.
 #[inline]
 pub(super) fn abs_sinpi_dd_lean(x: f64) -> DoubleDouble {
-    let v = sinpi_dd::<false>(x);
-    if v.high < 0.0 { neg(v) } else { v }
+    let a = (x - x.round_ties_even()).abs();
+    let s = a * 128.0;
+    let kf = s.round_ties_even();
+    let d = s - kf;
+    // SAFETY: a ∈ [0, ½] ⇒ s ∈ [0, 64] ⇒ k ∈ 0..=64.
+    let k = unsafe { kf.to_int_unchecked::<usize>() };
+    let sg = SINPI_TABLE[k]; // sin(πk/128)
+    let cg = SINPI_TABLE[64 - k]; // cos(πk/128) = sin(π(64−k)/128)
+
+    let d2 = d * d;
+    // sin(πd/128)/d = S0 + d²(S1 + d²(S2 + d²·S3))  (leading word double-double)
+    let sin_over_d = SINPI_S0.add_ordered(DoubleDouble {
+        high: d2 * crate::poly(d2, &[SINPI_S1.high, SINPI_S2, SINPI_S3]),
+        low: 0.0,
+    });
+    // (cos(πd/128) − 1)/d² = C1 + d²(C2 + d²·C3)
+    let cosm1_over_d2 = SINPI_C1.add_ordered(DoubleDouble {
+        high: d2 * crate::poly(d2, &[SINPI_C2, SINPI_C3]),
+        low: 0.0,
+    });
+    // sin(π·a) = sg + d·(cg·[sin θ/d] + sg·d·[(cos θ − 1)/d²]),  θ = πd/128.
+    let bracket = cg * sin_over_d + sg * (cosm1_over_d2 * d);
+    sg + bracket * d
 }
 
 /// Sine
@@ -1244,42 +1470,23 @@ mod fold_ordering {
         }
     }
 
-    /// `sinpi_sin_kernel` / `sinpi_cos_kernel`:
-    /// `(1 ⊕ u·c₁) ⊕ u²·(c₂ ⊕ u·c₃) ⊕ u⁴·tail` with `u = r² ≤ (π/4)²`; each
-    /// `add_ordered` needs its running sum (resp. `c₂`) to dominate the next term.
+    /// The table-driven `abs_sinpi_dd_lean` folds the residual polynomials with
+    /// `add_ordered` (`S0 ⊕ d²·(…)` and `C1 ⊕ d²·(…)`), which needs the leading
+    /// coefficient to dominate the higher-order remainder.  `|d| ≤ ½`, so check
+    /// the remainder stays under half the lead there.
     #[test]
-    fn sinpi_leads() {
-        let umax = core::f64::consts::FRAC_PI_4.powi(2) * 1.0001;
-        let u2max = umax * umax;
-        let u4max = u2max * u2max;
+    fn sinpi_table_leads() {
+        let d2max = 0.25_f64; // (½)²
         let mag = |c: DoubleDouble| c.high.abs() + c.low.abs();
-        let tail_mag = |tail: &[f64]| {
-            tail.iter()
+        let poly_mag = |c: &[f64]| {
+            c.iter()
                 .rev()
-                .fold(0.0, |acc, c| crate::fast_mul_add(acc, umax, c.abs()))
+                .fold(0.0, |acc, c| crate::fast_mul_add(acc, d2max, c.abs()))
         };
-
-        for (c1, c2, c3, tail) in [
-            (
-                mag(NEG_FRAC_1_6),
-                mag(FRAC_1_120),
-                mag(NEG_FRAC_1_5040),
-                &SINPI_TAIL[..],
-            ),
-            (0.5, mag(FRAC_1_24), mag(NEG_FRAC_1_720), &COSPI_TAIL[..]),
-        ] {
-            // a0 = 1 ⊕ u·c₁
-            assert!(umax * c1 <= 0.5);
-            let a0_min = 1.0 - umax * c1;
-            // a1 = c₂ ⊕ u·c₃
-            assert!(umax * c3 <= 0.5 * c2);
-            let a1_mag = c2 + umax * c3;
-            // a0 ⊕ u²·a1
-            assert!(u2max * a1_mag <= 0.5 * a0_min);
-            let sum_min = a0_min - u2max * a1_mag;
-            // ⊕ u⁴·tail
-            assert!(u4max * tail_mag(tail) <= 0.5 * sum_min);
-        }
+        // sin: |S0| ≥ |d²·(S1 + d²(S2 + d²·S3))|
+        assert!(d2max * poly_mag(&[SINPI_S1.high, SINPI_S2, SINPI_S3]) <= 0.5 * mag(SINPI_S0));
+        // cos: |C1| ≥ |d²·(C2 + d²·C3)|
+        assert!(d2max * poly_mag(&[SINPI_C2, SINPI_C3]) <= 0.5 * mag(SINPI_C1));
     }
 
     #[test]
