@@ -118,6 +118,65 @@ fn ln_2x_corrected(s: f64, correction: f64) -> f64 {
     super::dint::ln_2s_corrected_accurate(s, correction)
 }
 
+/// `2⁶ = 64`.  For `ASYMP_IHYP ≤ |x| < LARGE_IHYP` `asinh` takes a **sqrt-free**
+/// asymptotic fast leg before the double-double sqrt path, so the wide upper
+/// stretch of its kernel band pays one division instead of a square root.  Below
+/// 64 the asymptotic would need too many terms (and the `f64` correction loses its
+/// soundness margin); above `LARGE_IHYP` a single correction term suffices
+/// ([`ln_2x_corrected`]).
+const ASYMP_IHYP: f64 = 64.0;
+
+/// Asymptotic correction `f(v) = a₁v + a₂v² + a₃v³ + a₄v⁴ + a₅v⁵` of
+/// `ln((1 + √(1 + v))/2)` with `v = 1/x²`, for `asinh(x) = ln(2x) + f(v)` —
+/// low-degree-first for `crate::poly`, evaluated `v·poly(v)`.  The dropped `a₆v⁶`
+/// is `<2⁻⁷²` for `|x| ≥ 64`, far inside the [`IHYP_ZIV_EPS`] gate.
+const ASINH_ASYMP: [f64; 5] = [
+    0.25,             // 1/4
+    -0.093_75,        // −3/32
+    5.0 / 96.0,       // 5/96
+    -0.034_179_687_5, // −35/1024
+    63.0 / 2560.0,    // 63/2560
+];
+
+/// Sqrt-free asymptotic fast leg for `ASYMP_IHYP ≤ |x| < LARGE_IHYP`:
+/// `asinh(x) = ln(2x) + f(1/x²)`.  `ln(2x)` comes from the scaled reduction; the
+/// asymptotic correction `f` (up to `≈6e-5` at `x = 64`, far above `ulp(high)`) is
+/// added in with one 2Sum.  Returns the raw pair the Ziv test consumes.
+#[inline]
+fn asinh_asymptotic_pair(s: f64) -> DoubleDouble {
+    let v = 1.0 / (s * s);
+    let correction = v * crate::poly(v, &ASINH_ASYMP);
+
+    let DoubleDouble { high, low } = ln_fast_scaled(s, 1);
+    let DoubleDouble { high, low: cl } = DoubleDouble::from_sum(high, correction);
+    DoubleDouble {
+        high,
+        low: cl + low,
+    }
+}
+
+/// `asinh(|x|)` magnitude for the kernel band `[ASINH_SMALL, LARGE_IHYP]`: the
+/// sqrt-free [`asinh_asymptotic_pair`], Ziv-tested, for `|x| ≥ ASYMP_IHYP`, else
+/// (and on a straddle) the double-double sqrt path [`ln_sqrt_rounded`].
+///
+/// `acosh` deliberately does *not* share this asymptotic: its kernel band reaches
+/// only `2¹¹` and is dominated by the near-1 region, so the asymptotic's large-`x`
+/// payoff is too thin a slice to cover the threshold branch's misprediction on a
+/// log-uniform argument — see [`acosh`].
+#[inline]
+fn asinh_mid(s: f64) -> f64 {
+    if s >= ASYMP_IHYP {
+        let DoubleDouble { high, low } = asinh_asymptotic_pair(s);
+        let lo = high + (low - IHYP_ZIV_EPS);
+        let hi = high + (low + IHYP_ZIV_EPS);
+        if lo == hi {
+            return lo;
+        }
+    }
+    let d = DoubleDouble::from_product(s, s) + ONE;
+    ln_sqrt_rounded(s, sqrt_dd(d), d)
+}
+
 /// Combine `(m, q)` — where `eˣ = 2`<sup>`q`</sup>` · m` for `x ≥ 0` — into the
 /// mantissa `m ± 2⁻²q/m` so that `½(eˣ ± e⁻ˣ) = 2`<sup>`q−1`</sup>` · mantissa`.
 ///
@@ -895,8 +954,7 @@ pub fn asinh(x: f64) -> f64 {
         // asinh(x) = ln(2|x|) + 1/(4x²) − …, no square root.
         ln_2x_corrected(s, 0.25 / (s * s))
     } else {
-        let d = DoubleDouble::from_product(s, s) + ONE;
-        ln_sqrt_rounded(s, sqrt_dd(d), d)
+        asinh_mid(s)
     };
 
     magnitude.copysign(x)
@@ -929,6 +987,11 @@ pub fn acosh(x: f64) -> f64 {
         return ln_2x_corrected(x, -0.25 / (x * x));
     }
 
+    // The sqrt-free asymptotic ([`asinh_mid`]) is *not* used here: acosh's kernel
+    // band `[1, 2¹¹)` is dominated by the near-1 region, so its only payoff would be
+    // the large-`x` tail — too thin a slice to cover the threshold branch's
+    // misprediction on a log-uniform argument.  (`asinh`'s band reaches `2²⁶`, so
+    // there the asymptotic broadly pays.)
     let d = DoubleDouble::from_product(x, x)
         + DoubleDouble {
             high: -1.0,
@@ -1147,6 +1210,28 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "asinh main-leg gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// The sqrt-free [`asinh_asymptotic_pair`] must clear the [`IHYP_ZIV_EPS`] gate
+    /// over its operating range `[ASYMP_IHYP, LARGE_IHYP]`.  The truncated `a₆v⁶`
+    /// term and the `f64` correction's rounding are both largest at the bottom of
+    /// the range (`|x| = 64`), so this is where the gate is tightest.
+    #[test]
+    fn asinh_asymptotic_leg_is_sound() {
+        let (worst, x) = worst_ratio(
+            ASYMP_IHYP,
+            LARGE_IHYP,
+            8_000_000,
+            asinh_asymptotic_pair,
+            |_| IHYP_ZIV_EPS,
+            |x| x.clone().asinh(),
+        );
+        println!("asinh asymptotic leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "asinh asymptotic-leg gate covers only {:.2}× the slip at x={x:e}",
             1.0 / worst
         );
     }
