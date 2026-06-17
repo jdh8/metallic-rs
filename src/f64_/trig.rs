@@ -237,6 +237,22 @@ const FRAC_1_24: DoubleDouble = DoubleDouble {
     low: 2.3129646346357427e-18,
 };
 
+/// `−1/5040` as a double-double — the exact `u³` coefficient peeled from
+/// `sin(r)/r` by the `sinpi` kernel ([`sinpi_sin_kernel`]).  See [`FRAC_1_120`].
+const NEG_FRAC_1_5040: DoubleDouble = DoubleDouble {
+    high: -0.0001984126984126984,
+    low: -1.7209558293420705e-22,
+};
+
+/// `−1/720` as a double-double — the exact `u³` coefficient peeled from `cos(r)`
+/// by the `sinpi` kernel ([`sinpi_cos_kernel`]).  Peeling this term out of the
+/// `f64` tail (where the fast `cos` kernel leaves it) is what lifts the lean
+/// `cos(πr)` from ≈2⁻⁶¹·⁷ to ≈2⁻⁶⁷·⁹.  See [`FRAC_1_120`].
+const NEG_FRAC_1_720: DoubleDouble = DoubleDouble {
+    high: -0.001388888888888889,
+    low: 5.300543954373577e-20,
+};
+
 /// 2/π as f64, for the medium-range quotient `round(x·2/π)`.
 const FRAC_2_PI_F64: f64 = 0.6366197723675814;
 
@@ -895,32 +911,130 @@ const PI_DD: DoubleDouble = DoubleDouble {
     low: 1.224_646_799_147_353_2e-16,
 };
 
+/// `f64` tail of `sin(r)/r` for the lean `sinpi` kernel: the `u⁴` remainder after
+/// the four exact double-double leads `1 − u/6 + u²/120 − u³/5040` are peeled off,
+/// low-degree first in `u = r²` (coefficients `(−1)ᵏ/(2k+1)!`, `k = 4…11`).  The
+/// truncation past `u¹¹` is ≈2⁻⁹² on `[−π/4, π/4]`, so the lean `sin(πr)` is bound
+/// by the `f64` rounding of this tiny tail at ≈2⁻⁷¹ — see [`sinpi_sin_kernel`].
+const SINPI_TAIL: [f64; 8] = [
+    2.7557319223985893e-06,
+    -2.505210838544172e-08,
+    1.6059043836821613e-10,
+    -7.647163731819816e-13,
+    2.8114572543455206e-15,
+    -8.22063524662433e-18,
+    1.9572941063391263e-20,
+    -3.868170170630684e-23,
+];
+
+/// `f64` tail of `cos(r)` for the lean `sinpi` kernel: the `u⁴` remainder after the
+/// four leads `1 − u/2 + u²/24 − u³/720` are peeled off (coefficients
+/// `(−1)ᵏ/(2k)!`, `k = 4…11`).  Truncation past `u¹¹` is ≈2⁻⁸⁷.  See [`SINPI_TAIL`].
+const COSPI_TAIL: [f64; 8] = [
+    2.48015873015873e-05,
+    -2.755731922398589e-07,
+    2.08767569878681e-09,
+    -1.1470745597729725e-11,
+    4.779477332387385e-14,
+    -1.5619206968586225e-16,
+    4.110317623312165e-19,
+    -8.896791392450574e-22,
+];
+
+/// `sin(r)` for `r ∈ [−π/4, π/4]` as a double-double, ≈2⁻⁷¹ — the lean kernel for
+/// the `lgamma` reflection's `sin(πz)` ([`sinpi_dd`]).
+///
+/// Four exact double-double leads `1 − u/6 + u²/120 − u³/5040` (2-way Estrin) plus
+/// the `f64` [`SINPI_TAIL`], versus the accurate [`sin_kernel`]'s full 13-term
+/// double-double Estrin (≈2⁻¹²⁷).  The reflection's `ln|sin πz|` only needs
+/// `sin(πz)` to the leg's ≈2⁻⁶²–2⁻⁶⁶ budget, so this trades the accurate kernel's
+/// surplus precision for a shorter dependency chain.  Each `add_ordered` fold's
+/// running sum dominates the next term across the octant (`fold_ordering::sinpi_leads`).
+#[inline]
+fn sinpi_sin_kernel(r: DoubleDouble) -> DoubleDouble {
+    let uu = r * r;
+    let u = uu.high;
+    let u2 = uu * uu;
+    let u4 = u2.high * u2.high;
+    let a0 = ONE.add_ordered(uu * NEG_FRAC_1_6);
+    let a1 = FRAC_1_120.add_ordered(uu * NEG_FRAC_1_5040);
+    let sin_over_r = a0.add_ordered(u2 * a1).add_ordered(DoubleDouble {
+        high: u4 * crate::poly(u, &SINPI_TAIL),
+        low: 0.0,
+    });
+    r * sin_over_r
+}
+
+/// `cos(r)` for `r ∈ [−π/4, π/4]` as a double-double, ≈2⁻⁶⁸ — the lean kernel for
+/// the `lgamma` reflection's `cos(πz)` ([`sinpi_dd`]).  See [`sinpi_sin_kernel`];
+/// the leads are `1 − u/2 + u²/24 − u³/720` and the tail [`COSPI_TAIL`].
+#[inline]
+fn sinpi_cos_kernel(r: DoubleDouble) -> DoubleDouble {
+    let uu = r * r;
+    let u = uu.high;
+    let u2 = uu * uu;
+    let u4 = u2.high * u2.high;
+    let b0 = ONE.add_ordered(uu * -0.5);
+    let b1 = FRAC_1_24.add_ordered(uu * NEG_FRAC_1_720);
+    b0.add_ordered(u2 * b1).add_ordered(DoubleDouble {
+        high: u4 * crate::poly(u, &COSPI_TAIL),
+        low: 0.0,
+    })
+}
+
 /// `sin(πx)` as a double-double for `|x| < 2⁵²`, where `x − q/2` is exact
 ///
 /// Reduces `x = q/2 + r`, `r ∈ [−¼, ¼]`, and selects `±sin(πr)`/`±cos(πr)` by
-/// `q mod 4`, with `πr ∈ [−π/4, π/4]` carried as a double-double into the
-/// trigonometric kernels.
+/// `q mod 4`, with `πr ∈ [−π/4, π/4]` carried as a double-double into the kernels.
+/// `accurate` picks the ≈2⁻¹²⁷ [`sin_kernel`]/[`cos_kernel`] (the `lgamma` middle
+/// Ziv tier needs it for its ≈2⁻⁹³ gate) over the lean ≈2⁻⁶⁸
+/// [`sinpi_sin_kernel`]/[`sinpi_cos_kernel`] the fast leg uses; the compiler
+/// monomorphizes the `const` flag away.
 #[inline]
-fn sinpi_dd(x: f64) -> DoubleDouble {
+fn sinpi_dd<const ACCURATE: bool>(x: f64) -> DoubleDouble {
     let q = (2.0 * x).round_ties_even();
     let theta = PI_DD * (x - q * 0.5);
+    let sin = |t| {
+        if ACCURATE {
+            sin_kernel(t)
+        } else {
+            sinpi_sin_kernel(t)
+        }
+    };
+    let cos = |t| {
+        if ACCURATE {
+            cos_kernel(t)
+        } else {
+            sinpi_cos_kernel(t)
+        }
+    };
     // SAFETY: `|x| < 2⁵²`, so `|q| < 2⁵³` fits an `i64`.
     match unsafe { q.to_int_unchecked::<i64>() } & 3 {
-        0 => sin_kernel(theta),
-        1 => cos_kernel(theta),
-        2 => neg(sin_kernel(theta)),
-        _ => neg(cos_kernel(theta)),
+        0 => sin(theta),
+        1 => cos(theta),
+        2 => neg(sin(theta)),
+        _ => neg(cos(theta)),
     }
 }
 
-/// `|sin(πx)|` as a double-double for `|x| < 2⁵²` (see [`sinpi_dd`])
+/// `|sin(πx)|` as a double-double for `|x| < 2⁵²`, accurate ≈2⁻¹²⁷ (see
+/// [`sinpi_dd`]) — for the `lgamma` middle Ziv tier.
 ///
 /// The lgamma reflection needs `ln|sin(πz)|` accurate even as `z` nears an
 /// integer; there `|sin(πz)| ≈ π·|r|` with `r = z − round(z)` exact, so the
 /// kernel's leading term keeps full relative accuracy.
 #[inline]
 pub(super) fn abs_sinpi_dd(x: f64) -> DoubleDouble {
-    let v = sinpi_dd(x);
+    let v = sinpi_dd::<true>(x);
+    if v.high < 0.0 { neg(v) } else { v }
+}
+
+/// `|sin(πx)|` as a double-double for `|x| < 2⁵²`, the lean ≈2⁻⁶⁸ kernel (see
+/// [`sinpi_dd`]) — for the `lgamma` reflection *fast* leg, whose ≈2⁻⁶²–2⁻⁶⁶ gate
+/// has ample room for it (the middle tier still uses the accurate [`abs_sinpi_dd`]).
+#[inline]
+pub(super) fn abs_sinpi_dd_lean(x: f64) -> DoubleDouble {
+    let v = sinpi_dd::<false>(x);
     if v.high < 0.0 { neg(v) } else { v }
 }
 
@@ -1127,6 +1241,44 @@ mod fold_ordering {
             assert!(u2max * c2 <= 0.5 * lead_min);
             let lead2_min = lead_min - u2max * c2;
             assert!(u3max * tail_mag(tail) <= 0.5 * lead2_min);
+        }
+    }
+
+    /// `sinpi_sin_kernel` / `sinpi_cos_kernel`:
+    /// `(1 ⊕ u·c₁) ⊕ u²·(c₂ ⊕ u·c₃) ⊕ u⁴·tail` with `u = r² ≤ (π/4)²`; each
+    /// `add_ordered` needs its running sum (resp. `c₂`) to dominate the next term.
+    #[test]
+    fn sinpi_leads() {
+        let umax = core::f64::consts::FRAC_PI_4.powi(2) * 1.0001;
+        let u2max = umax * umax;
+        let u4max = u2max * u2max;
+        let mag = |c: DoubleDouble| c.high.abs() + c.low.abs();
+        let tail_mag = |tail: &[f64]| {
+            tail.iter()
+                .rev()
+                .fold(0.0, |acc, c| crate::fast_mul_add(acc, umax, c.abs()))
+        };
+
+        for (c1, c2, c3, tail) in [
+            (
+                mag(NEG_FRAC_1_6),
+                mag(FRAC_1_120),
+                mag(NEG_FRAC_1_5040),
+                &SINPI_TAIL[..],
+            ),
+            (0.5, mag(FRAC_1_24), mag(NEG_FRAC_1_720), &COSPI_TAIL[..]),
+        ] {
+            // a0 = 1 ⊕ u·c₁
+            assert!(umax * c1 <= 0.5);
+            let a0_min = 1.0 - umax * c1;
+            // a1 = c₂ ⊕ u·c₃
+            assert!(umax * c3 <= 0.5 * c2);
+            let a1_mag = c2 + umax * c3;
+            // a0 ⊕ u²·a1
+            assert!(u2max * a1_mag <= 0.5 * a0_min);
+            let sum_min = a0_min - u2max * a1_mag;
+            // ⊕ u⁴·tail
+            assert!(u4max * tail_mag(tail) <= 0.5 * sum_min);
         }
     }
 

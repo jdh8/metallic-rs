@@ -25,7 +25,7 @@
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::double::{DoubleDouble, fast_ldexp};
-use super::trig::abs_sinpi_dd;
+use super::trig::{abs_sinpi_dd, abs_sinpi_dd_lean};
 
 /// `1` as a double-double.
 const ONE: DoubleDouble = DoubleDouble {
@@ -1986,7 +1986,7 @@ fn lgamma_root_fast(z: f64) -> Option<(DoubleDouble, f64)> {
 fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     if z < 0.5 {
         let (pos, gate) = lgamma_pos_fast(DoubleDouble::from_sum(1.0, -z));
-        return (LN_PI + neg(ln_fast_sum(abs_sinpi_dd(z)) + pos), gate);
+        return (LN_PI + neg(ln_fast_sum(abs_sinpi_dd_lean(z)) + pos), gate);
     }
     if z < LGAMMA_FAST_CUTOFF {
         // Near the roots `z = 1, 2` the central table cancels to a tiny result the
