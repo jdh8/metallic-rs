@@ -1,4 +1,4 @@
-use super::double::{DoubleDouble, fast_sum, round_general64};
+use super::double::{DoubleDouble, fast_ldexp, fast_sum, round_general64};
 use crate::Sign;
 use core::num::FpCategory;
 
@@ -16,84 +16,96 @@ pub fn round(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn cbrt(x: f64) -> f64 {
-    let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
-        return x; // 0, ±inf, nan
+    let (_, Magnitude::Normalized(magnitude)) = normalize(x) else {
+        return x; // 0, ±inf, nan (sign and NaN payload preserved)
     };
 
-    // Scale extreme |x| into [1e-200, 1e200] so the double-double refinement keeps
-    // full precision (tiny `x` loses it, huge `x` overflows `2·y³`); undo afterwards.
-    // The 999 shift mirrors the `2^±999` scaling of `x`; `333 = 999/3` rescales `y`.
-    let (x, magnitude, coefficient) = if x.abs() < 1e-200 {
-        (
-            crate::exp2i(999) * x,
-            magnitude + (999 << EXP_SHIFT),
-            crate::exp2i(-333),
-        )
-    } else if x.abs() <= 1e200 {
-        (x, magnitude, 1.0)
-    } else {
-        (
-            crate::exp2i(-999) * x,
-            magnitude - (999 << EXP_SHIFT),
-            crate::exp2i(333),
-        )
-    };
+    // Reduce `|x| = z·2ᵉ` with `z ∈ [1, 2)`, then split `e = 3·et + it` (floor
+    // division, `it ∈ {0,1,2}`) so `cbrt(x) = cbrt(z·2^it)·2^et` with `z·2^it ∈
+    // [1, 8)`.  Working on the *mantissa* keeps every intermediate `O(1)` — no
+    // overflow of `y³` for huge `x`, no precision loss for tiny `x`, and (unlike the
+    // old full-magnitude inverse-seed path) no magnitude-scaling branch to mispredict
+    // on the full-range benchmark.  `normalize` folds subnormals into a virtual
+    // exponent, so this one reduction covers the whole domain.
+    let e = (magnitude >> EXP_SHIFT) - 1023;
+    let it = e.rem_euclid(3) as usize;
+    let et = e.div_euclid(3);
+    let z = f64::from_bits((magnitude as u64 & MANTISSA_MASK) | 0x3ff0_0000_0000_0000);
+    let zz = f64::from_bits(z.to_bits() + ((it as u64) << EXP_SHIFT)); // z·2^it ∈ [1, 8)
 
-    // Seed the *inverse* cube root `c ≈ x^(−1/3)` by the magic-constant bit trick
-    // (the exponent is negated relative to a cube-root seed), then refine it with
-    // no division at all — where the old forward Newton/Halley chain spent three.
-    // The residual `h = 1 − x·c³` drives a degree-4 correction `c·(1 − h)^(−1/3)`
-    // (the series `1 + h/3 + 2h²/9 + 14h³/81 + 35h⁴/243`, exact through `h⁴`),
-    // then one cubic Newton step `c·(1 + h/3 + 2h²/9)` lands `c` at f64 accuracy.
-    let magnitude = (0x553E_F100_0000_0000 - magnitude / 3) as u64;
-    let c = f64::from_bits(u64_sign_bit(sign) | magnitude);
-    let h = crate::fma(-x, c * c * c, 1.0);
-    let c = c * crate::poly(h, &[1.0, 1.0 / 3.0, 2.0 / 9.0, 14.0 / 81.0, 35.0 / 243.0]);
-    let h = crate::fma(-x, c * c * c, 1.0);
-    let c = c * crate::fast_mul_add(h, crate::fast_mul_add(2.0 / 9.0, h, 1.0 / 3.0), 1.0);
+    // Forward seed: a degree-3 minimax of `z^(1/3)` on `[1, 2)` then a cubic Newton
+    // step (CORE-MATH's `cr_cbrt` coefficients).  The reciprocal `1/z` is issued here
+    // so its latency overlaps the polynomial — the instruction-level parallelism the
+    // purely serial division-free inverse-seed chain could not expose.
+    let r = 1.0 / z;
+    let y = crate::fast_mul_add(
+        z * z,
+        crate::fast_mul_add(z, CBRT_C[3], CBRT_C[2]),
+        crate::fast_mul_add(z, CBRT_C[1], CBRT_C[0]),
+    );
+    let h = (y * y) * (y * r) - 1.0;
+    let y = y - (h * y) * crate::fast_mul_add(-CBRT_U1, h, CBRT_U0);
+    let y = y * CBRT_ESCALE[it]; // y ≈ (z·2^it)^(1/3) = zz^(1/3) ∈ [1, 2)
 
-    // Forward result `y = x·c² ≈ x^(1/3)`, then one Newton step in plain `f64` —
-    // the division-free fast leg.  `1/y² = c²` exactly in the limit (`y·c = 1`),
-    // so the Newton correction is `dy = −(y³ − x)·c²/3` with no division; `y³ − x`
-    // is formed with an exact FMA so its leading cancellation survives.  The
-    // result rides as a double-double `(high, low) = fast_sum(y, dy)`; the Ziv
-    // gate accepts it unless it straddles a rounding boundary, where the accurate
-    // double-double leg takes over.  This keeps the costly `from_quotient`/`/y`
-    // divisions off the common path entirely.
-    let c2 = c * c;
-    let y = x * c2;
-    let y2 = DoubleDouble::from_product(y, y);
-    let resid = crate::fma(y, y2.high, -x) + y * y2.low; // y³ − x
-    let dy = (-1.0 / 3.0 * c2) * resid;
-    let DoubleDouble { high, low } = fast_sum(y, dy);
-    let err = CBRT_ZIV_EPS * high.abs();
-    let lo = high + (low - err);
-    let hi = high + (low + err);
+    // One linear Newton step against the exact cube `y³` (≈106-bit via two FMAs),
+    // division-free using `rr ≈ 1/zz`: the fast leg's double-double result `y1 + low`.
+    let y2 = y * y;
+    let y2l = crate::fma(y, y, -y2);
+    let y3 = y2 * y;
+    let y3l = crate::fma(y, y2, -y3) + y * y2l; // y³ + y3l ≈ y³ to ≈106 bits
+    let rr = r * CBRT_RSC[it]; // (1/z)·2⁻ⁱᵗ = 1/zz
+    let h = ((y3 - zz) + y3l) * rr;
+    let dy = h * (y * CBRT_U0);
+    let y1 = y - dy;
+    let low = (y - y1) - dy; // residual: zz^(1/3) ≈ y1 + low
+
+    // Ziv gate (round-to-nearest): one linear Newton from the ≈2⁻⁴⁰ seed lands the
+    // leg at ≈2⁻⁷⁷, so `2⁻⁷³` bounds it with margin while the straddle rate stays
+    // ≈2⁻²⁰; on a straddle the accurate leg rounds correctly.  The `2^et` scale is
+    // exact, so gating the unscaled pair is equivalent.
+    let err = CBRT_ZIV_EPS * y1; // y1 ∈ [1, 2) > 0
+    let lo = y1 + (low - err);
+    let hi = y1 + (low + err);
     if lo == hi {
-        return coefficient * lo;
+        return fast_ldexp(lo, et).copysign(x);
     }
 
-    // Accurate leg: the correctly-rounded double-double Newton finish.  First
-    // polish `y` to ~1 ulp with one more division-free Newton step, so this rare
-    // last-resort path starts from a tighter seed than the gated leg's ~3-ulp `y`.
-    let y = crate::fast_mul_add(-(1.0 / 3.0) * c2, crate::fma(y, y * y, -x), y);
-    let quotient = DoubleDouble::from_quotient(x, y) / y;
-    let sum = fast_sum(2.0 * y, quotient.high);
+    // Accurate leg: one double-double cube-root Newton `(2·y1 + zz/y1²)/3` from the
+    // ≈1-ulp `y1`, then the subnormal-safe general rounder scales by `2^et` (the
+    // result is always normal, so `et ≥ −1022`).  `cbrt(x) = cbrt(|x|)·sign(x)`.
+    let quotient = DoubleDouble::from_quotient(zz, y1) / y1; // zz / y1²
+    let sum = fast_sum(2.0 * y1, quotient.high);
     let sum = DoubleDouble {
         high: sum.high,
         low: quotient.low + sum.low,
     } / 3.0;
-
-    coefficient * (sum.high + sum.low)
+    round_general64(sum, et).copysign(x)
 }
 
-/// Ziv gate for `cbrt`'s division-free fast leg, as a *relative* bound on the
-/// result.  The fast leg is one plain-`f64` Newton step from a ~3-ulp seed, so
-/// its error rides the Newton residual `≈(3 ulp)² ≈ 2⁻¹⁰⁰` plus the `f64`
-/// rounding of `dy`; `2⁻⁹⁵` keeps a >20× margin (certified by
-/// `ziv_soundness::cbrt_fast_leg_is_sound`).  On a straddle the accurate
-/// double-double leg rounds correctly.
-const CBRT_ZIV_EPS: f64 = 2.524_354_896_707_238_4e-29; // 2⁻⁹⁵
+/// Ziv gate for `cbrt`'s fast leg, a *relative* bound on the result.  The forward
+/// seed (degree-3 minimax + cubic Newton, ≈2⁻⁴⁰) plus one linear Newton against the
+/// exact cube lands the leg at ≈2⁻⁷⁷; `2⁻⁷³` bounds it with a ≈16× margin (certified
+/// by `ziv_soundness::cbrt_fast_leg_is_sound`).  On a straddle the accurate
+/// double-double leg (≈2⁻¹⁰⁴) rounds correctly.
+const CBRT_ZIV_EPS: f64 = crate::exp2i(-73);
+
+/// Low 52 mantissa bits of an `f64`.
+const MANTISSA_MASK: u64 = (1 << EXP_SHIFT) - 1;
+
+/// Degree-3 minimax of `z^(1/3)` on `[1, 2)` (CORE-MATH `cr_cbrt`), max error <9.2e-5.
+const CBRT_C: [f64; 4] = [
+    0.552_823_418_401_647_2,
+    0.587_114_291_826_698_2,
+    -0.162_969_671_949_879_05,
+    0.023_104_964_110_781_47,
+];
+/// Cubic-Newton coefficients `1/3` and `2/9` for the seed-refinement step.
+const CBRT_U0: f64 = 1.0 / 3.0;
+const CBRT_U1: f64 = 2.0 / 9.0;
+/// `2^(it/3)` for `it ∈ {0,1,2}`: folds the `e mod 3` remainder into the mantissa root.
+const CBRT_ESCALE: [f64; 3] = [1.0, 1.259_921_049_894_873_2, 1.587_401_051_968_199_6];
+/// `2^(−it)` to turn `1/z` into `1/zz` for the linear Newton residual.
+const CBRT_RSC: [f64; 3] = [1.0, 0.5, 0.25];
 
 /// Hypotenuse of a right-angled triangle with sides `x` and `y`
 ///
@@ -551,27 +563,44 @@ mod ziv_soundness {
         z ^ (z >> 31)
     }
 
-    /// Replicates [`cbrt`]'s positive-`x` division-free fast leg (seed →
-    /// refinement → one Newton step), returning the gated double-double.
+    /// Replicates [`cbrt`]'s positive-`x` fast leg (mantissa reduction → forward
+    /// seed → cubic Newton → one linear Newton), returning the gated double-double
+    /// scaled by the exact `2^et`.
     fn cbrt_fast_dd(x: f64) -> DoubleDouble {
-        let magnitude = (0x553E_F100_0000_0000 - (x.to_bits() as i64) / 3) as u64;
-        let c = f64::from_bits(magnitude);
-        let h = crate::fma(-x, c * c * c, 1.0);
-        let c = c * crate::poly(h, &[1.0, 1.0 / 3.0, 2.0 / 9.0, 14.0 / 81.0, 35.0 / 243.0]);
-        let h = crate::fma(-x, c * c * c, 1.0);
-        let c = c * crate::fast_mul_add(h, crate::fast_mul_add(2.0 / 9.0, h, 1.0 / 3.0), 1.0);
-        let c2 = c * c;
-        let y = x * c2;
-        let y2 = DoubleDouble::from_product(y, y);
-        let resid = crate::fma(y, y2.high, -x) + y * y2.low;
-        let dy = (-1.0 / 3.0 * c2) * resid;
-        fast_sum(y, dy)
+        let magnitude = x.to_bits() as i64; // x > 0 in the test range
+        let e = (magnitude >> EXP_SHIFT) - 1023;
+        let it = e.rem_euclid(3) as usize;
+        let et = e.div_euclid(3);
+        let z = f64::from_bits((magnitude as u64 & MANTISSA_MASK) | 0x3ff0_0000_0000_0000);
+        let zz = f64::from_bits(z.to_bits() + ((it as u64) << EXP_SHIFT));
+        let r = 1.0 / z;
+        let y = crate::fast_mul_add(
+            z * z,
+            crate::fast_mul_add(z, CBRT_C[3], CBRT_C[2]),
+            crate::fast_mul_add(z, CBRT_C[1], CBRT_C[0]),
+        );
+        let h = (y * y) * (y * r) - 1.0;
+        let y = y - (h * y) * crate::fast_mul_add(-CBRT_U1, h, CBRT_U0);
+        let y = y * CBRT_ESCALE[it];
+        let y2 = y * y;
+        let y2l = crate::fma(y, y, -y2);
+        let y3 = y2 * y;
+        let y3l = crate::fma(y, y2, -y3) + y * y2l;
+        let rr = r * CBRT_RSC[it];
+        let h = ((y3 - zz) + y3l) * rr;
+        let dy = h * (y * CBRT_U0);
+        let y1 = y - dy;
+        let low = (y - y1) - dy;
+        DoubleDouble {
+            high: fast_ldexp(y1, et),
+            low: fast_ldexp(low, et),
+        }
     }
 
     /// Worst `|leg(x) − cbrt(x)| / (CBRT_ZIV_EPS · |result|)` over `[0.5, 4)` —
-    /// one full period of the magic-constant seed (every mantissa × exponent
-    /// mod 3, the only inputs the relative error depends on).  A ratio `< 0.5`
-    /// certifies the 2× soundness margin.
+    /// one full period of the reduction (every mantissa × exponent mod 3, the
+    /// only inputs the relative error depends on).  A ratio `< 0.5` certifies the
+    /// 2× soundness margin.
     #[test]
     fn cbrt_fast_leg_is_sound() {
         let (lb, hb) = (0.5f64.to_bits(), 4.0f64.to_bits());
