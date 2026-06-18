@@ -9143,6 +9143,87 @@ fn tgamma_stirling_fast(z: f64) -> (DoubleDouble, i64) {
     super::exp::exp_dd_of_dd_fast(tgamma_lngamma_stirling(z))
 }
 
+/// `π` as a double-double — the numerator of the reflection `Γ(z) = π / (sin(πz)·Γ(1−z))`.
+const PI_DD: DoubleDouble = DoubleDouble {
+    high: 3.141_592_653_589_793,
+    low: 1.224_646_799_147_353_2e-16,
+};
+
+/// Relative Ziv slack for the [`tgamma`] reflection fast leg.
+///
+/// The leg's error is the table `Γ(1−z)` (≈2⁻⁶⁷), the lean `|sin πz|` (≈2⁻⁶⁶, its
+/// leading `π·r` term exact so the near-integer relative accuracy holds), and the
+/// double-double reciprocal/product (≈2⁻¹⁰⁵) — all *relative*, summing to ≈2⁻⁶⁵.
+/// `2⁻⁶¹` clears that with a ≥ 16× margin while staying ≪ `ulp`, so the rare
+/// straddle still falls through to the recurrence leg (not straight to the
+/// triple-double accurate path).
+const TGAMMA_REFLECT_ZIV: f64 = crate::exp2i(-61);
+
+/// `Γ(1−z)` from the wide [`TGAMMA_TABLE`] for the reflection, with the cell-local
+/// argument formed **exactly**.
+///
+/// The cell at `k = round(8·(1−z))` approximates `Γ` about `k/8`; its local argument
+/// is `(1−z) − k/8 = (1 − k/8) − z`.  Because `1 − k/8` is an exact multiple of `1/8`
+/// and within `1/16` of `z`, the subtraction is Sterbenz-exact — so the argument has
+/// **no low word**, and [`eval_cell`] skips its first-order derivative correction.
+/// Forming it as `1 − z` (a `from_sum`) instead would carry a low word up to ≈2⁻⁴⁸
+/// just past each power-of-two binade (`1−z` near 8, 16, 32), where the cubic
+/// derivative correction degrades to ≈2⁻⁵⁵ against the huge `Γ(1−z)` — the failure
+/// this exact form avoids.
+#[inline]
+fn tgamma_reflect_gamma(z: f64, wf: f64) -> DoubleDouble {
+    let kf = (8.0 * wf).round_ties_even();
+    // SAFETY: `wf = 1 − z ∈ [2, 36)` ⇒ `8·wf ∈ [16, 288)` ⇒ `k ∈ 16..=288`.
+    let k = unsafe { kf.to_int_unchecked::<i64>() };
+    let cell = &TGAMMA_TABLE[(k - TGAMMA_TABLE_KLO) as usize];
+    let h = crate::fma(-0.125, kf, 1.0) - z; // (1 − k/8) − z, exact
+    eval_cell(cell, DoubleDouble { high: h, low: 0.0 })
+}
+
+/// Reflection fast leg of [`tgamma`] for `z ∈ (−35, −1]`: `Γ(z) = ±π / (sin(πz)·Γ(1−z))`.
+///
+/// `1 − z ∈ [2, 36)` lands in the recurrence-free wide [`TGAMMA_TABLE`], so `Γ(1−z)`
+/// is one table evaluation — no logarithm, no exponential, and no `O(|z|)` divisor
+/// product (the old path walked up to 13 double-double factors then a reciprocal).
+/// CORE-MATH computes `Γ(1−z) = exp(lnΓ(1−z))`; reading it straight from the table is
+/// cheaper still.  `Some` on a certified Ziv hit; `None` (deep `z`, or the rare
+/// straddle) falls through to the recurrence path.
+#[inline]
+fn tgamma_reflect_value(z: f64, wf: f64) -> DoubleDouble {
+    // `π / (|sin πz|·Γ(1−z))` via CORE-MATH's raw reciprocal-multiply: one division
+    // and a short FMA correction, instead of `DoubleDouble::recip` (div + two muls +
+    // a 2Sum) followed by two `PI_DD *` muls — a much shorter serial chain.
+    let denom = abs_sinpi_dd_lean(z) * tgamma_reflect_gamma(z, wf);
+    let rcp = 1.0 / denom.high;
+    let rh = rcp * PI_DD.high;
+    // `pil − ll·rh − (rh·lh − pih)`: the residual `rh·lh − pih` is an exact FMA, and
+    // `pil − ll·rh` folds the cross term through one more.
+    let resid = crate::fma(rh, denom.high, -PI_DD.high);
+    let rl = rcp * (crate::fast_mul_add(-denom.low, rh, PI_DD.low) - resid);
+    let mag = DoubleDouble { high: rh, low: rl };
+    // sign(Γ(z)) = sign(sin πz): negative on the humps where ⌊z⌋ is odd.
+    if (z.floor() as i64) & 1 != 0 {
+        neg(mag)
+    } else {
+        mag
+    }
+}
+
+#[inline]
+fn tgamma_reflect_fast(z: f64) -> Option<f64> {
+    let wf = 1.0 - z; // 1 − z (high word; the table only needs the index and an exact local arg)
+    // The wide table covers `[2, 36)`; `z ∈ (−1, 0)` (`1 − z < 2`) and deep `z ≤ −35`
+    // (`1 − z ≥ 36`) fall through to the recurrence.
+    if wf < 2.0 || wf >= TGAMMA_TABLE_HI {
+        return None;
+    }
+    let value = tgamma_reflect_value(z, wf);
+    let err = value.high.abs() * TGAMMA_REFLECT_ZIV;
+    let lo = value.high + (value.low - err);
+    let hi = value.high + (value.low + err);
+    (lo == hi).then_some(lo)
+}
+
 /// The gamma function
 #[must_use]
 #[inline]
@@ -9179,6 +9260,12 @@ pub fn tgamma(z: f64) -> f64 {
             } else {
                 -0.0
             };
+        }
+        // Reflection fast leg: `Γ(z) = ±π / (sin(πz)·Γ(1−z))` with `Γ(1−z)` straight
+        // from the wide table.  Replaces the `O(|z|)` downward recurrence product on
+        // the benchmarked `[−10, −2]` band; a miss falls through to it.
+        if let Some(value) = tgamma_reflect_fast(z) {
+            return value;
         }
     }
 
@@ -10648,6 +10735,52 @@ mod ziv_soundness {
             TGAMMA_ZIV_EPS > 2.0 * worst,
             "TGAMMA_ZIV_EPS = 2^{:.2} does not cover the fast leg's 2^{:.2}",
             TGAMMA_ZIV_EPS.log2(),
+            worst.log2()
+        );
+    }
+
+    /// The **reflection** fast leg (`z ∈ (−35, −1]`, `1−z` in the wide table) must be
+    /// sound: [`TGAMMA_REFLECT_ZIV`] has to exceed the un-rounded leg's true relative
+    /// error with margin, or a confident `lo == hi` could certify a value on the wrong
+    /// side of a boundary.  The error peaks just past each power-of-two binade of
+    /// `1−z` (8, 16, 32), where the exact cell-local argument keeps it ≈2⁻⁶⁶; sample
+    /// the whole band and require a `2×` margin.  (The benchmarked `[−10, −2]` slice
+    /// and CORE-MATH's hard-to-round corpus exercise the same leg bit-for-bit.)
+    #[test]
+    fn tgamma_reflect_leg_is_sound() {
+        let (lo, hi) = ((-35.0f64).to_bits(), (-1.0f64).to_bits());
+        let mut worst = 0.0_f64;
+        let mut worst_x = 0.0_f64;
+        for k in 0..400_000u64 {
+            // `(-35, -1]` is bit-monotonic (same sign), so a single bit-walk stays in
+            // band; `1−z ∈ [2, 36)` keeps the table index valid.
+            let z = f64::from_bits(lo.wrapping_sub(mix(k) % lo.wrapping_sub(hi)));
+            // Near a negative integer the result blows up (the special ladder /
+            // recurrence handles those); skip the half-cell humps the gate never sees.
+            if (z - z.round()).abs() < 1.0 / 64.0 {
+                continue;
+            }
+            let value = tgamma_reflect_value(z, 1.0 - z);
+            let got = Float::with_val(250, value.high) + Float::with_val(250, value.low);
+            let truth = Float::with_val(250, z).gamma();
+            if truth == 0.0 || !truth.is_finite() {
+                continue;
+            }
+            let rel = (Float::with_val(250, &got - &truth).abs() / truth.abs()).to_f64();
+            if rel > worst {
+                worst = rel;
+                worst_x = z;
+            }
+        }
+        println!(
+            "tgamma reflect leg: worst rel error 2^{:.2} at z={worst_x:e}; eps = 2^{:.2}",
+            worst.log2(),
+            TGAMMA_REFLECT_ZIV.log2()
+        );
+        assert!(
+            TGAMMA_REFLECT_ZIV > 2.0 * worst,
+            "TGAMMA_REFLECT_ZIV = 2^{:.2} does not cover the reflect leg's 2^{:.2}",
+            TGAMMA_REFLECT_ZIV.log2(),
             worst.log2()
         );
     }
