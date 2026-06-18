@@ -635,12 +635,97 @@ struct GammaCell {
     tail: [f64; 8],
 }
 
-/// Fast-path table for `Γ(2.875 + d)`, `d ∈ [−½, ½]`: per-cell minimax of
-/// `Γ(2.875 + i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8,
-/// `i ∈ [-4, 4]`.  Degree 11 (`c0..c3` double-double, `c4..c11` plain
-/// `f64`); worst-cell minimax error 2^-75, f64 tail ≤ 2^-19 of Γ.
+/// Fast-path table for `Γ(z)`, `z ∈ [16/8, 64/8)` = `[2.0, 8.0)`: per-cell minimax of
+/// `Γ(k/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8, `k ∈ [16, 64]`.
+/// Degree 11 (`c0..c3` double-double, `c4..c11` plain `f64`); worst-cell relative
+/// minimax error 2^-72, f64 tail ≤ 2^-16 of Γ.
+/// Recurrence-free: `tgamma` reads cell `k = round(8·z)` directly here.
 /// From `tools/gen_gamma_f64.py`.
-const TGAMMA_TABLE: [GammaCell; 9] = [
+const TGAMMA_TABLE: [GammaCell; 49] = [
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.0,
+            low: -2.1169062909430826e-22,
+        },
+        c1: DoubleDouble {
+            high: 0.42278433509846713,
+            low: 4.943020921562632e-18,
+        },
+        c2: DoubleDouble {
+            high: 0.4118403304264397,
+            low: 5.112168087583061e-18,
+        },
+        c3: DoubleDouble {
+            high: 0.08157691924708627,
+            low: -1.4223952051684846e-18,
+        },
+        tail: [
+            0.07424901075350225,
+            -0.00026698206873919264,
+            0.011154045730856935,
+            -0.002852645827513731,
+            0.0021039270594622244,
+            -0.0009195707004708338,
+            0.0004918169334591783,
+            -0.00024165516207782332,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.0594605373309143,
+            low: -1.0185701867727995e-16,
+        },
+        c1: DoubleDouble {
+            high: 0.5301500540451571,
+            low: 3.365881215780332e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.44942653473377603,
+            low: 2.0861286438262186e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.1190743647518374,
+            low: 1.2859201515114054e-18,
+        },
+        tail: [
+            0.0765341494954676,
+            0.007367746214647816,
+            0.009449712871731915,
+            -0.0011678622840945614,
+            0.0013491910119568695,
+            -0.00047036991599351937,
+            0.000257510239227978,
+            -0.00011539206778730193,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1.1330030963193463,
+            low: 8.849831645502928e-17,
+        },
+        c1: DoubleDouble {
+            high: 0.6486969194713926,
+            low: -4.7512889212126716e-17,
+        },
+        c2: DoubleDouble {
+            high: 0.5014323934393234,
+            low: 4.3611752623220844e-17,
+        },
+        c3: DoubleDouble {
+            high: 0.15885396864071258,
+            low: -8.688540729541212e-18,
+        },
+        tail: [
+            0.08329537099561922,
+            0.014206716346591342,
+            0.008952657984269776,
+            -3.113507275480047e-05,
+            0.0009693443049914154,
+            -0.00022826104967109222,
+            0.0001441281557142382,
+            -5.661168869458095e-05,
+        ],
+    },
     GammaCell {
         c0: DoubleDouble {
             high: 1.2222561575898099,
@@ -893,7 +978,1049 @@ const TGAMMA_TABLE: [GammaCell; 9] = [
             2.2276141463137748e-05,
         ],
     },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 3.3233509704478426,
+            low: -4.970628047937506e-18,
+        },
+        c1: DoubleDouble {
+            high: 3.666176692244351,
+            low: 2.437068548873219e-17,
+        },
+        c2: DoubleDouble {
+            high: 2.5711309665794273,
+            low: 1.4838738591040693e-16,
+        },
+        c3: DoubleDouble {
+            high: 1.2892366950841938,
+            low: 8.625507661937777e-17,
+        },
+        tail: [
+            0.5280543318465426,
+            0.1805751854892606,
+            0.05434178916017226,
+            0.014410904638195741,
+            0.0034935855320845574,
+            0.0007643285487154814,
+            0.00015732923273890182,
+            2.9335841194527893e-05,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 3.8244496633664258,
+            low: 9.290382107208106e-19,
+        },
+        c1: DoubleDouble {
+            high: 4.373748605972517,
+            low: -1.835215644537014e-16,
+        },
+        c2: DoubleDouble {
+            high: 3.107835307727775,
+            low: -1.625985852273272e-16,
+        },
+        c3: DoubleDouble {
+            high: 1.5837308246306134,
+            low: -7.873017468084069e-17,
+        },
+        tail: [
+            0.6546980746499507,
+            0.22646699166615525,
+            0.06861366815144868,
+            0.01837378207467255,
+            0.004474163726460489,
+            0.0009885635782466626,
+            0.00020368480896498713,
+            3.848868001435544e-05,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 4.422988410460251,
+            low: -2.5591306350689495e-16,
+        },
+        c1: DoubleDouble {
+            high: 5.230349164765904,
+            low: -1.8329840311631393e-16,
+        },
+        c2: DoubleDouble {
+            high: 3.7677990362653957,
+            low: 3.650636159909032e-18,
+        },
+        c3: DoubleDouble {
+            high: 1.9493105284347854,
+            low: 2.5608823979634754e-17,
+        },
+        tail: [
+            0.8136577265472178,
+            0.28447754795494284,
+            0.0868213670411126,
+            0.023455008207776195,
+            0.005742741927380219,
+            0.0012793277541539331,
+            0.00026446113947783105,
+            5.044407748454454e-05,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 5.139668834328703,
+            low: 3.132300433406296e-17,
+        },
+        c1: DoubleDouble {
+            high: 6.270393364869798,
+            low: 2.7662554524691576e-16,
+        },
+        c2: DoubleDouble {
+            high: 4.580960715416351,
+            low: -7.305387172553357e-17,
+        },
+        c3: DoubleDouble {
+            high: 2.4041911292746994,
+            low: 1.2161296164987784e-16,
+        },
+        tail: [
+            1.0135116034637268,
+            0.3579593400006264,
+            0.11008113638024669,
+            0.02998362338665575,
+            0.007385271896311176,
+            0.0016572935582761885,
+            0.00034411857249423916,
+            6.612594838212128e-05,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 6.0,
+            low: -2.7285741183507627e-23,
+        },
+        c1: DoubleDouble {
+            high: 7.536706010590803,
+            low: 2.5170209120614436e-16,
+        },
+        c2: DoubleDouble {
+            high: 5.584963658050974,
+            low: 3.2479542171379106e-17,
+        },
+        c3: DoubleDouble {
+            high: 2.971447502713183,
+            low: 1.807761594234408e-16,
+        },
+        tail: [
+            1.265218991182953,
+            0.45122008060218544,
+            0.1398383747202154,
+            0.0383873715952565,
+            0.009514415846556828,
+            0.0021495777118297494,
+            0.0004485791553991027,
+            8.675109792751832e-05,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 7.035480130713102,
+            low: -3.6067398782511366e-16,
+        },
+        c1: DoubleDouble {
+            high: 9.082695523630921,
+            low: 2.230612322038784e-16,
+        },
+        c2: DoubleDouble {
+            high: 6.8272214032844705,
+            low: 4.208222520282725e-16,
+        },
+        c3: DoubleDouble {
+            high: 3.6803675648276517,
+            low: -3.6067244222105626e-17,
+        },
+        tail: [
+            1.582801536174295,
+            0.569805089309699,
+            0.17796681662488306,
+            0.049223403298888586,
+            0.012277925380811842,
+            0.0027918462477929127,
+            0.0005856962668096291,
+            0.00011393113900893077,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 8.28508514183522,
+            low: 5.638775023389592e-16,
+        },
+        c1: DoubleDouble {
+            high: 10.975113253390964,
+            low: -4.921365089109479e-16,
+        },
+        c2: DoubleDouble {
+            high: 8.367560530437059,
+            low: -2.894703340437161e-16,
+        },
+        c3: DoubleDouble {
+            high: 4.568194729072882,
+            low: 2.6751927159769206e-16,
+        },
+        tail: [
+            1.984226621368724,
+            0.7208651224010729,
+            0.22689862239440026,
+            0.06321866003465057,
+            0.015869753926763513,
+            0.003631102594390252,
+            0.0007658858720376583,
+            0.00014980741495120505,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 9.797147013180819,
+            low: 5.961940487295658e-16,
+        },
+        c1: DoubleDouble {
+            high: 13.297562543756339,
+            low: 8.223269968503214e-16,
+        },
+        c2: DoubleDouble {
+            high: 10.28160739849642,
+            low: 1.942699953135753e-16,
+        },
+        c3: DoubleDouble {
+            high: 5.6823749711003355,
+            low: 3.4045676207238987e-16,
+        },
+        tail: [
+            2.4925540872723033,
+            0.9136363276344618,
+            0.28979515776170556,
+            0.08132309913600412,
+            0.020544796176727522,
+            0.0047293922033349685,
+            0.0010029727863065847,
+            0.0001972311087536005,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 11.631728396567448,
+            low: 8.707811706427716e-16,
+        },
+        c1: DoubleDouble {
+            high: 16.15496939330307,
+            low: 9.685051908627505e-16,
+        },
+        c2: DoubleDouble {
+            high: 12.665135075272348,
+            low: -7.876030967764131e-16,
+        },
+        c3: DoubleDouble {
+            high: 7.083459399374106,
+            low: 3.3925785161571346e-16,
+        },
+        tail: [
+            3.13742685654709,
+            1.1600674810589549,
+            0.3707714475529235,
+            0.10477995539385736,
+            0.026638452489742424,
+            0.006168735452588742,
+            0.0013153246426906363,
+            0.00026000467691974946,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 13.863630029703293,
+            low: 6.139903602904822e-16,
+        },
+        c1: DoubleDouble {
+            high: 19.6792883600168,
+            low: -5.533143304714311e-16,
+        },
+        c2: DoubleDouble {
+            high: 15.6396515964857,
+            low: -6.051773288692953e-16,
+        },
+        c3: DoubleDouble {
+            high: 8.848859547013749,
+            low: -8.088179514485505e-16,
+        },
+        tail: [
+            3.957011345236681,
+            1.4756409194397635,
+            0.4751915387191714,
+            0.13521862817213667,
+            0.03459262360098588,
+            0.00805770669760464,
+            0.001727372049963659,
+            0.0003432062740170256,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 16.58620653922594,
+            low: -1.403763285507444e-15,
+        },
+        c1: DoubleDouble {
+            high: 24.036797778332392,
+            low: -9.432820751930722e-16,
+        },
+        c2: DoubleDouble {
+            high: 19.35959555076114,
+            low: -5.010625046273577e-16,
+        },
+        c3: DoubleDouble {
+            high: 11.077713517895841,
+            low: -1.2236087884149196e-16,
+        },
+        tail: [
+            5.000527002986847,
+            1.8804485313782535,
+            0.6100576743643769,
+            0.17477764782027333,
+            0.044990287837662075,
+            0.010540221005457467,
+            0.0022716481687288215,
+            0.000453626430044873,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 19.916216733023727,
+            low: -1.7660026147785072e-15,
+        },
+        c1: DoubleDouble {
+            high: 29.43744312319917,
+            low: 9.922246897033458e-16,
+        },
+        c2: DoubleDouble {
+            high: 24.021616137108158,
+            low: 1.1058791559876971e-15,
+        },
+        c3: DoubleDouble {
+            high: 13.897201341355812,
+            low: -3.7895976256986654e-16,
+        },
+        tail: [
+            6.331548592696635,
+            2.400604045966154,
+            0.7845237434809798,
+            0.22626767700353773,
+            0.058601548579480155,
+            0.013807284434631407,
+            0.002991527940148968,
+            0.0006003566224749592,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 24.0,
+            low: -2.5963213087565947e-22,
+        },
+        c1: DoubleDouble {
+            high: 36.146824042363214,
+            low: -2.5459053412616647e-15,
+        },
+        c2: DoubleDouble {
+            high: 29.876560642794697,
+            low: 1.2725724959021086e-15,
+        },
+        c3: DoubleDouble {
+            high: 17.470753668903708,
+            low: -1.0207726595351082e-15,
+        },
+        tail: [
+            8.032323467444986,
+            3.0700993135916947,
+            1.0105735794920958,
+            0.2933878611012414,
+            0.07644503051393993,
+            0.018112726693875824,
+            0.003944910947854998,
+            0.000795583547109176,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 29.021355539191546,
+            low: -8.216465826425214e-16,
+        },
+        c1: DoubleDouble {
+            high: 44.50159916569065,
+            low: 2.7798996442661978e-15,
+        },
+        c2: DoubleDouble {
+            high: 37.24498381217936,
+            low: 4.082836697892686e-16,
+        },
+        c3: DoubleDouble {
+            high: 22.008737608198533,
+            low: 7.161340794621494e-16,
+        },
+        tail: [
+            10.209423901546609,
+            3.9332475295768035,
+            1.3039182078992255,
+            0.3810133552327985,
+            0.09986983962746457,
+            0.023794291152957607,
+            0.005209178478917894,
+            0.0010556622152214684,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 35.211611852799685,
+            low: 1.0642114955159495e-15,
+        },
+        c1: DoubleDouble {
+            high: 54.92931646874681,
+            low: 1.5809218084178688e-15,
+        },
+        c2: DoubleDouble {
+            high: 46.53724550774846,
+            low: 3.1673858854244935e-15,
+        },
+        c3: DoubleDouble {
+            high: 27.782388128996807,
+            low: 1.7356649899466004e-15,
+        },
+        tail: [
+            13.001157869889946,
+            5.047903391573284,
+            1.6851842675929,
+            0.4955779275416652,
+            0.13066510650855137,
+            0.03130193995292208,
+            0.006887873106194259,
+            0.00140256738558028,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 42.862518182666086,
+            low: -9.44365057750085e-16,
+        },
+        c1: DoubleDouble {
+            high: 67.9739831421148,
+            low: 1.0852501909992838e-15,
+        },
+        c2: DoubleDouble {
+            high: 58.279594912178176,
+            low: -1.8741491015317025e-15,
+        },
+        c3: DoubleDouble {
+            high: 35.14199789706039,
+            low: -3.4232575838954393e-15,
+        },
+        tail: [
+            16.587299102916642,
+            6.489713020673074,
+            2.181490142862496,
+            0.6455837164817236,
+            0.17120657225209793,
+            0.04123588706631801,
+            0.009119709445481983,
+            0.001865858887103587,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 52.34277778455352,
+            low: 1.2539795577558795e-15,
+        },
+        c1: DoubleDouble {
+            high: 84.32909066643127,
+            low: -3.652729667476104e-15,
+        },
+        c2: DoubleDouble {
+            high: 73.14807723202863,
+            low: 5.426210532220222e-15,
+        },
+        c3: DoubleDouble {
+            high: 44.540702372455826,
+            low: -1.4813888137560157e-15,
+        },
+        tail: [
+            21.201880253835988,
+            8.357730521312387,
+            2.828538995074231,
+            0.8422812468252816,
+            0.22465297820787,
+            0.054397762026391766,
+            0.012090743274504259,
+            0.0024853456888295085,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 64.11928888737773,
+            low: -2.711410302150283e-15,
+        },
+        c1: DoubleDouble {
+            high: 104.88033869478099,
+            low: -5.497802096940388e-15,
+        },
+        c2: DoubleDouble {
+            high: 92.01267699376317,
+            low: -4.895597888347987e-15,
+        },
+        c3: DoubleDouble {
+            high: 56.56562700142428,
+            low: 3.203556213132223e-15,
+        },
+        tail: [
+            27.150037018733364,
+            10.781850597645587,
+            3.6734017860517305,
+            1.1005776940153036,
+            0.2952094946521179,
+            0.07185951707740734,
+            0.0160508243772102,
+            0.0033147010672924023,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 78.78448106132322,
+            low: -6.667876393076777e-15,
+        },
+        c1: DoubleDouble {
+            high: 130.7609959863048,
+            low: -7.660709982074787e-15,
+        },
+        c2: DoubleDouble {
+            high: 115.9948766444478,
+            low: -2.4206461090651232e-15,
+        },
+        c3: DoubleDouble {
+            high: 71.97873476076639,
+            low: -3.74681193822482e-15,
+        },
+        tail: [
+            34.83021678208332,
+            13.932657527033552,
+            4.77822248465636,
+            1.4402515015106752,
+            0.3884814916881269,
+            0.09505633761358505,
+            0.02133586574164646,
+            0.004426373711441969,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 97.09155657349066,
+            low: -1.059747221046885e-15,
+        },
+        c1: DoubleDouble {
+            high: 163.42375195861968,
+            low: 8.844252475576118e-15,
+        },
+        c2: DoubleDouble {
+            high: 146.54282179160145,
+            low: -1.002871913264552e-14,
+        },
+        c3: DoubleDouble {
+            high: 91.77047267621774,
+            low: 4.365476226735318e-15,
+        },
+        tail: [
+            44.76350073075185,
+            18.034493316781635,
+            6.225157295498552,
+            1.8875786688732261,
+            0.5119501954110901,
+            0.12591206019830825,
+            0.028398018572027256,
+            0.005918266474714394,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 120.0,
+            low: -2.678278110649485e-21,
+        },
+        c1: DoubleDouble {
+            high: 204.73412021181605,
+            low: 8.586755106862552e-15,
+        },
+        c2: DoubleDouble {
+            high: 185.5296272563367,
+            low: -6.815745573198634e-15,
+        },
+        c3: DoubleDouble {
+            high: 117.23032898731323,
+            low: 3.2741365558275693e-15,
+        },
+        tail: [
+            57.632371006128565,
+            23.38282003540346,
+            8.12296721113516,
+            2.477512884998303,
+            0.6756129726996509,
+            0.16700866398331907,
+            0.0378466046778435,
+            0.007922828683400877,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 148.73444713835667,
+            low: -6.582268885244489e-16,
+        },
+        c1: DoubleDouble {
+            high: 257.09205126335615,
+            low: -1.6772727175582513e-14,
+        },
+        c2: DoubleDouble {
+            high: 235.38214120310988,
+            low: 9.346999740766717e-15,
+        },
+        c3: DoubleDouble {
+            high: 150.03976405419684,
+            low: 1.3404344233884099e-14,
+        },
+        tail: [
+            74.3320351036248,
+            30.367317490627727,
+            10.615828345170447,
+            3.2566116534673175,
+            0.8928462289586255,
+            0.2218155817863723,
+            0.05050370189899644,
+            0.01061944733192792,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 184.86096222719834,
+            low: 7.363464757792414e-15,
+        },
+        c1: DoubleDouble {
+            high: 323.59052331372044,
+            low: 1.8245835186711013e-14,
+        },
+        c2: DoubleDouble {
+            high: 299.2498553844262,
+            low: 2.7136328186923425e-14,
+        },
+        c3: DoubleDouble {
+            high: 192.39478318498172,
+            low: -1.0813011829559111e-14,
+        },
+        tail: [
+            96.03846694591888,
+            39.50265067564968,
+            13.895120796582308,
+            4.286968387186643,
+            1.1815696644815652,
+            0.2950002912613923,
+            0.06747971009699172,
+            0.014251351880490728,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 230.38603523183022,
+            low: -1.1293214360056797e-14,
+        },
+        c1: DoubleDouble {
+            high: 408.22267757153315,
+            low: 8.441568397671567e-15,
+        },
+        c2: DoubleDouble {
+            high: 381.2268057950725,
+            low: -2.7113925303144202e-15,
+        },
+        c3: DoubleDouble {
+            high: 247.16783360887777,
+            low: -7.839660739167935e-15,
+        },
+        tail: [
+            124.29873057523717,
+            51.46950658903442,
+            18.215222538753615,
+            5.651502618951761,
+            1.5658189462479781,
+            0.39284946523355724,
+            0.09027619086961691,
+            0.01914870096366376,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 287.88527781504433,
+            low: 2.821316532907283e-14,
+        },
+        c1: DoubleDouble {
+            high: 516.1527764499255,
+            low: 3.090195788984432e-14,
+        },
+        c2: DoubleDouble {
+            high: 486.64351544258875,
+            low: -9.256241033642619e-15,
+        },
+        c3: DoubleDouble {
+            high: 318.1219402805357,
+            low: -1.6932282658639868e-14,
+        },
+        tail: [
+            161.1510437685535,
+            67.16939812105412,
+            23.9146949944799,
+            7.46108585261328,
+            2.0778724989772077,
+            0.5238406693530248,
+            0.12092597518095616,
+            0.025760144563066557,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 360.67099999149974,
+            low: 2.511879694317406e-15,
+        },
+        c1: DoubleDouble {
+            high: 654.0711940455208,
+            low: -8.767551345836458e-15,
+        },
+        c2: DoubleDouble {
+            high: 622.4516467846987,
+            low: 4.8782860047919846e-14,
+        },
+        c3: DoubleDouble {
+            high: 410.19432887677476,
+            low: 3.3544431938193887e-15,
+        },
+        tail: [
+            209.28458523179916,
+            87.79794663048979,
+            31.44473564453232,
+            9.864151314887813,
+            2.761130930731622,
+            0.6994192782125341,
+            0.16218424835234704,
+            0.034696017880729964,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 453.0107661026085,
+            low: -2.4129442223523854e-14,
+        },
+        c1: DoubleDouble {
+            high: 830.6602079825758,
+            low: 6.1264600708012095e-15,
+        },
+        c2: DoubleDouble {
+            high: 797.7315366918797,
+            low: -4.985960379371415e-14,
+        },
+        c3: DoubleDouble {
+            high: 529.8726015188545,
+            low: 1.5115035712947672e-14,
+        },
+        tail: [
+            272.25248125774505,
+            114.94299756252624,
+            41.40743681426933,
+            13.059668618342743,
+            3.6740198507661828,
+            0.9350554329662409,
+            0.21778943719498314,
+            0.046787514582437774,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 570.4128948692577,
+            low: -4.175316197821125e-14,
+        },
+        c1: DoubleDouble {
+            high: 1057.2060993303812,
+            low: 8.642737286096781e-14,
+        },
+        c2: DoubleDouble {
+            high: 1024.3628299842783,
+            low: -1.0672865813318879e-13,
+        },
+        c3: DoubleDouble {
+            high: 685.6943487643807,
+            low: -5.188310619778505e-14,
+        },
+        tail: [
+            354.7560394693843,
+            150.71614896684397,
+            54.60729242845296,
+            17.314681975128757,
+            4.8952857621320485,
+            1.251683549076151,
+            0.29281977399421893,
+            0.06316783411097432,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 720.0,
+            low: -2.981358557713483e-20,
+        },
+        c1: DoubleDouble {
+            high: 1348.4047212708963,
+            low: 5.15205279628972e-14,
+        },
+        c2: DoubleDouble {
+            high: 1317.9118837498363,
+            low: -3.2054390455784455e-14,
+        },
+        c3: DoubleDouble {
+            high: 888.911601180216,
+            low: 4.125078319217079e-14,
+        },
+        tail: [
+            463.02455502408384,
+            197.9292912185493,
+            72.12062330304083,
+            22.988044521124976,
+            6.531190313183104,
+            1.6776649565995654,
+            0.3941811376990137,
+            0.08538357677824877,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 910.9984887224346,
+            low: 4.9259047067990676e-14,
+        },
+        c1: DoubleDouble {
+            high: 1723.423261126413,
+            low: -6.786404405096234e-14,
+        },
+        c2: DoubleDouble {
+            high: 1698.8076661324042,
+            low: 5.5028051653992604e-14,
+        },
+        c3: DoubleDouble {
+            high: 1154.3756960350656,
+            low: -2.934365690591021e-14,
+        },
+        tail: [
+            605.3234790638977,
+            260.33185473371964,
+            95.38926610590441,
+            30.562574722657768,
+            8.725294258954214,
+            2.2514666674001558,
+            0.5312752025661465,
+            0.11554781680705495,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1155.3810139199898,
+            low: -6.766520770756811e-14,
+        },
+        c1: DoubleDouble {
+            high: 2207.3017329379513,
+            low: -1.201845954836978e-13,
+        },
+        c2: DoubleDouble {
+            high: 2193.9021194663846,
+            low: -1.953895122005667e-13,
+        },
+        c3: DoubleDouble {
+            high: 1501.7172502905619,
+            low: 3.7714705185790005e-14,
+        },
+        tail: [
+            792.6352015969734,
+            342.93003366872944,
+            126.34715565577565,
+            40.68867321649882,
+            11.67177805627442,
+            3.025321484865267,
+            0.71691548739744,
+            0.15655065935005877,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1468.7109746029175,
+            low: 5.2350703994954356e-14,
+        },
+        c1: DoubleDouble {
+            high: 2832.805604750354,
+            low: -5.695419883131459e-14,
+        },
+        c2: DoubleDouble {
+            high: 2838.54356451512,
+            low: 1.69404393623546e-13,
+        },
+        c3: DoubleDouble {
+            high: 1956.9217450516683,
+            low: -3.49256613485075e-14,
+        },
+        tail: [
+            1039.572241026013,
+            452.41683508033157,
+            167.5915502755861,
+            54.24355173457109,
+            15.63359741515491,
+            4.070234287111906,
+            0.968584580866783,
+            0.2123491595129734,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 1871.2543057977884,
+            low: -1.0083156435179419e-13,
+        },
+        c1: DoubleDouble {
+            high: 3642.87832473956,
+            low: 5.854563503063687e-14,
+        },
+        c2: DoubleDouble {
+            high: 3679.335626826752,
+            low: 1.9893373237601311e-13,
+        },
+        c3: DoubleDouble {
+            high: 2554.4361272660703,
+            low: 2.2174443485004634e-13,
+        },
+        tail: [
+            1365.603724776131,
+            597.7521315554053,
+            222.61491558786045,
+            72.41175303646622,
+            20.967255769358562,
+            5.482836849771869,
+            1.3101613847233382,
+            0.2883669148408888,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 2389.4453749436857,
+            low: 1.090116984356691e-13,
+        },
+        c1: DoubleDouble {
+            high: 4693.892660543075,
+            low: -3.966336611366972e-13,
+        },
+        c2: DoubleDouble {
+            high: 4777.81335399415,
+            low: 1.7100332608313434e-14,
+        },
+        c3: DoubleDouble {
+            high: 3339.9890755933316,
+            low: 1.4162627346165282e-14,
+        },
+        tail: [
+            1796.7047060374407,
+            790.945981658794,
+            296.1193202791355,
+            96.79473810566408,
+            28.156641944194945,
+            7.3947836488896606,
+            1.7742965175063732,
+            0.39204536681218305,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 3057.8226711926072,
+            low: -2.076526902016591e-14,
+        },
+        c1: DoubleDouble {
+            high: 6059.967169984995,
+            low: 1.0248929154559633e-13,
+        },
+        c2: DoubleDouble {
+            high: 6215.348080652763,
+            low: 1.2581748913718175e-13,
+        },
+        c3: DoubleDouble {
+            high: 4374.371596944147,
+            low: 1.6585372499029865e-13,
+        },
+        tail: [
+            2367.576850008629,
+            1048.1177148047973,
+            394.44319606372454,
+            129.56019998808284,
+            37.859300201531724,
+            9.985644023288309,
+            2.40568242521889,
+            0.5336051606264381,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 3921.588652226146,
+            low: 6.8218269701123e-14,
+        },
+        c1: DoubleDouble {
+            high: 7838.7048277656295,
+            low: -3.5705967533198575e-13,
+        },
+        c2: DoubleDouble {
+            high: 8099.700555472294,
+            low: 6.523033901015141e-14,
+        },
+        c3: DoubleDouble {
+            high: 5738.511477739396,
+            low: -2.9289475666053694e-13,
+        },
+        tail: [
+            3124.6421201163917,
+            1390.9295636164366,
+            526.141284419047,
+            173.64573100746316,
+            50.96976833674338,
+            13.500610162030588,
+            3.2655597433423944,
+            0.7270986335071674,
+        ],
+    },
+    GammaCell {
+        c0: DoubleDouble {
+            high: 5040.0,
+            low: -3.568119941400401e-19,
+        },
+        c1: DoubleDouble {
+            high: 10158.833048896275,
+            low: -3.2147736040300137e-13,
+        },
+        c2: DoubleDouble {
+            high: 10573.78790751975,
+            low: -3.9750379006034103e-13,
+        },
+        c3: DoubleDouble {
+            high: 7540.293092011349,
+            low: 3.703879296110271e-13,
+        },
+        tail: [
+            4130.083486348795,
+            1848.529593553929,
+            702.7736543487414,
+            233.03693495091568,
+            68.706372316288,
+            18.274845009380062,
+            4.437933509283031,
+            0.9918661751467551,
+        ],
+    },
 ];
+
+/// Lowest cell index of [`TGAMMA_TABLE`] (`k = round(8·z)`, centre `k/8`)
+const TGAMMA_TABLE_KLO: i64 = 16;
+
+/// `Γ(z)` reads [`TGAMMA_TABLE`] directly (no recurrence) for `z ∈ [2, TGAMMA_TABLE_HI)`
+const TGAMMA_TABLE_HI: f64 = 8.0;
 
 /// `Γ(z)` overflows to `+∞` at and above this `z`
 const TGAMMA_OVERFLOW: f64 = 171.6243769563027;
@@ -1497,37 +2624,54 @@ fn recurrence_product_z(z: f64, first: i64, step: i64, n: i64) -> DoubleDouble {
     (p[0] * p[1]) * (p[2] * p[3])
 }
 
-/// Reduce `z` for the recurrence: `(i, d)` with `d = z − (2.875 + i)`, `d ∈ [−½, ½]`
+/// Reduce `z` for the recurrence: `(i, zr)` with `zr = z − i` the absolute argument
+/// the wide [`TGAMMA_TABLE`] evaluates and `Γ(z) = Γ(zr) · ∏`.
+///
+/// For `z ∈ [2, 8)` (the wide table's band — `z ≥ 8` already took the Stirling leg)
+/// `i = 0` and `zr = z`, so [`tgamma_table_eval`] reads `Γ(z)` directly with **no
+/// recurrence**.  Below `2` the recurrence reduces up by `i = round(z − 2.875) < 0`
+/// to `zr = z − i ∈ [2.375, 3.375]`; `zr` is exact via `from_sum` (`−i = |i|` a
+/// positive integer) so `z`'s low bits survive in `zr.low`.
 #[inline]
 fn tgamma_reduce(z: f64) -> (f64, DoubleDouble) {
+    if (2.0..TGAMMA_TABLE_HI).contains(&z) {
+        return (0.0, DoubleDouble { high: z, low: 0.0 });
+    }
+    // Below 2 the recurrence reduces up; a `z ≥ 8` that fell through the Stirling
+    // Ziv gate (≈0.8% of that band) reduces down.  Either way land in `[2.375,
+    // 3.375]` (still inside the wide table) by `i = round(z − 2.875)`, exact via
+    // `from_sum` (`−i` an integer); `Γ(z) = Γ(z − i) · ∏` with the recurrence
+    // running upward (`i > 0`, the `z ≥ 8` miss) or downward (`i < 0`, `z < 2`).
     let i = (z - TGAMMA_CENTER).round_ties_even();
-    // The reduced argument `d = z − (2.875 + i)` must be exact: a plain-f64
-    // `z − 2.875 − i` loses `z`'s low bits when `z ≪ 2.875` (the small-`z` pole).
-    // `2.875 + i` is exact for any integer `i`, so `from_sum` captures `d` in full.
-    (i, DoubleDouble::from_sum(z, -(TGAMMA_CENTER + i)))
+    (i, DoubleDouble::from_sum(z, -i))
 }
 
-/// A per-cell minimax `f(2.875 + d)` for `d ∈ [−½, ½]` straight from a 9-cell
-/// `table` — the fast-leg evaluator shared by `Γ` ([`TGAMMA_TABLE`]) and `ln Γ`
-/// ([`LGAMMA_TABLE`]).
+/// Per-cell minimax of a tabulated `Γ`/`ln Γ` at the cell-local argument
+/// `h ∈ [−1/16, 1/16]` (`h.high` exact on the `1/8` grid, `h.low` the reduction's
+/// surviving low word) — the evaluator shared by the wide `Γ` table
+/// ([`tgamma_table_eval`]) and the `ln Γ` central table ([`cell_eval`]).
 ///
-/// `fi = round(8·d)` picks the cell; the high-word subtraction `d.high − fi/8` is
-/// Sterbenz-exact and `d.low` rides along, so `h` is exact.  The `c4..c11` tail
-/// sums in `f64` (small relative to the result), then the `c3..c0` leads fold in
-/// double-double — a few double-double FMAs versus the accurate polynomial.  `h`
-/// keeps its low word through the leads: `c1·d.low` alone can reach 2⁻⁵⁴, far above
-/// the leg's budget.
+/// The `c4..c11` tail sums in `f64` (small relative to the result), then the
+/// `c3..c0` leads fold in double-double — a few double-double FMAs versus the
+/// accurate polynomial.  `h` keeps its low word through the leads: `c1·h.low`
+/// alone can reach 2⁻⁵⁴, far above the leg's budget.
+///
+/// `h.low` correction: positive (non-reflection) inputs reduce exactly, so
+/// `h.low = 0` and it vanishes — the whole `Γ` table path (`tgamma` over `[2, 8)`)
+/// and the positive `ln Γ` band hit this branch, skipping the derivative entirely.
+/// A reduced or reflection argument carries `h.low ≲ 2⁻⁵¹`, shifting `P` by
+/// `P′(h)·h.low`.  `P′(h) ≈ c1 + h·(2c2 + 3h·c3)` in `f64` is ample — its rounding
+/// rides `h.low` down to ≲2⁻⁶⁸, well inside the gate (the dropped `4c4·h³·h.low` is
+/// ≲2⁻⁷⁰).  The branch is value-consistent within a magnitude band, so it predicts
+/// perfectly.
 #[inline]
-fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
-    let fi = (d.high * 8.0).round_ties_even();
-    // SAFETY: d.high ∈ [−½, ½] ⇒ fi ∈ [−4, 4].
-    let cell = &table[(unsafe { fi.to_int_unchecked::<i64>() } + 4) as usize];
-    // `z` is the cell-local argument, exact (Sterbenz: `fi·⅛` lands on `d.high`'s
-    // grid).  Carry it as a plain `f64`, so the Horner leads fold with dd × f64
-    // multiplies (CORE-MATH's `polydddfst`) rather than the dd × dd the dd
-    // argument would force, and with the magnitude-ordered Fast2Sum: each `|cₖ|`
-    // dominates its `acc·z` (|z| ≤ 1/16), the same ordering the corpus certifies.
-    let z = d.high - fi * 0.125;
+fn eval_cell(cell: &GammaCell, h: DoubleDouble) -> DoubleDouble {
+    // `z` is the cell-local argument, exact.  Carry it as a plain `f64`, so the
+    // Horner leads fold with dd × f64 multiplies (CORE-MATH's `polydddfst`) rather
+    // than the dd × dd a dd argument would force, and with the magnitude-ordered
+    // Fast2Sum: each `|cₖ|` dominates its `acc·z` (|z| ≤ 1/16), the same ordering
+    // the corpus certifies.
+    let z = h.high;
 
     // P(z) = c0 + z·(c1 + z·(c2 + z·(c3 + z·tail))), tail = c4 + c5·z + … in f64.
     let tail = crate::poly(z, &cell.tail);
@@ -1539,15 +2683,7 @@ fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
     let acc = cell.c1.add_ordered(acc * z);
     let value = cell.c0.add_ordered(acc * z);
 
-    // `d.low` correction.  Positive (non-reflection) inputs reduce exactly, so
-    // `d.low = 0` and this vanishes — the whole `Γ` table path (`tgamma`) and the
-    // positive `ln Γ` band hit this branch, skipping the derivative entirely.  The
-    // reflection feeds a double-double argument whose `d.low ≲ 2⁻⁵¹` shifts `P` by
-    // `P′(z)·d.low`.  `P′(z) ≈ c1 + z·(2c2 + 3z·c3)` in `f64` is ample — its
-    // rounding rides `d.low` down to ≲2⁻⁶⁸, well inside the table gate (the dropped
-    // `4c4·z³·d.low` is ≲2⁻⁷⁰).  The branch is value-consistent within a magnitude
-    // band, so it predicts perfectly.
-    if d.low == 0.0 {
+    if h.low == 0.0 {
         return value;
     }
     let deriv = crate::fast_mul_add(
@@ -1557,14 +2693,46 @@ fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
     );
     DoubleDouble {
         high: value.high,
-        low: crate::fast_mul_add(deriv, d.low, value.low),
+        low: crate::fast_mul_add(deriv, h.low, value.low),
     }
 }
 
-/// `Γ(2.875 + d)` for `d ∈ [−½, ½]` straight from [`TGAMMA_TABLE`] — the fast leg
+/// A per-cell minimax `ln Γ(2.875 + d)` for `d ∈ [−½, ½]` from the 9-cell `ln Γ`
+/// central [`LGAMMA_TABLE`]: `fi = round(8·d)` picks the sub-cell, then
+/// [`eval_cell`] evaluates it.  The sub-cell argument `d.high − fi/8` is
+/// Sterbenz-exact and `d.low` rides along.
 #[inline]
-fn tgamma_table_eval(d: DoubleDouble) -> DoubleDouble {
-    cell_eval(&TGAMMA_TABLE, d)
+fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
+    let fi = (d.high * 8.0).round_ties_even();
+    // SAFETY: d.high ∈ [−½, ½] ⇒ fi ∈ [−4, 4].
+    let cell = &table[(unsafe { fi.to_int_unchecked::<i64>() } + 4) as usize];
+    eval_cell(
+        cell,
+        DoubleDouble {
+            high: d.high - fi * 0.125,
+            low: d.low,
+        },
+    )
+}
+
+/// `Γ(z)` for `z ∈ [2, 8)` straight from the wide recurrence-free [`TGAMMA_TABLE`]
+/// — the `Γ` fast leg.  `k = round(8·z)` indexes the cell centred at `k/8`; the
+/// cell-local argument `z − k/8 ∈ [−1/16, 1/16]` is Sterbenz-exact (`z`, `k/8`
+/// within `1/16`, both `≥ 2`), and `z`'s low word — nonzero only when the
+/// recurrence fed a reduced argument — rides along in `zr.low`.
+#[inline]
+fn tgamma_table_eval(zr: DoubleDouble) -> DoubleDouble {
+    let kf = (zr.high * 8.0).round_ties_even();
+    // SAFETY: zr.high ∈ [2, 8) ⇒ 8·zr.high ∈ [16, 64] ⇒ k ∈ 16..=64.
+    let k = unsafe { kf.to_int_unchecked::<i64>() };
+    let cell = &TGAMMA_TABLE[(k - TGAMMA_TABLE_KLO) as usize];
+    eval_cell(
+        cell,
+        DoubleDouble {
+            high: zr.high - kf * 0.125,
+            low: zr.low,
+        },
+    )
 }
 
 /// Walk the recurrence from `value = Γ(z − i)` to `(value, e2)` with
@@ -1776,7 +2944,7 @@ pub fn tgamma(z: f64) -> f64 {
         }
     }
 
-    tgamma_accurate(z, i, d)
+    tgamma_accurate(z)
 }
 
 /// The accurate **triple-double** leg of [`tgamma`], reached only when the table
@@ -1790,9 +2958,24 @@ pub fn tgamma(z: f64) -> f64 {
 /// triple-double section); the lift clears them all with a > 70-bit margin.
 #[cold]
 #[inline(never)]
-fn tgamma_accurate(z: f64, i: f64, d: DoubleDouble) -> f64 {
+fn tgamma_accurate(z: f64) -> f64 {
+    // The accurate path keeps the centred reduction: the degree-38 [`TGAMMA_TD`]
+    // minimax is valid only on `[−½, ½]` about 2.875, so it cannot take the wide
+    // table's absolute argument — it reduces `z` into `[2.375, 3.375]` and walks the
+    // triple-double recurrence (which may run upward, `i > 0`, unlike the fast leg).
+    let (i, d) = tgamma_reduce_center(z);
     let (value, e2) = tgamma_recurrence_td(z, i, poly_td(dd_to_td(d), &TGAMMA_TD));
     round_td_signed64(value, e2)
+}
+
+/// Reduce `z` into `[2.375, 3.375]` for the **accurate** path: `(i, d)` with
+/// `d = z − (2.875 + i) ∈ [−½, ½]` the relative argument the degree-38
+/// [`TGAMMA_TD`] minimax evaluates, and `Γ(z) = Γ(2.875 + d) · ∏`.  `d` is exact
+/// via `from_sum` (`2.875 + i` is exact for any integer `i`).
+#[inline]
+fn tgamma_reduce_center(z: f64) -> (f64, DoubleDouble) {
+    let i = (z - TGAMMA_CENTER).round_ties_even();
+    (i, DoubleDouble::from_sum(z, -(TGAMMA_CENTER + i)))
 }
 
 /// Natural logarithm of a positive double-double, as a double-double.

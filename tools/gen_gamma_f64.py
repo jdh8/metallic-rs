@@ -103,26 +103,37 @@ print_td_array("TGAMMA_TD", td_coeffs,
 # struct is hand-written in gamma.rs; this emits only the `TGAMMA_TABLE` array.
 TABLE_W = mpf(1) / 16          # half-width: cells of width 1/8
 TABLE_DEG = 11                 # c0..c11; c4..c11 form the f64 tail
-TABLE_ILO, TABLE_IHI = -4, 4   # centre 2.875 + i/8, covering d ∈ [−½, ½]
+TABLE_ILO, TABLE_IHI = -4, 4   # lgamma central table: centre 2.875 + i/8, d ∈ [−½, ½]
+
+# tgamma WIDE recurrence-free table: per-cell minimax of Γ(k/8 + h), h ∈ [−1/16, 1/16],
+# cells centred at k/8 for k ∈ [TGAMMA_KLO, TGAMMA_KHI].  Covers [TGAMMA_KLO/8,
+# TGAMMA_KHI/8 + 1/16) directly with NO recurrence — `tgamma` looks up the cell by
+# `k = round(8·z)` for z in this band, recurs only below it, and takes Stirling above.
+# Measurement: a direct cell eval (≈24 ns) BEATS both the multiply/divide recurrence
+# and the exp(lnΓ) Stirling leg (≈39 ns) for the same z, so widening the band that
+# avoids them is a straight win (issue #5).
+TGAMMA_KLO, TGAMMA_KHI = 16, 64   # centres 2.0 … 8.0 ⇒ covers z ∈ [2, 8)
 
 table_rows = []
-table_worst = -mp.inf
+table_worst = -mp.inf          # worst RELATIVE minimax error err/Γ(ci) across cells
 tail_worst = -mp.inf           # |c4|·W⁴ relative to Γ: the f64 tail's share
-for i in range(TABLE_ILO, TABLE_IHI + 1):
-    ci = CENTER + mpf(i) / 8
+for kc in range(TGAMMA_KLO, TGAMMA_KHI + 1):
+    ci = mpf(kc) / 8
     coeffs, err = chebyfit(lambda h, ci=ci: gamma(ci + h), [-TABLE_W, TABLE_W],
                            TABLE_DEG + 1, error=True)
     coeffs = list(reversed(coeffs))
     table_rows.append(coeffs)
-    table_worst = max(table_worst, mp.log(err, 2))
+    table_worst = max(table_worst, mp.log(err / gamma(ci), 2))
     tail_worst = max(tail_worst, mp.log(abs(coeffs[4]) * TABLE_W ** 4 / gamma(ci), 2))
 
-print(f"\n/// Fast-path table for `Γ(2.875 + d)`, `d ∈ [−½, ½]`: per-cell minimax of")
-print(f"/// `Γ(2.875 + i/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8,")
-print(f"/// `i ∈ [{TABLE_ILO}, {TABLE_IHI}]`.  Degree {TABLE_DEG} (`c0..c3` double-double, `c4..c{TABLE_DEG}` plain")
-print(f"/// `f64`); worst-cell minimax error 2^{float(table_worst):.0f}, f64 tail ≤ 2^{float(tail_worst):.0f} of Γ.")
+print(f"\n/// Fast-path table for `Γ(z)`, `z ∈ [{TGAMMA_KLO}/8, {TGAMMA_KHI}/8)` = "
+      f"`[{float(mpf(TGAMMA_KLO)/8)}, {float(mpf(TGAMMA_KHI)/8)})`: per-cell minimax of")
+print(f"/// `Γ(k/8 + h)` in `h ∈ [−1/16, 1/16]`, cells of width 1/8, `k ∈ [{TGAMMA_KLO}, {TGAMMA_KHI}]`.")
+print(f"/// Degree {TABLE_DEG} (`c0..c3` double-double, `c4..c{TABLE_DEG}` plain `f64`); worst-cell relative")
+print(f"/// minimax error 2^{float(table_worst):.0f}, f64 tail ≤ 2^{float(tail_worst):.0f} of Γ.")
+print(f"/// Recurrence-free: `tgamma` reads cell `k = round(8·z)` directly here.")
 print(f"/// From `tools/gen_gamma_f64.py`.")
-print(f"const TGAMMA_TABLE: [GammaCell; {TABLE_IHI - TABLE_ILO + 1}] = [")
+print(f"const TGAMMA_TABLE: [GammaCell; {TGAMMA_KHI - TGAMMA_KLO + 1}] = [")
 for coeffs in table_rows:
     print("    GammaCell {")
     for k in range(4):
@@ -132,6 +143,10 @@ for coeffs in table_rows:
     print(f"        tail: [{tail}],")
     print("    },")
 print("];")
+print(f"\n/// Lowest cell index of [`TGAMMA_TABLE`] (`k = round(8·z)`, centre `k/8`)")
+print(f"const TGAMMA_TABLE_KLO: i64 = {TGAMMA_KLO};")
+print(f"\n/// `Γ(z)` reads [`TGAMMA_TABLE`] directly (no recurrence) for `z ∈ [2, TGAMMA_TABLE_HI)`")
+print(f"const TGAMMA_TABLE_HI: f64 = {hexf(f64(mpf(TGAMMA_KHI) / 8))};")
 
 # --- thresholds -----------------------------------------------------------
 MAX = mpf(f64(__import__('sys').float_info.max))
