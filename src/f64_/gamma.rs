@@ -1540,10 +1540,16 @@ fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
     let value = cell.c0.add_ordered(acc * z);
 
     // `d.low` correction.  Positive (non-reflection) inputs reduce exactly, so
-    // `d.low = 0` and this vanishes; the reflection feeds a double-double argument
-    // whose `d.low ≲ 2⁻⁵¹` shifts `P` by `P′(z)·d.low`.  `P′(z) ≈ c1 + z·(2c2 +
-    // 3z·c3)` in `f64` is ample — its rounding rides `d.low` down to ≲2⁻⁶⁸, well
-    // inside the table gate (the dropped `4c4·z³·d.low` is ≲2⁻⁷⁰).
+    // `d.low = 0` and this vanishes — the whole `Γ` table path (`tgamma`) and the
+    // positive `ln Γ` band hit this branch, skipping the derivative entirely.  The
+    // reflection feeds a double-double argument whose `d.low ≲ 2⁻⁵¹` shifts `P` by
+    // `P′(z)·d.low`.  `P′(z) ≈ c1 + z·(2c2 + 3z·c3)` in `f64` is ample — its
+    // rounding rides `d.low` down to ≲2⁻⁶⁸, well inside the table gate (the dropped
+    // `4c4·z³·d.low` is ≲2⁻⁷⁰).  The branch is value-consistent within a magnitude
+    // band, so it predicts perfectly.
+    if d.low == 0.0 {
+        return value;
+    }
     let deriv = crate::fast_mul_add(
         z,
         crate::fast_mul_add(z, 3.0 * cell.c3.high, 2.0 * cell.c2.high),
