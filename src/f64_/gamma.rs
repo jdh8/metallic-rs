@@ -9496,20 +9496,28 @@ fn lgamma_piecewise(y: DoubleDouble) -> (DoubleDouble, f64) {
     let z = ax - LGAMMA_PIECE_OFFS[j];
     let tail = z * crate::poly(z, &LGAMMA_PIECE_CL[j]);
     let (fh, fl) = c_polydddfst(z, cell, (tail, 0.0));
-    let deriv = crate::fast_mul_add(
-        z,
-        crate::fast_mul_add(
+    let value = DoubleDouble { high: fh, low: fl };
+    // Exact argument (the positive path feeds `y.low = 0`): the `P′(z)·y.low`
+    // correction vanishes, so skip it.  Only a `1 − z` reflection (`z < ½`) carries a
+    // nonzero low word and needs the derivative.
+    let value = if y.low == 0.0 {
+        value
+    } else {
+        let deriv = crate::fast_mul_add(
             z,
-            crate::fast_mul_add(z, 4.0 * cell[4].high, 3.0 * cell[3].high),
-            2.0 * cell[2].high,
-        ),
-        cell[1].high,
-    );
-    let value = DoubleDouble { high: fh, low: fl }
-        + DoubleDouble {
-            high: deriv * y.low,
-            low: 0.0,
-        };
+            crate::fast_mul_add(
+                z,
+                crate::fast_mul_add(z, 4.0 * cell[4].high, 3.0 * cell[3].high),
+                2.0 * cell[2].high,
+            ),
+            cell[1].high,
+        );
+        value
+            + DoubleDouble {
+                high: deriv * y.low,
+                low: 0.0,
+            }
+    };
     // Roots at `y = 1` (region 4) / `y = 2` (region 10): factor the tiny value out as
     // the *double-double* `1 − y` / `y − 2` (whose low word carries the rest of the
     // reflection's `1 − z`) so it carries no cancellation.
