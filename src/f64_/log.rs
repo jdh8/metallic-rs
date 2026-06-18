@@ -979,6 +979,32 @@ const LN1P_Q_COEFFS: [f64; 8] = [
     0.1111111111111111,
 ];
 
+/// Plain-`f64` tail of `ln(1+x)` past the exact `x − x²/2`:
+/// `f(x) = (ln(1+x) − x + x²/2)/x³ = ∑_{k≥0} (−1)ᵏ xᵏ/(k+3)`, low-degree first.
+///
+/// Used by the [`log1p`] mid-`|x|` leg `[2⁻⁸, 2⁻⁴)`, where the leading `x − x²/2`
+/// is carried to extra precision (one `fma`) so the leg error rides only the
+/// `x³·f` correction (gate ∝ `x³`, [`LN1P_WIDE_ZIV_SCALE`]) — far tighter than
+/// reusing `ln`'s absolute gate, which over-falls-back where the result is small.
+/// Degree 13: the truncation past `x¹³`, scaled by `x³`, is `x¹⁷/19 ≤ 2⁻⁷²` at
+/// `|x| = 2⁻⁴` — far under the leg's `≈2⁻⁵²·x³` budget.
+const LN1P_F_WIDE: [f64; 14] = [
+    0.3333333333333333,
+    -0.25,
+    0.2,
+    -0.16666666666666666,
+    0.14285714285714285,
+    -0.125,
+    0.1111111111111111,
+    -0.1,
+    0.09090909090909091,
+    -0.08333333333333333,
+    0.07692307692307693,
+    -0.07142857142857142,
+    0.06666666666666667,
+    -0.0625,
+];
+
 /// Correction-scaled Ziv gate for `ln_1p`'s small-`|x|` branch (`|x| < 1/256`):
 /// the absolute error bound is `x² · LN1P_SMALL_ZIV_SCALE`.
 ///
@@ -991,6 +1017,17 @@ const LN1P_Q_COEFFS: [f64; 8] = [
 /// drops the straddle odds to `≈2⁻⁴⁵·|x|` — the fallback all but vanishes,
 /// where the flat gate fell back on ≈2⁻³·⁵ of random small inputs.
 const LN1P_SMALL_ZIV_SCALE: f64 = 3.552713678800501e-15; // 2^-48
+
+/// Ziv gate for `log1p`'s mid-`|x|` leg (`2⁻⁸ ≤ |x| < 2⁻⁴`): an absolute bound
+/// `|x|³ · LN1P_WIDE_ZIV_SCALE` on the leg error.
+///
+/// The leading `x − x²/2` is carried exactly (the `fma` residual joins the low
+/// word), so the error is only the `x³·f` correction: the rounding of `x³·f`
+/// (≈2⁻⁵³·|f|, `|f| ≤ 0.34`) and the Estrin evaluation of [`LN1P_F_WIDE`]
+/// (≈13·2⁻⁵⁴ against `|f|`) — together under `≈2⁻⁵²·x³`, so `2⁻⁵⁰` keeps a ~4×
+/// margin.  A dense `[2⁻⁸, 2⁻⁴)` sweep against the `core-math` oracle and the
+/// worst-case corpus (`test_log1p_worst_cases`) round bit-exactly.
+const LN1P_WIDE_ZIV_SCALE: f64 = 8.881784197001252e-16; // 2^-50
 
 /// Ziv gate for the natural log's fast path, as an absolute error bound.
 ///
@@ -1368,6 +1405,34 @@ pub fn log1p(x: f64) -> f64 {
         // as a double-double: its ≈2⁻¹⁰⁴ relative error rides the *tiny* `c`, not
         // the result, so `x` (exact) + `c` resolves the rounding.
         return log1p_small_accurate(x);
+    }
+
+    // Mid |x| (`2⁻⁸ ≤ |x| < 2⁻⁴`): still evaluate the relative-accurate series
+    // rather than the table reduction.  There the result `ln(1+x)` is small
+    // (≥ ≈2⁻⁸), where the reduction path's *absolute* gate is coarse relative to
+    // the result and forces the accurate fallback on a large fraction of inputs.
+    // The series keeps the leading `x − x²/2` exact (one `fma`, its residual
+    // joining the low word), so only the `x³·f` correction carries error and the
+    // gate scales with `x³` ([`LN1P_WIDE_ZIV_SCALE`]) — the fallback all but
+    // vanishes.  (Mirrors CORE-MATH's `|x| < 2⁻⁴` polynomial branch.)
+    if x.abs() < 0.0625 {
+        let hx = -0.5 * x;
+        let high = crate::fma(hx, x, x); // x − x²/2, rounded
+        let resid = crate::fma(hx, x, x - high); // exact residual of x − x²/2
+        let x3 = (x * x) * x;
+        let low = crate::fast_mul_add(x3, crate::poly(x, &LN1P_F_WIDE), resid);
+        let err = LN1P_WIDE_ZIV_SCALE * x3.abs();
+        let lo = high + (low - err);
+        let hi = high + (low + err);
+        if lo == hi {
+            return lo;
+        }
+
+        // Accurate fallback: `|x| ≥ 2⁻⁸` keeps the result `≥ ≈2⁻⁸`, well within
+        // the `dint` 128-bit `1 + x`'s reach, so the same correctly-rounded path
+        // the reduction leg uses resolves the rare straddle.
+        let s = 1.0 + x;
+        return super::dint::log1p_accurate(s, x - (s - 1.0));
     }
 
     // Otherwise carry 1 + x exactly as `s + c` (Fast2Sum), so the bits of `x` lost
