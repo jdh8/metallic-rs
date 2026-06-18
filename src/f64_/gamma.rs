@@ -9681,8 +9681,12 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
             // soundness test demands a 2× margin, so double it.  `gate ≪ ulp` of the
             // result, so the extra fallback is negligible.  The `ln|sin πz|` term is
             // already ≈2× its own error.
+            //
+            // The two combining adds are CORE-MATH's `sumdd` (2Sum on the high words,
+            // no renormalizing `fast_sum`): the result only feeds the Ziv test
+            // `high + (low ± gate)`, which accepts an un-renormalized low word.
             return (
-                LN_PI + neg(ln_sin + pos),
+                LN_PI.add_loose(neg(ln_sin.add_loose(pos))),
                 crate::fast_mul_add(
                     ln_sin.high.abs(),
                     LGAMMA_REFLECT_SIN_REL,
@@ -9691,7 +9695,10 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
             );
         }
         let (pos, gate) = lgamma_pos_fast(w);
-        return (LN_PI + neg(ln_fast_sum(sinpi) + pos), gate);
+        return (
+            LN_PI.add_loose(neg(ln_fast_sum(sinpi).add_loose(pos))),
+            gate,
+        );
     }
     if z < LGAMMA_FAST_CUTOFF {
         // Near the roots `z = 1, 2` the result is tiny; the relative-gated root
