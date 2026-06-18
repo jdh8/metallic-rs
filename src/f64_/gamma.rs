@@ -1889,6 +1889,99 @@ fn lgamma_table_fast(y: DoubleDouble) -> DoubleDouble {
     cell_eval(&LGAMMA_TABLE, d) + lgamma_recurrence_log(y, i, ln_fast_sum)
 }
 
+/// Relative + absolute Ziv slack for the [`lgamma_piecewise`] leg, CORE-MATH's
+/// `fabs(fh)*8.3e-20 + 1e-24` (≈2⁻⁶³·⁵ relative, 2⁻⁷⁹·⁷ absolute).
+const LGAMMA_PIECE_REL: f64 = 8.3e-20;
+const LGAMMA_PIECE_ABS: f64 = 1e-24;
+
+/// Ziv slack for the reflection leg's `ln|sin πz|` term: a relative part plus an
+/// **absolute floor**.
+///
+/// [`ln_fast`](crate::f64_::ln_fast)'s error on `ln|sin πz|` is ≈2⁻⁶⁶ relative away
+/// from 1, but near a half-integer `z` (where `sin πz → 1`) the result shrinks while
+/// the *absolute* error stays ≈2⁻⁶⁶·⁹ — so a purely relative gate underbudgets it
+/// there.  `|ln|sin πz||·2⁻⁶⁵` covers the relative regime and `LGAMMA_REFLECT_SIN_ABS`
+/// the near-1 floor (each ≈2× the measured worst, negligible vs `ulp` of the result).
+const LGAMMA_REFLECT_SIN_REL: f64 = crate::exp2i(-65);
+const LGAMMA_REFLECT_SIN_ABS: f64 = crate::exp2i(-65);
+
+/// Select the [`LGAMMA_PIECE_OFFS`] region for `ax ∈ [0.5, 8.29541]` — a 1:1 port of
+/// CORE-MATH's quadratic hash on the exponent-and-top-mantissa key
+/// `au = (|x|.to_bits() << 1) >> 38`, with the one-step boundary correction.
+#[inline]
+fn lgamma_piece_region(ax: f64) -> usize {
+    let au = ((ax.to_bits() << 1) >> 38) as u32;
+    let ou = au.wrapping_sub(LGAMMA_PIECE_BORDERS[0]);
+    // The multiply `ou*0x150d` is a deliberate 32-bit wrap (matching C's `unsigned`),
+    // then the rest of the hash runs in 64 bits.
+    let t32 = ou.wrapping_mul(0x150d) as u64;
+    let m = (0x1_57ce_d865_u64.wrapping_sub(t32))
+        .wrapping_mul(u64::from(ou))
+        .wrapping_add(0x1280_0000_0000)
+        >> 45;
+    let j = m as usize;
+    j - usize::from(au < LGAMMA_PIECE_BORDERS[j])
+}
+
+/// `ln Γ(y)` for positive `y.high ∈ [0.5, 8)` straight from the **recurrence-free**
+/// CORE-MATH piecewise table ([`LGAMMA_PIECE_CH`]/[`LGAMMA_PIECE_CL`]), with its
+/// relative+absolute Ziv slack.
+///
+/// Replaces the central-cell table plus the `ln ∏` recurrence: a single degree-12
+/// minimax per region (`c0..c4` double-double, `c5..c12` plain `f64`), with the
+/// roots at `y = 1` (region 4) and `y = 2` (region 10) factored out as `(1 − y)`
+/// resp. `(y − 2)` so the tiny value there carries no cancellation.  The argument's
+/// low word (the reflection's `1 − z`) folds back through the polynomial derivative
+/// (see the body) rather than into the cell-local `z` directly.
+#[inline]
+fn lgamma_piecewise(y: DoubleDouble) -> (DoubleDouble, f64) {
+    let ax = y.high;
+    let j = lgamma_piece_region(ax);
+    let cell = &LGAMMA_PIECE_CH[j];
+    // `ax − off` is Sterbenz-exact (`off` within the region).  CORE-MATH folds the
+    // argument's low word straight into this plain `z`, but it only ever feeds an
+    // exact `|x|`; metallic's reflection feeds a `1 − z` whose `y.low` (≲2⁻⁵³) can
+    // exceed `ulp(z)`, so the plain fold would drop its low bits.  Keep `z` exact and
+    // fold `y.low` back through the polynomial derivative `P′(z)·y.low` (a
+    // renormalizing `DoubleDouble` add — the correction can dwarf the low word near a
+    // root), the same first-order trick [`cell_eval`] uses.
+    let z = ax - LGAMMA_PIECE_OFFS[j];
+    let tail = z * crate::poly(z, &LGAMMA_PIECE_CL[j]);
+    let (fh, fl) = c_polydddfst(z, cell, (tail, 0.0));
+    let deriv = crate::fast_mul_add(
+        z,
+        crate::fast_mul_add(
+            z,
+            crate::fast_mul_add(z, 4.0 * cell[4].high, 3.0 * cell[3].high),
+            2.0 * cell[2].high,
+        ),
+        cell[1].high,
+    );
+    let value = DoubleDouble { high: fh, low: fl }
+        + DoubleDouble {
+            high: deriv * y.low,
+            low: 0.0,
+        };
+    // Roots at `y = 1` (region 4) / `y = 2` (region 10): factor the tiny value out as
+    // the *double-double* `1 − y` / `y − 2` (whose low word carries the rest of the
+    // reflection's `1 − z`) so it carries no cancellation.
+    let value = if j == 4 {
+        value * (ONE + neg(y))
+    } else if j == 10 {
+        value
+            * (y + DoubleDouble {
+                high: -2.0,
+                low: 0.0,
+            })
+    } else {
+        value
+    };
+    (
+        value,
+        crate::fast_mul_add(value.high.abs(), LGAMMA_PIECE_REL, LGAMMA_PIECE_ABS),
+    )
+}
+
 /// Direct Stirling `ln Γ(y)` for a positive double-double `y` with `y.high ≥ 8`,
 /// the lean fast leg (`steps = 0`): the reflection's `ln Γ(1−z)` once `1−z` clears
 /// the cutoff
@@ -2020,42 +2113,38 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
         let w = DoubleDouble::from_sum(1.0, -z);
         let sinpi = abs_sinpi_dd_lean(z);
         if w.high < LGAMMA_FAST_CUTOFF {
-            // ln Γ(1−z) = cell_eval(d) ± ln ∏; fold the ∏ into |sin πz| so one
-            // logarithm of |sin πz|·∏^±1 covers both terms (combining is at least
-            // as accurate as the two separate logs, so the table gate still holds).
-            let (i, d) = lgamma_center_reduce(w);
-            let arg = if i > 0 {
-                sinpi
-                    * recurrence_product_dd(
-                        w + DoubleDouble {
-                            high: -(i as f64),
-                            low: 0.0,
-                        },
-                        i,
-                    )
-            } else if i < 0 {
-                sinpi * recurrence_product_dd(w, -i).recip()
-            } else {
-                sinpi
-            };
+            // ln Γ(1−z) from the recurrence-free piecewise table (no recurrence, no
+            // recurrence log); combine with `− ln|sin πz|`.  The `ln|sin πz|` term
+            // adds its own slack to the leg's gate: near a half-integer `z` the sine
+            // approaches 1, where `ln_fast`'s relative error degrades to ≈2⁻⁶¹ (the
+            // old code logged `|sin πz|·∏`, never near 1), so it is budgeted at the
+            // looser [`LGAMMA_REFLECT_SIN_REL`], not the table's own [`LGAMMA_PIECE_REL`].
+            let (pos, gate) = lgamma_piecewise(w);
+            let ln_sin = ln_fast_sum(sinpi);
+            // `gate` is CORE-MATH's tight (≈1×) bound on `pos`'s error; the reflection
+            // soundness test demands a 2× margin, so double it.  `gate ≪ ulp` of the
+            // result, so the extra fallback is negligible.  The `ln|sin πz|` term is
+            // already ≈2× its own error.
             return (
-                LN_PI + neg(cell_eval(&LGAMMA_TABLE, d) + ln_fast_sum(arg)),
-                LGAMMA_TABLE_ERR,
+                LN_PI + neg(ln_sin + pos),
+                crate::fast_mul_add(
+                    ln_sin.high.abs(),
+                    LGAMMA_REFLECT_SIN_REL,
+                    crate::fast_mul_add(2.0, gate, LGAMMA_REFLECT_SIN_ABS),
+                ),
             );
         }
         let (pos, gate) = lgamma_pos_fast(w);
         return (LN_PI + neg(ln_fast_sum(sinpi) + pos), gate);
     }
     if z < LGAMMA_FAST_CUTOFF {
-        // Near the roots `z = 1, 2` the central table cancels to a tiny result the
-        // absolute gate can't certify; the root-anchored series handles those.
+        // Near the roots `z = 1, 2` the result is tiny; the relative-gated root
+        // series ([`lgamma_root_fast`]) certifies it where the piecewise leg's
+        // absolute floor would defer to the accurate path.
         if let Some(root) = lgamma_root_fast(z) {
             return root;
         }
-        return (
-            lgamma_table_fast(DoubleDouble { high: z, low: 0.0 }),
-            LGAMMA_TABLE_ERR,
-        );
+        return lgamma_piecewise(DoubleDouble { high: z, low: 0.0 });
     }
 
     let inv = 1.0 / z;
@@ -2257,6 +2346,31 @@ fn c_fastsum(xh: f64, xl: f64, yh: f64, yl: f64) -> (f64, f64) {
     (sh, (xl + yl) + sl)
 }
 
+/// `mulddd`: `(ch+cl)·x` (a double-double times a scalar) as a double-double pair —
+/// a 1:1 port of CORE-MATH's `mulddd`.
+#[inline]
+fn c_mulddd(x: f64, ch: f64, cl: f64) -> (f64, f64) {
+    let ahhh = ch * x;
+    (ahhh, crate::fast_mul_add(cl, x, crate::fma(ch, x, -ahhh)))
+}
+
+/// `polydddfst`: Horner `Σ c[k]·xᵏ` over a *scalar* `x` (double-double coefficients,
+/// `seed` injected at the top), using [`c_mulddd`] — a 1:1 port of CORE-MATH's
+/// `polydddfst` (`polydd` with the cheaper double-double × scalar step).
+#[inline]
+fn c_polydddfst(x: f64, c: &[DoubleDouble], seed: (f64, f64)) -> (f64, f64) {
+    let n = c.len();
+    let (mut ch, mut cl) = fast_two_sum(c[n - 1].high, seed.0);
+    cl += seed.1 + c[n - 1].low;
+    for k in (0..n - 1).rev() {
+        let (mh, ml) = c_mulddd(x, ch, cl);
+        let (sh, sl) = c_fastsum(c[k].high, c[k].low, mh, ml);
+        ch = sh;
+        cl = sl;
+    }
+    (ch, cl)
+}
+
 /// `polydd`: Horner `Σ c[k]·xᵏ` over a double-double `x`, with `seed` injected
 /// at the top coefficient — a 1:1 port of CORE-MATH's `polydd`.
 #[inline]
@@ -2274,6 +2388,7 @@ fn c_polydd(xh: f64, xl: f64, c: &[DoubleDouble], seed: (f64, f64)) -> (f64, f64
 }
 
 include!("gamma_td_tables.rs");
+include!("gamma_piece_tables.rs");
 
 /// Three words of `ln 2` (`0x1.62e42fefa38p-1 + 0x1.ef35793c76p-45 + …`).
 const LN2_TD: [f64; 3] = [
