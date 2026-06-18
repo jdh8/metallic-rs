@@ -112,7 +112,7 @@ TABLE_ILO, TABLE_IHI = -4, 4   # lgamma central table: centre 2.875 + i/8, d ∈
 # Measurement: a direct cell eval (≈24 ns) BEATS both the multiply/divide recurrence
 # and the exp(lnΓ) Stirling leg (≈39 ns) for the same z, so widening the band that
 # avoids them is a straight win (issue #5).
-TGAMMA_KLO, TGAMMA_KHI = 16, 64   # centres 2.0 … 8.0 ⇒ covers z ∈ [2, 8)
+TGAMMA_KLO, TGAMMA_KHI = 16, 288   # centres 2.0 … 8.0 ⇒ covers z ∈ [2, 8)
 
 table_rows = []
 table_worst = -mp.inf          # worst RELATIVE minimax error err/Γ(ci) across cells
