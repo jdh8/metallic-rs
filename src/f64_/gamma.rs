@@ -9180,14 +9180,15 @@ fn tgamma_reflect_gamma(z: f64, wf: f64) -> DoubleDouble {
     eval_cell(cell, DoubleDouble { high: h, low: 0.0 })
 }
 
-/// Reflection fast leg of [`tgamma`] for `z ∈ (−35, −1]`: `Γ(z) = ±π / (sin(πz)·Γ(1−z))`.
+/// Reflection fast leg of [`tgamma`] for `z ∈ (−35, −1]`: the **magnitude**
+/// `|Γ(z)| = π / (|sin πz|·Γ(1−z))`, always positive (the caller folds in
+/// `sign(Γ(z)) = sign(sin πz)`).
 ///
 /// `1 − z ∈ [2, 36)` lands in the recurrence-free wide [`TGAMMA_TABLE`], so `Γ(1−z)`
 /// is one table evaluation — no logarithm, no exponential, and no `O(|z|)` divisor
 /// product (the old path walked up to 13 double-double factors then a reciprocal).
 /// CORE-MATH computes `Γ(1−z) = exp(lnΓ(1−z))`; reading it straight from the table is
-/// cheaper still.  `Some` on a certified Ziv hit; `None` (deep `z`, or the rare
-/// straddle) falls through to the recurrence path.
+/// cheaper still.
 #[inline]
 fn tgamma_reflect_value(z: f64, wf: f64) -> DoubleDouble {
     // `π / (|sin πz|·Γ(1−z))` via CORE-MATH's raw reciprocal-multiply: one division
@@ -9200,13 +9201,7 @@ fn tgamma_reflect_value(z: f64, wf: f64) -> DoubleDouble {
     // `pil − ll·rh` folds the cross term through one more.
     let resid = crate::fma(rh, denom.high, -PI_DD.high);
     let rl = rcp * (crate::fast_mul_add(-denom.low, rh, PI_DD.low) - resid);
-    let mag = DoubleDouble { high: rh, low: rl };
-    // sign(Γ(z)) = sign(sin πz): negative on the humps where ⌊z⌋ is odd.
-    if (z.floor() as i64) & 1 != 0 {
-        neg(mag)
-    } else {
-        mag
-    }
+    DoubleDouble { high: rh, low: rl }
 }
 
 #[inline]
@@ -9217,11 +9212,21 @@ fn tgamma_reflect_fast(z: f64) -> Option<f64> {
     if wf < 2.0 || wf >= TGAMMA_TABLE_HI {
         return None;
     }
+    // `value` is the positive magnitude, so the gate needs no `abs`.
     let value = tgamma_reflect_value(z, wf);
-    let err = value.high.abs() * TGAMMA_REFLECT_ZIV;
+    let err = value.high * TGAMMA_REFLECT_ZIV;
     let lo = value.high + (value.low - err);
     let hi = value.high + (value.low + err);
-    (lo == hi).then_some(lo)
+    // sign(Γ(z)) = sign(sin πz): negative on the humps where ⌊z⌋ is odd.  Applied
+    // as a bit flip on the certified scalar: negation is exact and commutes with
+    // rounding, so this returns bit-identically what negating the double-double
+    // before the gate would — without the `if`/`neg` arm, whose 50/50 parity
+    // branch mispredicts on random input.  The parity chain is all integer ops,
+    // scheduled beside the float pipe.
+    // SAFETY: `z ∈ (−35, −1]` here, so `⌊z⌋` fits an `i64`.
+    let odd = unsafe { z.floor().to_int_unchecked::<i64>() } & 1;
+    let sign = (odd as u64) << 63;
+    (lo == hi).then_some(f64::from_bits(lo.to_bits() ^ sign))
 }
 
 /// The gamma function
@@ -10794,13 +10799,15 @@ mod ziv_soundness {
             if (z - z.round()).abs() < 1.0 / 64.0 {
                 continue;
             }
+            // The leg returns the positive magnitude `|Γ(z)|` (the caller folds the
+            // hump sign into the certified scalar), so compare against `|truth|`.
             let value = tgamma_reflect_value(z, 1.0 - z);
             let got = Float::with_val(250, value.high) + Float::with_val(250, value.low);
-            let truth = Float::with_val(250, z).gamma();
+            let truth = Float::with_val(250, z).gamma().abs();
             if truth == 0.0 || !truth.is_finite() {
                 continue;
             }
-            let rel = (Float::with_val(250, &got - &truth).abs() / truth.abs()).to_f64();
+            let rel = (Float::with_val(250, &got - &truth).abs() / truth).to_f64();
             if rel > worst {
                 worst = rel;
                 worst_x = z;
