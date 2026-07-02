@@ -23,3 +23,18 @@ fn test_log10_worst_cases() {
 fn test_log10_worst_faithful() {
     common::test_worst_faithful("log10", metallic::log10, core_math::log10, 1);
 }
+
+/// Independent confirmation of correct rounding against MPFR.  Run with
+/// `cargo test --release --features mpfr`.  Representation-uniform over the
+/// positive domain (sign bit cleared): +0, subnormals, normals, +∞, NaN.
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_log10_vs_mpfr() {
+    let cr = |x: f64| rug::Float::with_val(200, x).log10().to_f64();
+    common::mpfr_sweep_univariate(
+        metallic::log10,
+        cr,
+        |i| f64::from_bits(common::mix64(i) & 0x7FFF_FFFF_FFFF_FFFF),
+        2_000_000,
+    );
+}

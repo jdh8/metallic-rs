@@ -1748,6 +1748,52 @@ fn log1p_small_accurate(x: f64) -> f64 {
     super::double::round_anchored(x, c)
 }
 
+/// The small-`|x|` fast leg of [`log1p`] (`2⁻⁵⁴ ≲ |x| < 2⁻⁸`): the exact `x`
+/// lead plus the `x²·Q(x)` correction, as the raw pair the
+/// [`LN1P_SMALL_ZIV_SCALE`] gate consumes (soundness certified by
+/// `ziv_soundness::log1p_small_leg_is_sound`).
+#[inline]
+fn log1p_small_eval(x: f64) -> DoubleDouble {
+    let zz = x * x;
+    let tail = zz * crate::poly(x, &LN1P_Q_COEFFS);
+    fast_sum(x, tail)
+}
+
+/// The mid-`|x|` fast leg of [`log1p`] (`2⁻⁸ ≤ |x| < 2⁻⁴`): the exact
+/// `x − x²/2` lead (one `fma`, its residual joining the low word) plus the
+/// `x³·f(x)` correction, as the raw pair the [`LN1P_WIDE_ZIV_SCALE`] gate
+/// consumes (soundness certified by `ziv_soundness::log1p_wide_leg_is_sound`).
+#[inline]
+fn log1p_wide_eval(x: f64) -> DoubleDouble {
+    let hx = -0.5 * x;
+    let high = crate::fma(hx, x, x); // x − x²/2, rounded
+    let resid = crate::fma(hx, x, x - high); // exact residual of x − x²/2
+    let x3 = (x * x) * x;
+    let low = crate::fast_mul_add(x3, crate::poly(x, &LN1P_F_WIDE), resid);
+    DoubleDouble { high, low }
+}
+
+/// The table fast leg of [`log1p`] (`|x| ≥ 2⁻⁴`), on the exact split
+/// `1 + x = s + c`, as the raw pair the [`LN_ZIV_EPS`] gate consumes: reduce
+/// `s = 2^e·m` with the exact-`z` cells as for `ln`, then fold the tail `c`
+/// into the low word.  With `δ = c·2⁻ᵉ` the true mantissa is `m + δ`, so the
+/// true reduced argument is `z + r·δ`; `|δ| ≤ ½ulp(m)` makes `dz = r·δ ≤ 2⁻⁵³`,
+/// and its first-order image through ln, `dz/(1+z)`, is `dz·(1 − z)` up to a
+/// dropped `dz·z² ≤ 2⁻⁶⁸` — inside the gate's margin (certified by
+/// `ziv_soundness::log1p_table_leg_is_sound`).
+#[inline]
+fn log1p_table_raw(s: f64, c: f64) -> DoubleDouble {
+    let (e, cell, z) = ln_exact_reduce(s);
+    let delta = if e > -1000 { c * crate::exp2i(-e) } else { 0.0 };
+    let dz = cell.r * delta;
+    let dz = crate::fast_mul_add(-dz, z, dz);
+    let DoubleDouble { high, low } = ln_exact_assemble(e as f64, cell, z);
+    DoubleDouble {
+        high,
+        low: low + dz,
+    }
+}
+
 /// Decompose a finite positive `x` into `(e, cell, z)` for the exact-`z` fast
 /// leg, against a caller-supplied cell table — the base-e [`LN_CELLS`] or the
 /// base-2 [`LOG2_CELLS`], which share the reciprocal lattice (`z` is
@@ -1951,6 +1997,32 @@ pub fn log(x: f64) -> f64 {
     }
 }
 
+/// The native base-2 fast leg of [`log2`] over [`LOG2_CELLS`], as the raw
+/// unnormalized pair the Ziv gate consumes:
+/// `log2(2^e·m) = (e + l1) + z·log2(e) + l2 + z²·Q(z)·log2(e)`,
+/// sparing the base-e leg's closing `× log2(e)` double-double multiply and
+/// its `e·LN2_LO` low fold — in base 2 the exponent join `e + l1` is exact
+/// by the table's 2⁻⁴² grid.  The linear term is no longer exact, so
+/// `z·LOG2_E_HI` keeps its FMA residual and the `z·LOG2_E_LO` sliver
+/// (≤ 2⁻⁶²·⁹) joins it in the low word; the tail reuses the base-e `Q`,
+/// scaled by `LOG2_E_HI` on its way in (the dropped `tail·LOG2_E_LO` is
+/// ≤ 2⁻⁷¹).  Budget: the base-e leg's <2⁻⁶⁶ absolute scaled by log2(e),
+/// plus ≲2⁻⁶⁷ of new low-word rounding — [`LOG2_ZIV_EPS`] holds with its
+/// margin intact (certified by `ziv_soundness::log2_fast_leg_is_sound`).
+#[inline]
+fn log2_fast_raw(x: f64) -> DoubleDouble {
+    let (e, cell, z) = exact_reduce_in(&LOG2_CELLS, x);
+    let zl = DoubleDouble::from_product(z, LOG2_E_HI);
+    let tail = (z * z) * crate::poly(z, &LN1P_Q_COEFFS);
+    let s = fast_sum(e as f64 + cell.l1, zl.high);
+    let low = crate::fast_mul_add(
+        tail,
+        LOG2_E_HI,
+        s.low + (cell.l2 + crate::fast_mul_add(z, LOG2_E_LO, zl.low)),
+    );
+    DoubleDouble { high: s.high, low }
+}
+
 /// The base-2 logarithm
 #[must_use]
 #[inline]
@@ -1968,30 +2040,11 @@ pub fn log2(x: f64) -> f64 {
         return x - 1.0;
     }
 
-    // Native base-2 fast leg over [`LOG2_CELLS`]:
-    //
-    //     log2(2^e·m) = (e + l1) + z·log2(e) + l2 + z²·Q(z)·log2(e)
-    //
-    // sparing the base-e leg's closing `× log2(e)` double-double multiply and
-    // its `e·LN2_LO` low fold — in base 2 the exponent join `e + l1` is exact
-    // by the table's 2⁻⁴² grid.  The linear term is no longer exact, so
-    // `z·LOG2_E_HI` keeps its FMA residual and the `z·LOG2_E_LO` sliver
-    // (≤ 2⁻⁶²·⁹) joins it in the low word; the tail reuses the base-e `Q`,
-    // scaled by `LOG2_E_HI` on its way in (the dropped `tail·LOG2_E_LO` is
-    // ≤ 2⁻⁷¹).  Budget: the base-e leg's <2⁻⁶⁶ absolute scaled by log2(e),
-    // plus ≲2⁻⁶⁷ of new low-word rounding — [`LOG2_ZIV_EPS`] holds with its
-    // margin intact.  On a straddle the 128-bit accurate path resolves it.
-    let (e, cell, z) = exact_reduce_in(&LOG2_CELLS, x);
-    let zl = DoubleDouble::from_product(z, LOG2_E_HI);
-    let tail = (z * z) * crate::poly(z, &LN1P_Q_COEFFS);
-    let s = fast_sum(e as f64 + cell.l1, zl.high);
-    let low = crate::fast_mul_add(
-        tail,
-        LOG2_E_HI,
-        s.low + (cell.l2 + crate::fast_mul_add(z, LOG2_E_LO, zl.low)),
-    );
-    let left = s.high + (low - LOG2_ZIV_EPS);
-    let right = s.high + (low + LOG2_ZIV_EPS);
+    // Native base-2 fast leg; on a straddle the 128-bit accurate path
+    // resolves it.
+    let DoubleDouble { high, low } = log2_fast_raw(x);
+    let left = high + (low - LOG2_ZIV_EPS);
+    let right = high + (low + LOG2_ZIV_EPS);
     if left == right {
         return left;
     }
@@ -2069,10 +2122,8 @@ pub fn log1p(x: f64) -> f64 {
         // the straddle odds shrink with `|x|` and the accurate kernel almost
         // never runs.  When `x²` underflows the gate is 0 and `x` itself is the
         // correctly rounded result (the dropped `−x²/2` is far below ½ ulp).
-        let zz = x * x;
-        let tail = zz * crate::poly(x, &LN1P_Q_COEFFS);
-        let DoubleDouble { high, low } = fast_sum(x, tail);
-        let err = LN1P_SMALL_ZIV_SCALE * zz;
+        let DoubleDouble { high, low } = log1p_small_eval(x);
+        let err = LN1P_SMALL_ZIV_SCALE * (x * x);
         let lo = high + (low - err);
         let hi = high + (low + err);
         if lo == hi {
@@ -2097,12 +2148,8 @@ pub fn log1p(x: f64) -> f64 {
     // gate scales with `x³` ([`LN1P_WIDE_ZIV_SCALE`]) — the fallback all but
     // vanishes.  (Mirrors CORE-MATH's `|x| < 2⁻⁴` polynomial branch.)
     if x.abs() < 0.0625 {
-        let hx = -0.5 * x;
-        let high = crate::fma(hx, x, x); // x − x²/2, rounded
-        let resid = crate::fma(hx, x, x - high); // exact residual of x − x²/2
-        let x3 = (x * x) * x;
-        let low = crate::fast_mul_add(x3, crate::poly(x, &LN1P_F_WIDE), resid);
-        let err = LN1P_WIDE_ZIV_SCALE * x3.abs();
+        let DoubleDouble { high, low } = log1p_wide_eval(x);
+        let err = LN1P_WIDE_ZIV_SCALE * ((x * x) * x).abs();
         let lo = high + (low - err);
         let hi = high + (low + err);
         if lo == hi {
@@ -2126,21 +2173,10 @@ pub fn log1p(x: f64) -> f64 {
         1.0 - (s - x)
     };
 
-    // Fast leg: reduce s = 2^e·m with the exact-`z` cells as for `ln`, then fold
-    // the tail `c` into the low word: with δ = c·2⁻ᵉ the true mantissa is m + δ,
-    // so the true reduced argument is z + r·δ.  `|δ| ≤ ½ulp(m)` makes
-    // `dz = r·δ ≤ 2⁻⁵³`, and its first-order image through ln, `dz/(1+z)`, is
-    // `dz·(1 − z)` up to a dropped `dz·z² ≤ 2⁻⁶⁸` — inside the gate's margin.
-    let (e, cell, z) = ln_exact_reduce(s);
-    let delta = if e > -1000 { c * crate::exp2i(-e) } else { 0.0 };
-    let dz = cell.r * delta;
-    let dz = crate::fast_mul_add(-dz, z, dz);
-
-    // `|x| ≥ 1/256` keeps `|ln(1+x)| ≥ ln(255/256) ≈ 2⁻⁸` away from zero, so the
-    // same absolute gate as `ln` applies; fall back to the accurate kernel on a
-    // straddle.
-    let DoubleDouble { high: rh, low: rl } = ln_exact_assemble(e as f64, cell, z);
-    let rl = rl + dz;
+    // `|x| ≥ 2⁻⁴` keeps `|ln(1+x)| ≥ ln(1 − 2⁻⁴) ≈ 2⁻³·⁹` away from zero, so
+    // the same absolute gate as `ln` applies; fall back to the accurate kernel
+    // on a straddle.
+    let DoubleDouble { high: rh, low: rl } = log1p_table_raw(s, c);
     let lo = rh + (rl - LN_ZIV_EPS);
     let hi = rh + (rl + LN_ZIV_EPS);
     if lo == hi {
@@ -2151,4 +2187,226 @@ pub fn log1p(x: f64) -> f64 {
     // correctly-rounded 128-bit `dint` log (the same path `ln`/`log2`/`log10`
     // use).  This resolves the hard-to-round cases the double-double kernel mis-rounds.
     super::dint::log1p_accurate(s, c)
+}
+
+/// MPFR-certified soundness of the log-family fast-leg Ziv gates.  A gate must
+/// exceed the leg's true error with margin (here ≥2×), or a confident
+/// `lo == hi` could certify a value on the wrong side of a rounding boundary.
+/// Run with `--features mpfr`.
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Worst-case `|leg(x) − f(x)| / gate(x)` over `[lo, hi]` vs a 250-bit MPFR
+    /// reference `f`, with `leg` the raw pair the Ziv test actually sees and
+    /// `gate` its half-width.  A ratio `< 0.5` everywhere certifies the 2×
+    /// soundness margin.  Returns `(worst_ratio, worst_x)`.
+    fn worst_ratio(
+        lo: f64,
+        hi: f64,
+        n: u64,
+        leg: impl Fn(f64) -> DoubleDouble,
+        gate: impl Fn(f64) -> f64,
+        f: impl Fn(&Float) -> Float,
+    ) -> (f64, f64) {
+        let (lb, hb) = (lo.to_bits(), hi.to_bits());
+        let mut worst = 0.0_f64;
+        let mut worst_x = lo;
+        for i in 0..n {
+            let b = lb + mix(i) % (hb - lb);
+            let x = f64::from_bits(b);
+            let e = leg(x);
+            let got = Float::with_val(250, e.high) + Float::with_val(250, e.low);
+            let truth = f(&Float::with_val(250, x));
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / gate(x);
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        (worst, worst_x)
+    }
+
+    /// The [`LN_ZIV_EPS`] gate must cover [`ln_fast_raw`]'s true error over the
+    /// whole positive domain `ln` feeds it (subnormals included).
+    #[test]
+    fn ln_fast_leg_is_sound() {
+        let (worst, x) = worst_ratio(
+            f64::from_bits(1),
+            f64::MAX,
+            8_000_000,
+            ln_fast_raw,
+            |_| LN_ZIV_EPS,
+            |x| x.clone().ln(),
+        );
+        println!("ln fast leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "ln gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// The [`LOG2_ZIV_EPS`] gate must cover the native base-2 leg
+    /// ([`log2_fast_raw`]) — including its new low-word roundings on top of the
+    /// base-e budget scaled by `log2(e)`.
+    #[test]
+    fn log2_fast_leg_is_sound() {
+        let (worst, x) = worst_ratio(
+            f64::from_bits(1),
+            f64::MAX,
+            8_000_000,
+            log2_fast_raw,
+            |_| LOG2_ZIV_EPS,
+            |x| x.clone().log2(),
+        );
+        println!("log2 fast leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "log2 gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// The [`LOG10_ZIV_EPS`] gate must cover the `log10` leg —
+    /// [`ln_fast_raw`]'s slip carried through the `× log10(e)` double-double
+    /// multiply, exactly as [`log10`] forms it.
+    #[test]
+    fn log10_fast_leg_is_sound() {
+        let log10e = DoubleDouble {
+            high: LOG10_E_HI,
+            low: LOG10_E_LO,
+        };
+        let (worst, x) = worst_ratio(
+            f64::from_bits(1),
+            f64::MAX,
+            8_000_000,
+            |x| ln_fast_raw(x) * log10e,
+            |_| LOG10_ZIV_EPS,
+            |x| x.clone().log10(),
+        );
+        println!("log10 fast leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "log10 gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// The `x²`-scaled [`LN1P_SMALL_ZIV_SCALE`] gate must cover
+    /// [`log1p_small_eval`]'s true error over its band `2⁻⁵⁴ ≲ |x| < 2⁻⁸`,
+    /// both signs.
+    #[test]
+    fn log1p_small_leg_is_sound() {
+        let gate = |x: f64| LN1P_SMALL_ZIV_SCALE * (x * x);
+        let (lo, hi) = (5.551115123125783e-17, 3.90625e-3);
+        let (wp, xp) = worst_ratio(lo, hi, 4_000_000, log1p_small_eval, gate, |x| {
+            x.clone().ln_1p()
+        });
+        let (wn, xn) = worst_ratio(
+            lo,
+            hi,
+            4_000_000,
+            |t| log1p_small_eval(-t),
+            gate,
+            |t| (-t.clone()).ln_1p(),
+        );
+        println!("log1p small leg: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
+        assert!(
+            wp < 0.5,
+            "log1p small gate covers only {:.2}× the slip at x={xp:e}",
+            1.0 / wp
+        );
+        assert!(
+            wn < 0.5,
+            "log1p small gate covers only {:.2}× the slip at x=-{xn:e}",
+            1.0 / wn
+        );
+    }
+
+    /// The `|x|³`-scaled [`LN1P_WIDE_ZIV_SCALE`] gate must cover
+    /// [`log1p_wide_eval`]'s true error over its band `2⁻⁸ ≤ |x| < 2⁻⁴`, both
+    /// signs.
+    #[test]
+    fn log1p_wide_leg_is_sound() {
+        let gate = |x: f64| LN1P_WIDE_ZIV_SCALE * ((x * x) * x);
+        let (lo, hi) = (3.90625e-3, 0.0625);
+        let (wp, xp) = worst_ratio(lo, hi, 4_000_000, log1p_wide_eval, gate, |x| {
+            x.clone().ln_1p()
+        });
+        let (wn, xn) = worst_ratio(
+            lo,
+            hi,
+            4_000_000,
+            |t| log1p_wide_eval(-t),
+            gate,
+            |t| (-t.clone()).ln_1p(),
+        );
+        println!("log1p wide leg: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
+        assert!(
+            wp < 0.5,
+            "log1p wide gate covers only {:.2}× the slip at x={xp:e}",
+            1.0 / wp
+        );
+        assert!(
+            wn < 0.5,
+            "log1p wide gate covers only {:.2}× the slip at x=-{xn:e}",
+            1.0 / wn
+        );
+    }
+
+    /// The [`log1p`] table-leg wrapper: the exact `1 + x = s + c` split feeding
+    /// [`log1p_table_raw`], exactly as `log1p` forms it.
+    fn log1p_table_leg(x: f64) -> DoubleDouble {
+        let s = 1.0 + x;
+        let c = if x.abs() <= 1.0 {
+            x - (s - 1.0)
+        } else {
+            1.0 - (s - x)
+        };
+        log1p_table_raw(s, c)
+    }
+
+    /// The [`LN_ZIV_EPS`] gate must cover the table leg's true error over
+    /// `|x| ≥ 2⁻⁴` — including the `dz` low-word fold and the deep-cancellation
+    /// end `x → −1` (where `e < 0` in the reduction).
+    #[test]
+    fn log1p_table_leg_is_sound() {
+        let (wp, xp) = worst_ratio(
+            0.0625,
+            f64::MAX,
+            4_000_000,
+            log1p_table_leg,
+            |_| LN_ZIV_EPS,
+            |x| x.clone().ln_1p(),
+        );
+        let (wn, xn) = worst_ratio(
+            0.0625,
+            f64::from_bits(0x3FEF_FFFF_FFFF_FFFF),
+            4_000_000,
+            |t| log1p_table_leg(-t),
+            |_| LN_ZIV_EPS,
+            |t| (-t.clone()).ln_1p(),
+        );
+        println!("log1p table leg: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
+        assert!(
+            wp < 0.5,
+            "log1p table gate covers only {:.2}× the slip at x={xp:e}",
+            1.0 / wp
+        );
+        assert!(
+            wn < 0.5,
+            "log1p table gate covers only {:.2}× the slip at x=-{xn:e}",
+            1.0 / wn
+        );
+    }
 }
