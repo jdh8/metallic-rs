@@ -592,9 +592,9 @@ pub fn tanh(x: f64) -> f64 {
         return tanh_small(s).copysign(x);
     }
 
-    // |x| ∈ [⅛, 20): tanh = E/(E + 2), E = e²ˣ − 1 = m·2^q − 1.  Fast path: the
-    // lean `e²ˣ` mantissa ([`exp_two_level_fast`]), the same `E/(E + 2)` as the
-    // accurate leg, accepted by a Ziv test; else [`tanh_accurate`].
+    // |x| ∈ [⅛, 20): tanh = 1 − 2/(e²ˣ + 1), e²ˣ = m·2^q.  Fast path: the lean
+    // `e²ˣ` mantissa ([`exp_two_level_fast`]) into the ordered-fold combine
+    // [`tanh_combine_fast`], accepted by a Ziv test; else [`tanh_accurate`].
     let (m, q) = exp_two_level_fast(2.0 * s);
 
     // |x| ≳ 3.683: tanh = 1 − 2/(e²ˣ + 1) with the correction 2/(e²ˣ + 1) ≤ ~1.3e-3
@@ -611,7 +611,7 @@ pub fn tanh(x: f64) -> f64 {
         }
     }
 
-    let result = tanh_combine(m, q);
+    let result = tanh_combine_fast(m, q);
     let lo = result.high + (result.low - TANH_ZIV_EPS);
     let hi = result.high + (result.low + TANH_ZIV_EPS);
     if lo == hi {
@@ -622,8 +622,8 @@ pub fn tanh(x: f64) -> f64 {
 }
 
 /// Form `tanh = E/(E + 2)` from `e²ˣ = 2`<sup>`q`</sup>`·m`, with `E = e²ˣ − 1`.
-/// Shared by [`tanh`]'s fast leg and [`tanh_accurate`] — only the source of
-/// `(m, q)` (lean vs ≈2⁻¹⁰⁷ mantissa) differs.
+/// [`tanh_accurate`]'s combine (the fast leg uses the leaner ordered-fold
+/// [`tanh_combine_fast`]; both divide by the same `e²ˣ + 1`).
 ///
 /// `E/(E + 2)` never cancels for `2x ≥ ¼` (`E ≥ 0.28`, `E + 2` the larger), so
 /// the double-double carries the result.  The `− 1` is exact only in the low
@@ -643,12 +643,75 @@ fn tanh_combine(m: DoubleDouble, q: i64) -> DoubleDouble {
     .recip()
 }
 
+/// Fast-leg combine `tanh = 1 − 2/(e²ˣ + 1)` from the lean `e²ˣ = 2`<sup>`q`</sup>`·m`
+/// (`m ∈ [1, 2)` normalized, `q ∈ [0, 57]` over the band `2|x| ∈ [¼, 40)` —
+/// asserted in `fold_ordering::tanh_fast_combine`).
+///
+/// The same value as [`tanh_combine`]'s `E/(E + 2)` over the same denominator,
+/// but the `1 − 2/…` shape (the large-`|x|` cheap leg's own) needs no `− 1` and
+/// makes every fold ordered:
+///
+/// - `e²ˣ = m·2^q` is exact — upward power-of-two scaling of both words (*not*
+///   [`fast_ldexp`], whose bit-shift assumes a normal argument; `m.low` may be
+///   zero or subnormal).
+/// - `⊕ 1` is an ordered fold: `m.high·2^q ≥ 1` since `q ≥ 0`.
+/// - `2/(e²ˣ + 1)` is [`two_over`]'s single fused division.
+/// - `1 ⊕ (−corr)` is an ordered fold: `corr ≤ 2/(e^¼ + 1) < 0.876`, and the
+///   Fast2Sum on the high words is exact.
+///
+/// One division and three ordered folds replace the old chain's renormalizing
+/// `− 1` and `+ 2` adds, the [`DoubleDouble::recip`], and the closing `dd × dd`
+/// multiply — about 100 cycles off the mid band's serial dependency chain.
+#[inline]
+fn tanh_combine_fast(m: DoubleDouble, q: i64) -> DoubleDouble {
+    let scale = crate::exp2i(q);
+    let e = DoubleDouble {
+        high: m.high * scale,
+        low: m.low * scale,
+    };
+    let denom = e.add_ordered(DoubleDouble {
+        high: 1.0,
+        low: 0.0,
+    });
+    let corr = two_over(denom);
+    DoubleDouble {
+        high: 1.0,
+        low: 0.0,
+    }
+    .add_ordered(DoubleDouble {
+        high: -corr.high,
+        low: -corr.low,
+    })
+}
+
+/// `2/denom` as a double-double with a single `f64` division.
+///
+/// `th = 2·iqh` is exact (a scaling by 2), and its low word folds the reciprocal
+/// residual `1 − qh·iqh` (exact in one [`crate::fma`], by the division-residual
+/// theorem) with the denominator low word's first-order term `−ql·iqh`:
+/// `2/(qh + ql) = th·(1 + (1 − qh·iqh) − ql·iqh) + O((ql/qh)²)`.  This is
+/// [`ratio_1ps`]'s fused quotient specialized to the numerator 2, whose own
+/// residual term vanishes.  Requires `denom.high` normal with `|denom.low|`
+/// within a few ulps of it, keeping the dropped second-order term ≈2⁻¹⁰⁴.
+#[inline]
+fn two_over(denom: DoubleDouble) -> DoubleDouble {
+    let iqh = 1.0 / denom.high;
+    let th = 2.0 * iqh;
+    let r = crate::fast_mul_add(-denom.low, iqh, crate::fma(-denom.high, iqh, 1.0));
+    DoubleDouble {
+        high: th,
+        low: th * r,
+    }
+}
+
 /// Ziv gate for [`tanh`]'s fast leg, as an absolute bound on the result.
 ///
 /// `tanh = 1 − 2/(e²ˣ + 1)`, so a relative error `δ` in `e²ˣ` propagates as
 /// `δ·(1 − tanh²)/2 ≤ δ/2`.  The fast `e²ˣ` mantissa slips ≈2⁻⁶⁴·⁷ relative
 /// (the [`HYP_ZIV_EPS`] leg), so the result is good to ≈2⁻⁶⁵·⁷ absolute; the
-/// `E/(E + 2)` double-double adds only ≈2⁻¹⁰⁶.  `2⁻⁶²` keeps a >10× margin.
+/// [`tanh_combine_fast`] folds add only ≈2⁻¹⁰⁰ ([`two_over`]'s dropped
+/// second-order term and two low-word roundings).  `2⁻⁶²` keeps a >10× margin,
+/// certified by `ziv_soundness::tanh_mid_leg_is_sound`.
 const TANH_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
 
 /// Lower bound of `tanh`'s large-`|x|` cheap leg (CORE-MATH's `0x1.76c8b4395810p+1`).
@@ -1148,6 +1211,51 @@ pub fn atanh(x: f64) -> f64 {
     }
 }
 
+/// Static proofs of the ordered folds' preconditions (per `double.rs`, every
+/// `add_ordered`/`fast_sum` caller asserts its ordering in a test like this).
+#[cfg(test)]
+mod fold_ordering {
+    use super::*;
+
+    /// [`tanh_combine_fast`]'s ordered folds hold over the whole operating band
+    /// `|x| ∈ [TANH_SMALL, 20)`, large-leg straddle re-entry included:
+    /// `q ∈ [0, 57]` and `m.high·2^q ≥ 1` (so `⊕ 1` is ordered), and
+    /// `corr < 0.876 < 1` (so `1 ⊕ (−corr)` is ordered).  The analytic bound —
+    /// `e²ˣ ≥ e^¼ > 1.28` even after the kernel's ≈2⁻⁶⁴ relative slip forces
+    /// `q ≥ 0` (`m < 2`) and caps `corr` — plus a deterministic bit-stepping
+    /// sweep of the kernel's actual output.
+    #[test]
+    fn tanh_fast_combine() {
+        // corr at the band bottom, with generous slack for the kernel slip.
+        assert!(2.0 / (0.25_f64.exp() * (1.0 - 2e-16) + 1.0) < 0.876);
+        // e^¼ (1 − slip) > 1 ⟹ m·2^q > 1 ⟹ q ≥ 0.
+        assert!(0.25_f64.exp() * (1.0 - 2e-16) > 1.0);
+
+        let check = |s: f64| {
+            let (m, q) = exp_two_level_fast(2.0 * s);
+            assert!((0..=57).contains(&q), "q = {q} at s = {s:e}");
+            assert!(
+                m.high >= 1.0 && m.high < 2.0,
+                "m.high = {} at s = {s:e}",
+                m.high
+            );
+            let e_high = m.high * crate::exp2i(q);
+            assert!(e_high >= 1.0, "e²ˣ = {e_high:e} < 1 at s = {s:e}");
+            let corr = two_over(fast_sum(e_high, 1.0));
+            assert!(corr.high < 0.876, "corr = {} at s = {s:e}", corr.high);
+        };
+
+        let lb = TANH_SMALL.to_bits();
+        let hb = 20.0_f64.to_bits();
+        check(TANH_SMALL);
+        check(TANH_LARGE);
+        check(f64::from_bits(hb - 1));
+        for k in (lb..hb).step_by(((hb - lb) / 65536) as usize) {
+            check(f64::from_bits(k));
+        }
+    }
+}
+
 /// MPFR-certified soundness of the small-`|x|` fast-leg Ziv gates.  A gate must
 /// exceed the leg's true error with margin (here ≥2×), or a confident `lo == hi`
 /// could certify a value on the wrong side of a rounding boundary.  Run with
@@ -1378,6 +1486,32 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "tanh large-leg gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// `tanh`'s mid-band fast leg ([`tanh_combine_fast`] on the lean `e²ˣ`): the
+    /// absolute [`TANH_ZIV_EPS`] gate must cover the leg's true error.  The range
+    /// deliberately spans `[TANH_SMALL, 20)` — `[TANH_LARGE, 20)` re-enters this
+    /// combine when the cheap large leg's gate straddles.
+    #[test]
+    fn tanh_mid_leg_is_sound() {
+        let leg = |x: f64| {
+            let (m, q) = exp_two_level_fast(2.0 * x);
+            tanh_combine_fast(m, q)
+        };
+        let (worst, x) = worst_ratio(
+            TANH_SMALL,
+            20.0,
+            8_000_000,
+            leg,
+            |_| TANH_ZIV_EPS,
+            |x| x.clone().tanh(),
+        );
+        println!("tanh mid leg: worst |err|/gate = {worst:.4} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "tanh mid-leg gate covers only {:.2}× the slip at x={x:e}",
             1.0 / worst
         );
     }
