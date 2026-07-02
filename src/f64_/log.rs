@@ -1227,17 +1227,20 @@ pub fn ln_fast_scaled(x: f64, k: i64) -> DoubleDouble {
     fast_sum(high, low)
 }
 
-/// Lean `ln(s)` for a finite double-double `s > 1`, as a raw unnormalized pair
-/// (the form the in-file Ziv gates consume — see [`ln_exact_assemble`]).
+/// Lean `ln(s)` for a finite positive double-double with `s.high` normal, as a
+/// raw unnormalized pair (the form the in-file Ziv gates consume — see
+/// [`ln_exact_assemble`]).
 ///
 /// `ln(s.high + s.low) = ln(s.high) + ln(1 + s.low/s.high)`.  Rather than form
 /// the linear correction `s.low/s.high` with a hardware division, fold `s.low`
 /// straight into the exact-`z` reduction the way [`log1p`] folds its tail: with
 /// `δ = s.low·2⁻ᵉ` the true mantissa is `m + δ`, so the reduced argument gains
 /// `cell.r·δ`, whose image through `ln` is `cell.r·δ·(1 − z)` up to a dropped
-/// `cell.r·δ·z² ≲ 2⁻⁶⁷` — inside the inverse-hyperbolic gate.  The inverse-
-/// hyperbolic callers (`atanh`, and `asinh`/`acosh` via `ln_sqrt_rounded`) all
-/// pass `s > 1`, so `e ≥ 0` and `2⁻ᵉ` never overflows.
+/// `cell.r·δ·z² ≲ 2⁻⁶⁷` — inside the callers' gates.  The inverse-hyperbolic
+/// callers (`atanh`, and `asinh`/`acosh` via `ln_sqrt_rounded`) pass `s > 1`
+/// (`e ≥ 0`); `lgamma`'s reflection passes `|sin πz| ∈ (0, 1]`, where `e < 0`
+/// makes `2⁻ᵉ` a *positive* power of two — finite and exact for any normal
+/// `s.high` (`e ≥ −1022`).
 #[inline]
 pub fn ln_dd_fast(s: DoubleDouble) -> DoubleDouble {
     let (e, cell, z) = ln_exact_reduce_normal(s.high);

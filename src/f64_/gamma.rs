@@ -9340,7 +9340,9 @@ fn tgamma_reduce_center(z: f64) -> (f64, DoubleDouble) {
 /// Natural logarithm of a positive double-double, as a double-double.
 ///
 /// `ln(s) = ln(s.high) + ln(1 + s.low/s.high) ≈ ln_fast(s.high) + s.low/s.high` —
-/// the Ziv fast leg's log (the accurate path uses the triple-double [`ln_sum_td`]).
+/// the recurrence-log path's log (the reflection's sine log uses the divide-free
+/// [`ln_dd_fast`](crate::f64_::ln_dd_fast); the accurate path the triple-double
+/// [`ln_sum_td`]).
 #[inline]
 fn ln_fast_sum(s: DoubleDouble) -> DoubleDouble {
     crate::f64_::ln_fast(s.high)
@@ -9445,11 +9447,12 @@ const LGAMMA_PIECE_ABS: f64 = 1e-24;
 /// Ziv slack for the reflection leg's `ln|sin πz|` term: a relative part plus an
 /// **absolute floor**.
 ///
-/// [`ln_fast`](crate::f64_::ln_fast)'s error on `ln|sin πz|` is ≈2⁻⁶⁶ relative away
-/// from 1, but near a half-integer `z` (where `sin πz → 1`) the result shrinks while
-/// the *absolute* error stays ≈2⁻⁶⁶·⁹ — so a purely relative gate underbudgets it
-/// there.  `|ln|sin πz||·2⁻⁶⁵` covers the relative regime and `LGAMMA_REFLECT_SIN_ABS`
-/// the near-1 floor (each ≈2× the measured worst, negligible vs `ulp` of the result).
+/// [`ln_dd_fast`](crate::f64_::ln_dd_fast)'s error on `ln|sin πz|` is ≈2⁻⁶⁶ relative
+/// away from 1, but near a half-integer `z` (where `sin πz → 1`) the result shrinks
+/// while the *absolute* error stays ≈2⁻⁶⁶ (the raw assembly plus the ≲2⁻⁶⁷ low-word
+/// fold) — so a purely relative gate underbudgets it there.  `|ln|sin πz||·2⁻⁶⁵`
+/// covers the relative regime and `LGAMMA_REFLECT_SIN_ABS` the near-1 floor (each
+/// ≈2× the measured worst, negligible vs `ulp` of the result).
 const LGAMMA_REFLECT_SIN_REL: f64 = crate::exp2i(-65);
 const LGAMMA_REFLECT_SIN_ABS: f64 = crate::exp2i(-65);
 
@@ -9652,35 +9655,54 @@ fn lgamma_root_fast(z: f64) -> Option<(DoubleDouble, f64)> {
 
 /// `ln|Γ(z)|` as a double-double via the lean Ziv fast leg, with its error bound
 ///
-/// Reflects through `ln π − ln|sin πz| − ln Γ(1−z)` for `z < ½` (the gate comes from
-/// the [`lgamma_pos_fast`] leg that handles `1−z`; the double-double `|sin πz|` and
-/// its `ln_fast` add only <2⁻⁶⁶, well inside that gate).  When `1−z` lands in the
-/// central-table band its `ln Γ(1−z)` is a table value `cell_eval(d)` plus the
-/// recurrence's `ln ∏`; that recurrence log is folded into the sine — one
-/// `ln(|sin πz|·∏^±1)` replaces two separate `ln`s (CORE-MATH's `lgamma` reflection
-/// does the same single combined log), the lone shared-kernel saving in this band.
-/// `[½, 8)` reads the central table; `[8, ∞)` takes the lean direct
-/// [`lgamma_stirling_fast`] with the ten-term [`LGAMMA_TAIL_F64`] up to
-/// [`LGAMMA_CUTOFF`] = 40 and the cheaper six-term [`LGAMMA_TAIL_F64_FAR`] on the
-/// hot `z ≥ 40` tail.  The caller restricts `|z|` to below [`LGAMMA_FAST_BOUND`].
+/// Reflects for `z < ½`: through `ln π − ln(|z|·|sin πz|) − ln Γ(|z|)` when
+/// `z ≤ −½` (the exact-argument `Γ(−z)` identity — see the body) and through
+/// `ln π − ln|sin πz| − ln Γ(1−z)` on the `(−½, ½)` sliver.  The double-double
+/// `|sin πz|` and its divide-free [`ln_dd_fast`](crate::f64_::ln_dd_fast) add only
+/// <2⁻⁶⁶, inside the positive leg's gate; a single combined log covers the sine
+/// and the `|z|` factor (CORE-MATH's `lgamma` reflection uses the same single
+/// combined log).  The positive leg reads the recurrence-free piecewise table on
+/// `[½, 8.295)` and takes the lean direct [`lgamma_stirling_fast`] beyond — the
+/// ten-term [`LGAMMA_TAIL_F64`] up to [`LGAMMA_CUTOFF`] = 40 and the cheaper
+/// six-term [`LGAMMA_TAIL_F64_FAR`] on the hot `z ≥ 40` tail.  The caller
+/// restricts `|z|` to below [`LGAMMA_FAST_BOUND`].
 #[inline]
 fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
     if z < 0.5 {
-        let w = DoubleDouble::from_sum(1.0, -z);
         let sinpi = abs_sinpi_dd_lean(z);
-        if w.high < LGAMMA_FAST_CUTOFF {
-            // ln Γ(1−z) from the recurrence-free piecewise table (no recurrence, no
-            // recurrence log); combine with `− ln|sin πz|`.  The `ln|sin πz|` term
-            // adds its own slack to the leg's gate: near a half-integer `z` the sine
-            // approaches 1, where `ln_fast`'s relative error degrades to ≈2⁻⁶¹ (the
-            // old code logged `|sin πz|·∏`, never near 1), so it is budgeted at the
-            // looser [`LGAMMA_REFLECT_SIN_REL`], not the table's own [`LGAMMA_PIECE_REL`].
-            let (pos, gate) = lgamma_piecewise(w);
-            let ln_sin = ln_fast_sum(sinpi);
+        // Two reflection identities, picked by whether |z| reaches the piecewise
+        // table:
+        //
+        // - `z ≤ −½`: through `Γ(−z)` (CORE-MATH's shape) — `Γ(1−z) = −z·Γ(−z)`, so
+        //   `ln|Γ(z)| = ln π − ln(|z|·|sin πz|) − ln Γ(|z|)`.  The positive-leg
+        //   argument `|z|` is EXACT: no low word, so [`lgamma_piecewise`] skips its
+        //   `P′(z)·y.low` derivative fold and [`lgamma_pos_fast`]'s digamma fold
+        //   vanishes; the `−z` factor joins the sine's log argument with one
+        //   `dd × f64` multiply instead.
+        // - `z ∈ (−½, ½)`: through `Γ(1−z)` — `|z|` falls below the table's range,
+        //   so keep `w = 1 − z ∈ (½, 1½)`, whose rounding low word is paid for by
+        //   the derivative fold.
+        let (y, log_arg) = if z <= -0.5 {
+            (DoubleDouble { high: -z, low: 0.0 }, sinpi * -z)
+        } else {
+            (DoubleDouble::from_sum(1.0, -z), sinpi)
+        };
+        // `ln_dd_fast` folds the argument's low word into the exact-`z` reduction,
+        // sparing [`ln_fast_sum`]'s `s.low/s.high` division.
+        let ln_sin = crate::f64_::ln_dd_fast(log_arg);
+        if y.high < LGAMMA_FAST_CUTOFF {
+            // ln Γ(y) from the recurrence-free piecewise table (no recurrence, no
+            // recurrence log); combine with `− ln(log_arg)`.  The log term adds its
+            // own slack to the leg's gate: near a half-integer `z` the sine
+            // approaches 1, where the log's result can shrink while its absolute
+            // error does not (the old code logged `|sin πz|·∏`, never near 1), so it
+            // is budgeted at the looser [`LGAMMA_REFLECT_SIN_REL`], not the table's
+            // own [`LGAMMA_PIECE_REL`].
+            let (pos, gate) = lgamma_piecewise(y);
             // `gate` is CORE-MATH's tight (≈1×) bound on `pos`'s error; the reflection
             // soundness test demands a 2× margin, so double it.  `gate ≪ ulp` of the
-            // result, so the extra fallback is negligible.  The `ln|sin πz|` term is
-            // already ≈2× its own error.
+            // result, so the extra fallback is negligible.  The log term is already
+            // ≈2× its own error.
             //
             // The two combining adds are CORE-MATH's `sumdd` (2Sum on the high words,
             // no renormalizing `fast_sum`): the result only feeds the Ziv test
@@ -9694,11 +9716,8 @@ fn lgamma_fast(z: f64) -> (DoubleDouble, f64) {
                 ),
             );
         }
-        let (pos, gate) = lgamma_pos_fast(w);
-        return (
-            LN_PI.add_loose(neg(ln_fast_sum(sinpi).add_loose(pos))),
-            gate,
-        );
+        let (pos, gate) = lgamma_pos_fast(y);
+        return (LN_PI.add_loose(neg(ln_sin.add_loose(pos))), gate);
     }
     if z < LGAMMA_FAST_CUTOFF {
         // Near the roots `z = 1, 2` the result is tiny; the relative-gated root
