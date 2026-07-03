@@ -23,9 +23,7 @@ bit-stepping sweep:
 
 - `test_<fn>_worst_cases` — CORE-MATH's `--worst` step: bit-exact vs the
   `core-math` oracle on CORE-MATH's hard-to-round corpus `tests/cases/<fn>.wc`.
-  This is the strict correct-rounding gate.  For functions that are not yet
-  correctly rounded it is `#[ignore]`d (run with `cargo test -- --ignored`) and
-  paired with an active `test_<fn>_worst_faithful` (≤ 1 ulp floor).
+  This is the strict correct-rounding gate.
 - `test_<fn>_vs_mpfr` (`#[cfg(feature = "mpfr")]`) — the independent gold-standard
   cross-check CORE-MATH itself uses, guarding against a shared CORE-MATH bug.
   Run with `cargo test --release --features mpfr`.
@@ -38,10 +36,29 @@ git but excluded from the published crate via `exclude = ["/tests/cases"]` in
 `Cargo.toml` (big repo, small dependency).  Refresh them from a `core-math-sys`
 checkout with `tools/sync-worst-cases.sh`.
 
-**Correctness status** is tracked in **issue #6** (not #5, which is performance):
-the strict gates that are RED, plus the handful of functions that fail even the
-faithful floor (genuine bugs at overflow/underflow extremes).  Default
-`cargo test` is therefore RED until those are fixed — that is by design.
+**Correctness status: complete.** Every f32 and f64 function is correctly
+rounded and every strict gate is active (issue #6, closed 2026-06-14).  Default
+`cargo test` is GREEN; a red gate is a **regression** to fix before anything
+else, never something to `#[ignore]`.
+
+**Ziv-gate soundness rule.** A new or changed fast leg or Ziv gate ships its
+in-source `mod ziv_soundness` MPFR certification (worst `|err|/gate < 0.5`,
+i.e. ≥ 2× margin) **in the same commit**, with the printed margin quoted in the
+commit message.  See the skill's `reference/correct-rounding.md` for the
+pattern (`src/f64_/log.rs` has the model modules).
+
+## Performance
+
+Performance work is tracked in **issue #5** (#6 was correctness).  Bench with
+`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo bench --bench <fn>` (the CI-canonical
+flag — the host default has **no FMA**), then run `python3
+tools/bench_ratio.py median` for the paired table.  The headline number is the
+**same-run CORE-MATH ratio** (`metallic::<fn>` / `core_math::<fn>`): CORE-MATH
+shares metallic's ≤ 0.5 ulp contract, while std/libm are faithful-only and do
+less work.  Never compare across runs (CORE-MATH is a moving baseline) and
+check box load *and* memory pressure before trusting absolute numbers.  The
+full playbook — diagnosis tree, proven patterns, falsified dead-ends — is the
+skill's `reference/performance.md`.
 
 ## Fused multiply-add
 
