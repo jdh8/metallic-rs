@@ -55,9 +55,7 @@ const CORPUS_LEN: usize = 2142;
 /// Correct-rounding gate over CORE-MATH's official worst cases (the `--worst`
 /// step).  `tests/cases/lgamma.wc` is CORE-MATH's full BaCSeL corpus (~37 MB),
 /// committed to git but excluded from the published crate (`exclude` in
-/// Cargo.toml); refresh it with `tools/sync-worst-cases.sh`.  RED until `lgamma`
-/// is correctly rounded (it mis-rounds ~268 k near-ties by 1 ulp; see issue #6);
-/// [`test_lgamma_worst_faithful`] is the active ≤1-ulp floor.
+/// Cargo.toml); refresh it with `tools/sync-worst-cases.sh`.
 #[test]
 fn test_lgamma_worst_cases() {
     let cases: Vec<f64> = common::parse_case_file("lgamma.wc", common::parse_f64).collect();

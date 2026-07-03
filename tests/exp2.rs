@@ -7,8 +7,7 @@ fn test_exp2() {
     common::test_univariate_cases(metallic::exp2, core_math::exp2, dense.chain(bits));
 }
 
-/// Correct-rounding gate on CORE-MATH's hard-to-round corpus (RED until exp2 is
-/// correctly rounded — issue #6).
+/// Correct-rounding gate on CORE-MATH's hard-to-round corpus.
 #[test]
 fn test_exp2_worst_cases() {
     common::test_worst_univariate("exp2", metallic::exp2, core_math::exp2);

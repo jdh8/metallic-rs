@@ -60,9 +60,7 @@ const CORPUS_LEN: usize = 1990;
 /// Correct-rounding gate over CORE-MATH's official worst cases (the `--worst`
 /// step).  `tests/cases/tgamma.wc` is CORE-MATH's full BaCSeL corpus (~12 MB),
 /// committed to git but excluded from the published crate (`exclude` in
-/// Cargo.toml); refresh it with `tools/sync-worst-cases.sh`.  RED until `tgamma`
-/// is correctly rounded (it mis-rounds ~312 near-ties by 1 ulp; see issue #6);
-/// [`test_tgamma_worst_faithful`] is the active ≤1-ulp floor.
+/// Cargo.toml); refresh it with `tools/sync-worst-cases.sh`.
 #[test]
 fn test_tgamma_worst_cases() {
     let cases: Vec<f64> = common::parse_case_file("tgamma.wc", common::parse_f64).collect();

@@ -18,8 +18,7 @@ fn test_atanh() {
     );
 }
 
-/// Correct-rounding gate on CORE-MATH's hard-to-round corpus (RED until atanh is
-/// correctly rounded — issue #6).
+/// Correct-rounding gate on CORE-MATH's hard-to-round corpus.
 #[test]
 fn test_atanh_worst_cases() {
     common::test_worst_univariate("atanh", metallic::atanh, core_math::atanh);

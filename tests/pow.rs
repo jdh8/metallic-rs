@@ -65,7 +65,7 @@ fn test_powf() {
 }
 
 /// Correct-rounding gate on CORE-MATH's hard-to-round corpus: bit-exact vs the
-/// `core-math` oracle.  This is the strict gate (issue #6).
+/// `core-math` oracle.
 #[test]
 fn test_pow_worst_cases() {
     common::test_worst_bivariate("pow", metallic::pow, core_math::pow);

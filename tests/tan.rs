@@ -10,8 +10,7 @@ fn test_tan() {
     common::test_univariate_cases(metallic::tan, core_math::tan, dense.chain(wide).chain(bits));
 }
 
-/// Correct-rounding gate on CORE-MATH's hard-to-round corpus (RED until tan is
-/// correctly rounded — issue #6).
+/// Correct-rounding gate on CORE-MATH's hard-to-round corpus.
 #[test]
 fn test_tan_worst_cases() {
     common::test_worst_univariate("tan", metallic::tan, core_math::tan);
