@@ -118,6 +118,18 @@ A value too precise for one `f64` is carried as `DoubleDouble { high, low }` wit
   "break normality" deliberately — they are intermediate-format operations;
   renormalize (`from_sum`) only when you need a clean pair, since the cost usually
   outweighs the gain for < 1 ulp work.
+- `add_ordered(a, b)` — Fast2Sum on the high words plus a plain low-word carry,
+  **no renormalization**: half the serial chain of the full `Add`. Requires
+  `exponent(a.high) ≥ exponent(b.high)`; every caller proves its orderings in a
+  per-module `#[cfg(test)] mod fold_ordering` (see `trig.rs`, `hyp.rs`,
+  `gamma.rs`, `erf.rs`, `atan.rs`). `add_loose` is the same shape with 2Sum
+  highs for the rare fold with no provable ordering.
+- **Sound collapsers back to one `f64`**: `round_general64` /
+  `round_general_signed64` (subnormal-safe single rounding of a dd) and
+  `round_anchored(x, c)` (result-anchored small-argument legs: correction
+  `c = f(x) − x` as a dd, exact `x` added last). Never collapse an accurate
+  tier with a naive `high + low` — it cannot round an exact half-ulp tie (see
+  [correct-rounding.md](correct-rounding.md) § sound-rounding pitfalls).
 - Hand-compensated tails: add the polynomial result to the low word *before* the
   high word, so the largest-magnitude term rounds last (compensated summation by
   hand). The `crate::fast_mul_add(y, x, x)` tails in `atanh`/`sin` fold the low
@@ -129,6 +141,11 @@ A value too precise for one `f64` is carried as `DoubleDouble { high, low }` wit
   the argument-reduction residual, and the final add-back) — this is rung 3 of the
   laziness ladder in [SKILL.md](../SKILL.md). Carrying `DoubleDouble` everywhere is
   slow and rarely necessary for < 1 ulp.
+- Judge any restructuring of a `DoubleDouble` primitive by its **loop-carried
+  latency** in chained use (Horner, recurrences), not by one call's isolated
+  depth: a "shallower" `Mul` that routes `self.low` through three ops per step
+  instead of one regressed tgamma 28% and was reverted (see the dead-ends table
+  in [performance.md](performance.md)).
 - Keep the largest-magnitude term for last in a hand-compensated sum.
 - In EFTs and compensation, always use `crate::fma` / `crate::fmaf` (true FMA),
   never `crate::fast_mul_add`.

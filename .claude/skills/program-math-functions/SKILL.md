@@ -7,8 +7,10 @@ description: >-
   argument reduction, generating minimax/Remez polynomial or rational
   coefficients (rminimax/Sollya, Remez.jl), choosing a polynomial evaluation
   scheme, applying error-free transforms and compensated arithmetic (true FMA
-  available), or making a function correctly rounded (≤ 0.5 ulp; Table Maker's
-  Dilemma, CORE-MATH, RLIBM). Covers f32 and f64.
+  available), making a function correctly rounded (≤ 0.5 ulp; Table Maker's
+  Dilemma, CORE-MATH, RLIBM), or benchmarking and optimizing a function's
+  performance against CORE-MATH (criterion benches, Ziv fallback rates,
+  branchless rewrites, issue #5). Covers f32 and f64.
 ---
 
 # Programming math functions
@@ -22,6 +24,12 @@ adapting for WASM (no scalar FMA, round-to-nearest only); this skill is the Rust
 source of that lineage, distilled from
 <https://jdh8.org/how-to-program-math-functions/> and the conventions already in
 `src/f32_/` and `src/f64_/`.
+
+**Where the project stands:** every f32 *and* f64 function is already correctly
+rounded, with active bit-exact worst-case gates (issue #6, closed 2026-06-14) —
+a red gate is a regression. The open front is **performance** (issue #5):
+closing the remaining gaps to CORE-MATH without breaking a gate. Start
+performance work at [reference/performance.md](reference/performance.md).
 
 **Performance target: beat CORE-MATH.** CORE-MATH is the correctly-rounded
 reference implementation. Matching its throughput is the floor; the real goal is
@@ -37,16 +45,19 @@ and must detect the current mode at runtime, while metallic-rs targets
 - **Faster Ziv refinement.** A first-pass approximation only needs to clear the
   RTN tie-breaking threshold, not the wider fence that covers directed rounding.
 
-Always `cargo bench` against `metallic__f64__<fn>` (the metallic path) and
-`core_math__f64__<fn>` (the CORE-MATH path) — not the `f64__<fn>` criterion
-group, which benchmarks std.
+Always bench with `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo bench --bench <fn>`
+(the host default has no FMA) and compare `metallic::<fn>` against
+`core_math::<fn>` — not `f64::<fn>`, which benchmarks std. f32 benches carry
+the `f` suffix (`metallic::expf`). `python3 tools/bench_ratio.py median` turns
+the criterion output into the paired ratio table.
 
-A real function ties together four ideas, each with a reference file:
+A real function ties together five ideas, each with a reference file:
 
 - **Exact arithmetic & rounding** → [reference/exact-arithmetic.md](reference/exact-arithmetic.md)
 - **Approximation: reduction, transforms, polynomial evaluation** → [reference/approximation.md](reference/approximation.md)
-- **Generating coefficients** (rminimax, Remez.jl, Sollya) → [reference/coefficients.md](reference/coefficients.md)
-- **Correct rounding** (TMD, CORE-MATH, RLIBM, the proof harness) → [reference/correct-rounding.md](reference/correct-rounding.md)
+- **Generating coefficients** (rminimax, Remez.jl, Sollya, `tools/gen_*.py`) → [reference/coefficients.md](reference/coefficients.md)
+- **Correct rounding** (TMD, the gate harness, Ziv soundness, the hard tier) → [reference/correct-rounding.md](reference/correct-rounding.md)
+- **Performance** (the optimization loop, diagnosis tree, dead-ends) → [reference/performance.md](reference/performance.md)
 
 Read the relevant reference file before writing code in that area — the summaries
 below are pointers, not the whole story.
@@ -166,19 +177,21 @@ skill cross-references these rungs instead of repeating "only where needed":
    `fast_ldexp(m, n)` or `crate::exp2i`. Handle subnormal outputs and the
    over/underflow ends explicitly (clamp before reduction).
 
-7. **Verify against an oracle.** For `f32`, the test harness sweeps **all 2³² bit
-   patterns** and compares to the correctly-rounded `core-math` result — a clean
-   sweep *proves* correct rounding (`tests/f32_univariate.rs`). For `f64`, you
-   cannot brute-force: lean on the published worst cases (rung 5), sample widely
-   (and use `rug` for ground truth), and track max ulp. See
+7. **Verify against an oracle.** For `f32`, each function's test sweeps **all
+   2³² bit patterns** against the `core-math` oracle (`common::test_all_f32`) —
+   a clean sweep *proves* correct rounding. For `f64`, the per-function
+   `tests/<fn>.rs` gates (CORE-MATH worst-case corpus, MPFR sweep) are the
+   proof; if you added or changed a Ziv fast leg or gate, its in-source
+   `ziv_soundness` certification ships **in the same commit**. See
    [reference/correct-rounding.md](reference/correct-rounding.md).
 
 8. **Build, test, commit atomically.** Per `CLAUDE.md`: `cargo fmt`, then
    `cargo test` — **NOT `--all-features`** (the `_no_fma` feature disables FMA
    and would exercise a different code path, producing misleading results).
-   Update `CHANGELOG.md`. One function (or one coherent improvement) per commit,
-   each building and passing tests on its own. `cargo bench` (criterion) to
-   confirm no regression vs core-math / std / libm.
+   One function (or one coherent improvement) per commit, each building and
+   passing tests on its own. Bench per
+   [reference/performance.md](reference/performance.md) to confirm no
+   regression vs CORE-MATH, and quote the same-run ratio in the commit message.
 
 ## Worked skeleton: a reduction → reconstruct `exp2`
 

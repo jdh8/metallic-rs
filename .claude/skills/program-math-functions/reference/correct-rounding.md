@@ -9,6 +9,12 @@ to fix; the C sibling [metallic](https://github.com/jdh8/metallic) is moving the
 same way and ports its kernels from here. A function not yet correctly rounded
 should be labelled WIP, not shipped as "done".
 
+**Baseline: this goal is met.** Every f32 and f64 function is correctly rounded
+(issue #6, closed 2026-06-14) and every strict worst-case gate is active — a red
+gate in `cargo test` is a **regression**, not a work-in-progress marker. New work
+must keep the gates green; the open front is performance (issue #5, see
+[performance.md](performance.md)).
+
 ## The Table Maker's Dilemma
 
 To return the correctly-rounded `f(x)` you must decide which side of a rounding
@@ -68,26 +74,94 @@ requirement. FMA is free here too (`crate::fma`/`crate::fmaf`); see
 ## How you *prove* a function is correctly rounded
 
 **`f32` (binary32): exhaustive — and the harness already exists.** Only 2³² bit
-patterns exist. `tests/f32_univariate.rs` already loops **every** `f32`
-(`(0..=u32::MAX).map(f32::from_bits)`) and compares the metallic function against the
-`core-math` oracle via the `Identity` trait in `tests/common/mod.rs` (`is` =
-bit-equal, with NaNs equal). A clean sweep is a *proof* of correct rounding and is
-the CI gate; it runs natively in minutes. To add a function, add a
-`test_identity(metal::foo, core_math::foof)` test in the same file (and
-`tests/f32_bivariate.rs` for two-argument functions like `hypot`).
+patterns exist. Each f32 function has a per-function test file (`tests/sinf.rs`,
+`tests/expf.rs`, …) whose core is one line: `common::test_all_f32(metallic::sinf,
+core_math::sinf)` — it loops **every** `f32` and compares against the `core-math`
+oracle via the `Identity` trait in `tests/common/mod.rs` (bit-equal, NaNs equal).
+A clean sweep is a *proof* of correct rounding and is the CI gate; it runs
+natively in minutes. Bivariate functions use `common::test_bivariate_cases`;
 `common::truncate_errors` caps the report at 250 mismatches so a regression fails
 fast.
 
-**`f64` (binary64): cannot brute-force** (2⁶⁴ inputs). You need the worst-case
-hardness for the function and interval. **Use the published worst cases** (laziness
-ladder rung 5 — Lefèvre–Muller tables, CORE-MATH's databases) rather than
-rediscovering them; then prove (Gappa) that the kernel's error stays under the
-resulting bound away from those cases, and handle the listed hard cases explicitly.
-Until that proof exists, sample heavily — uniform random, near-boundary, and
-known-tricky inputs — via `tests/f64_univariate.rs`, comparing against `core-math`
-(or `rug` for ground truth), and track the maximum observed ulp error. Curated hard
-cases live in `tests/cases/*.wc` (see `tests/cases/README.md`);
-`common::parse_case_file` loads them and `common::test_univariate_cases` runs them.
+**`f64` (binary64): cannot brute-force** (2⁶⁴ inputs) — so the repo reproduces
+CORE-MATH's own per-function check discipline. Each `tests/<fn>.rs` carries:
+
+- **`test_<fn>_worst_cases`** — the strict correct-rounding gate: bit-exact vs
+  the `core-math` oracle on CORE-MATH's hard-to-round corpus
+  `tests/cases/<fn>.wc` (their BaCSeL worst cases; the corpus is committed to
+  git but excluded from the published crate, refreshed via
+  `tools/sync-worst-cases.sh`). Under round-to-nearest, only distance to a
+  **midpoint** makes an input hard — random sampling can never certify CR at
+  the TMD points, which is why these published corpora are the gate.
+- A **frozen-corpus regression guard** where CORE-MATH has no oracle (gamma,
+  `log(x, base)`): `examples/gen_f64_*_cases.rs` (feature `mpfr`) scans ~800M
+  inputs, keeps near-midpoint results with their MPFR answers, and the default
+  test replays them oracle-free.
+- **`test_<fn>_vs_mpfr`** (`#[cfg(feature = "mpfr")]`) — an independent
+  broad sweep against MPFR ground truth, guarding against a bug shared with
+  CORE-MATH. Run with `cargo test --release --features mpfr`.
+
+Shared helpers live in `tests/common/mod.rs` (`test_worst_univariate`,
+`test_worst_bivariate`, `mpfr_sweep_univariate`, `parse_case_file`, …).
+
+## The CR mechanism (the house template)
+
+Every f64 function follows the same shape:
+
+1. a **lean fast leg** returning an (often un-normalized) `DoubleDouble` plus
+   its error bound (the Ziv gate) — see [performance.md](performance.md) for
+   how gate width/shape drive speed;
+2. on gate failure, a **dd accurate tier** (~2⁻¹⁰⁵…2⁻¹⁰⁷), sometimes a third
+   tier (triple-double, 128-bit `Dint`, 256-bit `Qint`);
+3. a **sound final rounding**; and
+4. for residual sub-2⁻¹⁰⁷ TMD cases, a small **exception database**
+   (`EXP_HARD`, `ERFC_HARD`, …) holding CORE-MATH's analytic hard cases plus
+   metallic's own corpus residuals.
+
+**Sound-rounding pitfalls** (these caused every historical miss):
+
+- A two-word dd's naive `high + low` **cannot** correctly round an exact
+  half-ulp tie — RN ties-to-even discards the sub-½ulp sticky information.
+- Round-to-odd applied to a two-word dd is **unsound** (the sticky sign is
+  guessed from the renormalization residual). Sound options: a genuine third
+  word (triple-double / `Dint`) so round-to-odd sees the true sticky, or an
+  exception table.
+- Use the crate's sound collapsers: `double::round_general64`,
+  `round_general_signed64`, and `round_anchored(x, c)` (result-anchored
+  small-argument legs, where the correction `c = f(x) − x` is computed as a dd
+  and the exact `x` is added last).
+- Overflow/underflow guards must test the **exact first-overflowing bit
+  pattern** with the right comparator — five edge bugs (cosh/sinh/exp10/
+  lgamma/tgamma) came from `>` vs `>=` on a rounded threshold (`3691a69`).
+
+**The hard tier: port CORE-MATH's own accurate path.** When a function's ties
+run past what dd or `Dint` can resolve, the reliable route to zero misses is
+porting CORE-MATH's vendored accurate path from
+`~/src/core-math-sys/vendor/src/binary64/<fn>/` (this is how atan2, pow, and
+lgamma closed: 192-bit Tint, 256-bit qint, and triple-double respectively);
+functions with milder ties are precision-lifts of the existing structure.
+Note pow's extra lesson: ~3k of its misses were **exact rational-exponent
+midpoints** that no amount of precision resolves — they need exact-case
+*detection* logic.
+
+## Ziv-gate soundness certification (non-negotiable)
+
+A Ziv gate must exceed its leg's true error **with margin (≥ 2×)** — otherwise
+a confident `lo == hi` can certify a value on the wrong side of a rounding
+boundary, and no test short of the exact bad input will catch it (three latent
+unsound gates were found in already-green code). The discipline:
+
+- Every fast leg has an in-source `#[cfg(all(test, feature = "mpfr"))]
+  mod ziv_soundness` proof: sample the leg's band (millions of points, 250-bit
+  MPFR reference), compute worst `|err| / gate`, and assert it is `< 0.5`.
+  The `worst_ratio` helper pattern lives in `src/f64_/log.rs` (search
+  `mod ziv_soundness`); all 24 legs are certified.
+- **A new or changed fast leg or gate ships its soundness proof in the same
+  commit**, with the printed margin recorded in the commit message.
+- Expose the leg's raw pair (e.g. `ln_fast_raw`, `log1p_wide_eval`) so the
+  proof measures exactly what the gate sees.
+- The tightest margin in the crate is log1p's wide leg at 2.25× — treat any
+  change near it with suspicion.
 
 **Watch the feature flag.** Run `cargo test`, **never `cargo test --all-features`**:
 the `_no_fma` feature disables FMA usage, so under `--all-features` the suite would
