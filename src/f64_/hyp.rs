@@ -1224,6 +1224,8 @@ mod fold_ordering {
     /// `e²ˣ ≥ e^¼ > 1.28` even after the kernel's ≈2⁻⁶⁴ relative slip forces
     /// `q ≥ 0` (`m < 2`) and caps `corr` — plus a deterministic bit-stepping
     /// sweep of the kernel's actual output.
+    // The asserts mirror the analytic bounds in the doc comment, not FMA sites.
+    #[allow(clippy::suboptimal_flops)]
     #[test]
     fn tanh_fast_combine() {
         // corr at the band bottom, with generous slack for the kernel slip.

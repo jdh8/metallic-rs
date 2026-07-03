@@ -9572,6 +9572,9 @@ fn lgamma_stirling_dd(y: DoubleDouble, inv_t: f64) -> DoubleDouble {
             high: tail,
             low: 0.0,
         });
+    // Not an FMA site: the whole `inv_t·…` correction is ≲2⁻⁶⁰ of the result,
+    // so its rounding is immaterial and the products overlap `base`'s folds.
+    #[allow(clippy::suboptimal_flops)]
     let digamma = lw.high - inv_t * crate::fast_mul_add(u, 1.0 / 12.0, 0.5);
     DoubleDouble {
         high: base.high,
@@ -10636,6 +10639,8 @@ mod mid_tier_soundness {
         let mut worst = 0.0_f64;
         let mut worst_z = 0.0_f64;
         for _ in 0..4_000_000u64 {
+            // Plain affine test-input mapping — accuracy is irrelevant here.
+            #[allow(clippy::suboptimal_flops)]
             let z = -9.5 + 209.5 * next();
             // The near-pole humps never reach this leg (the special ladder and the
             // `sin_is_reliable` guard divert them).

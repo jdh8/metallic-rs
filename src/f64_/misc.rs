@@ -43,7 +43,12 @@ pub fn cbrt(x: f64) -> f64 {
         crate::fast_mul_add(z, CBRT_C[3], CBRT_C[2]),
         crate::fast_mul_add(z, CBRT_C[1], CBRT_C[0]),
     );
+    // Not FMA sites: `y·y`, `y·r`, and `h·y` overlap in the OoO window, and the
+    // certified error budget assumes these exact roundings — fusing would
+    // serialize the chain and re-open the certification for no measured gain.
+    #[allow(clippy::suboptimal_flops)]
     let h = (y * y) * (y * r) - 1.0;
+    #[allow(clippy::suboptimal_flops)]
     let y = y - (h * y) * crate::fast_mul_add(-CBRT_U1, h, CBRT_U0);
     let y = y * CBRT_ESCALE[it]; // y ≈ (z·2^it)^(1/3) = zz^(1/3) ∈ [1, 2)
 
