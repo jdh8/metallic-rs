@@ -144,6 +144,17 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f32 {
     round(theta)
 }
 
+/// Arcsine in half-turns
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::asinpi`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/asinpif.rs` certifies
+/// the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn asinpif(x: f32) -> f32 {
+    crate::f64_::asinpi(x.into()) as f32
+}
+
 /// Arccosine
 ///
 /// `acos(x) = π/2 − asin(x)`.  For `|x| < ½` this subtracts the near-zero

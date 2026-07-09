@@ -67,6 +67,10 @@ name = "asinf"
 harness = false
 
 [[bench]]
+name = "asinpif"
+harness = false
+
+[[bench]]
 name = "asinhf"
 harness = false
 
@@ -196,6 +200,10 @@ harness = false
 
 [[bench]]
 name = "asin"
+harness = false
+
+[[bench]]
+name = "asinpi"
 harness = false
 
 [[bench]]

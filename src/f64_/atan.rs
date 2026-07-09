@@ -459,6 +459,16 @@ fn atan_cell_fast(table: DoubleDouble, u: DoubleDouble) -> DoubleDouble {
 /// and `r`.
 #[inline]
 fn asin_tail(off: DoubleDouble, z: f64, zl: f64, r: f64, j: usize) -> Option<f64> {
+    let (v, eps) = asin_tail_dd(off, z, zl, r, j);
+    let lo = v.high + (v.low - eps);
+    let hi = v.high + (v.low + eps);
+    (lo == hi).then_some(lo)
+}
+
+/// [`asin_tail`]'s un-gated core: the double-double value and the gate width,
+/// so [`asinpi`]/[`acospi`] can rescale both by 1/π before their own gate.
+#[inline]
+fn asin_tail_dd(off: DoubleDouble, z: f64, zl: f64, r: f64, j: usize) -> (DoubleDouble, f64) {
     let cell = &ASIN_CELLS[j];
     let p = DoubleDouble::from_product(cell.lead.high, z);
     let low = crate::fma(cell.lead.high, zl, p.low);
@@ -473,10 +483,32 @@ fn asin_tail(off: DoubleDouble, z: f64, zl: f64, r: f64, j: usize) -> Option<f64
         z.abs(),
         ASIN_EPS_ABS,
     );
-    let lo = v.high + (v.low - eps);
-    let hi = v.high + (v.low + eps);
-    (lo == hi).then_some(lo)
+    (v, eps)
 }
+
+/// `1/π` as a double-double (CORE-MATH's `ONE_OVER_PIH/PIL`), the lift from
+/// radian results to half-turn units.
+const INV_PI: DoubleDouble = DoubleDouble {
+    high: 0.318_309_886_183_790_7,
+    low: -1.967_867_667_518_248_6e-17,
+};
+
+/// The third limb of `1/π` below [`INV_PI`], for the triple-double lift.
+const INV_PI_LO: f64 = -1.072_143_628_289_300_4e-33;
+
+/// `1/π` as a 128-bit `Dint` (the 4/π mantissa, round-to-nearest), for the
+/// tiny-band lift whose results reach the subnormals.
+const INV_PI_DINT: Dint = Dint {
+    sgn: false,
+    ex: -2,
+    m: 0xA2F9_836E_4E44_1529_FC27_57D1_F534_DDC1,
+};
+
+/// Relative Ziv gate for the π-scaled double-double accurate tier: the
+/// underlying tier is good to ≈2⁻¹⁰⁴ and the 1/π double-double truncates at
+/// ≈2⁻¹⁰⁹, so `2⁻⁹⁸` bounds the product with margin (certified by
+/// `ziv_soundness` per function); survivors take the triple-double lift.
+const PI_SCALED_DD_EPS: f64 = crate::exp2i(-98);
 
 /// A triple-`f64` value `high + mid + low`, used only by the rare accurate
 /// fallback to round the few `f64` `asin`/`acos` arguments beyond double-double's
@@ -1820,6 +1852,153 @@ pub fn asin(x: f64) -> f64 {
     asin_tail(off, z, zl, r, j).unwrap_or_else(|| asin_accurate(a).copysign(x))
 }
 
+/// The triple-double lift `t/π`: `t·(1/π)` with the third limb folded in as
+/// an `f64` correction — ≈2⁻¹⁵⁰ relative, far past any corpus tie.
+#[inline]
+fn td_over_pi(t: TripleDouble) -> TripleDouble {
+    td_add_f64(dd_mul_td(INV_PI, t), INV_PI_LO * t.high)
+}
+
+/// `asin(a)` for `a ∈ [0, 1)` as a triple-double — [`asin_direct_td`] below ½,
+/// the exact-reflection series above (`asin(a) = π/2 − 2·asin(√u)`,
+/// `u = (1−a)/2` exact) — the deep tier behind the π-scaled functions.
+#[cold]
+fn asin_td(a: f64) -> TripleDouble {
+    if a < 0.5 {
+        return asin_direct_td(a);
+    }
+    let u = 0.5 * (1.0 - a);
+    let b = asin_b_td(DoubleDouble { high: u, low: 0.0 });
+    let s = sqrt_td(u);
+    let asin_s = td_add_f64(
+        dd_mul_td(
+            DoubleDouble {
+                high: s.high,
+                low: s.mid,
+            },
+            b,
+        ),
+        s.low * b.high,
+    );
+    td_add(FRAC_PI_2_TD, td_neg(td_mul_f64(asin_s, 2.0)))
+}
+
+/// Tiny-band [`asinpi`] tier: `(x + x³/6 + 3x⁵/40)/π` carried in the 128-bit
+/// `Dint`, rounded by the subnormal-safe general finisher — the series is
+/// exact to ≈2⁻¹⁶⁰ below the identity threshold.
+#[cold]
+fn asinpi_tiny_accurate(x: f64) -> f64 {
+    let xx = DoubleDouble::from_product(x, x);
+    let factor = SIXTH.add_ordered(DoubleDouble {
+        high: xx.high * 0.075,
+        low: 0.0,
+    });
+    let c = (xx * x) * factor; // x³/6 + 3x⁵/40, double-double
+    let mut w = Dint::from_f64(x).mul(&INV_PI_DINT);
+    if c.high != 0.0 {
+        w = w.add(&Dint::from_f64(c.high).mul(&INV_PI_DINT));
+    }
+    if c.low != 0.0 {
+        w = w.add(&Dint::from_f64(c.low).mul(&INV_PI_DINT));
+    }
+    w.to_f64_general()
+}
+
+/// `1/6` as a double-double, the arcsine series' cubic coefficient.
+const SIXTH: DoubleDouble = DoubleDouble {
+    high: 0.166_666_666_666_666_66,
+    low: 9.251_858_538_542_972e-18,
+};
+
+/// Accurate [`asinpi`] tier: the double-double `asin` lifted by 1/π, with the
+/// rare survivors resolved through the triple-double lift.
+#[cold]
+#[inline(never)]
+fn asinpi_accurate(a: f64) -> f64 {
+    let m = asin_pos(a, atan_dd) * INV_PI;
+    ziv_at(m, PI_SCALED_DD_EPS).unwrap_or_else(|| td_round(td_over_pi(asin_td(a))))
+}
+
+/// Arcsine in half-turns
+///
+/// `asinpi(x) = asin(x)/π` correctly rounded: the [`asin`] fast tail's
+/// double-double rescales by [`INV_PI`] before its gate (both value and width
+/// scale together), and straddles walk the same accurate ladder lifted by 1/π
+/// — double-double first, then the ≈2⁻¹⁵⁰ triple-double.  `asinpi(±1) = ±½`
+/// exactly; the tiny band returns `x/π` through the subnormal-safe fold.
+#[must_use]
+#[inline]
+pub fn asinpi(x: f64) -> f64 {
+    let a = x.abs();
+
+    let (off, z, zl, r, j) = if a < 0.5 {
+        // asin(x)/π = x/π·(1 + x²/6 + …): below the same identity threshold as
+        // asin, the product x·(1/π) decides the rounding on its own.
+        if a < 2.149_119_332_890_821e-8 {
+            if x == 0.0 {
+                return x; // ±0 keeps its sign
+            }
+            // Deep-tail territory: below 2⁻⁹⁰⁰ the double-double gate's width
+            // itself would go subnormal (and the results eventually do), so
+            // the 128-bit tier owns the single rounding outright.
+            if a < crate::exp2i(-900) {
+                return asinpi_tiny_accurate(x);
+            }
+            let zh = INV_PI.high * x;
+            #[allow(clippy::suboptimal_flops)] // separate roundings are the certified budget
+            let zl = crate::fma(INV_PI.high, x, -zh) + INV_PI.low * x;
+            // asin's identity threshold is calibrated to ½ ulp; the π-scaled
+            // gate needs ≈2⁻¹⁰², so the cubic term must fold in (the x⁵ term
+            // sits at ≈2⁻¹⁰⁵, inside the gate).
+            let zl = crate::fma(zh * (x * x), 0.166_666_666_666_666_66, zl);
+            let eps = zh.abs() * crate::exp2i(-102);
+            let lb = zh + (zl - eps);
+            let ub = zh + (zl + eps);
+            if lb == ub {
+                return lb;
+            }
+            return asinpi_tiny_accurate(x);
+        }
+        let jf = (128.0 * (x * x)).round_ties_even();
+        let r = crate::fma(x, x, -(jf * 0.007_812_5));
+        // SAFETY: x² < ¼ puts jf in 0..=32.
+        (ZERO, x, 0.0, r, unsafe { jf.to_int_unchecked::<i64>() }
+            as usize)
+    } else {
+        if !(a < 1.0) {
+            if a == 1.0 {
+                return f64::copysign(0.5, x); // asinpi(±1) = ±½ exactly
+            }
+            return f64::NAN; // |x| > 1 or NaN
+        }
+        let t = 2.0 * (1.0 - a);
+        let z = -t.sqrt().copysign(x);
+        let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
+        let u = 0.25 * t;
+        let jf = (128.0 * u).round_ties_even();
+        let r = u - jf * 0.007_812_5;
+        let off = DoubleDouble {
+            high: FRAC_PI_2.high.copysign(x),
+            low: FRAC_PI_2.low.copysign(x),
+        };
+        // SAFETY: u = ¼t ≤ ¼ puts jf in 0..=32.
+        (off, z, zl, r, unsafe { jf.to_int_unchecked::<i64>() }
+            as usize)
+    };
+
+    let (v, eps) = asin_tail_dd(off, z, zl, r, j);
+    let w = v * INV_PI;
+    // The gate rescales with the value; the product's own rounding adds a
+    // relative 2⁻¹⁰²·|w| (certified by `ziv_soundness::asinpi_fast_leg_is_sound`).
+    let eps = crate::fast_mul_add(eps, INV_PI.high, w.high.abs() * crate::exp2i(-102));
+    let lo = w.high + (w.low - eps);
+    let hi = w.high + (w.low + eps);
+    if lo == hi {
+        return lo;
+    }
+    asinpi_accurate(a).copysign(x)
+}
+
 /// Arccosine
 #[must_use]
 #[inline]
@@ -2671,5 +2850,114 @@ mod fold_ordering {
         assert!(bmax <= 0.35 * PI.high);
         // acos direct: off = π/2 vs |p| ≤ Bmax/2.
         assert!(0.5 * bmax <= 0.35 * FRAC_PI_2.high);
+    }
+}
+
+/// MPFR-certified soundness of the π-scaled inverse-trig Ziv gates.  Run with
+/// `--features mpfr`.
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Worst `|leg(x) − asin(x)/π| / eps` for [`asinpi`]'s rescaled fast tail,
+    /// value-uniform over `(0, 1)` (odd symmetry covers the negatives).
+    #[test]
+    fn asinpi_fast_leg_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..20_000_000u64 {
+            let x = mix(i) as f64 / u64::MAX as f64;
+            if !(2.149_119_332_890_821e-8..1.0).contains(&x) {
+                continue;
+            }
+            let (off, z, zl, r, j) = if x < 0.5 {
+                let jf = (128.0 * (x * x)).round_ties_even();
+                let r = crate::fma(x, x, -(jf * 0.007_812_5));
+                (ZERO, x, 0.0, r, unsafe { jf.to_int_unchecked::<i64>() }
+                    as usize)
+            } else {
+                let t = 2.0 * (1.0 - x);
+                let z = -t.sqrt().copysign(x);
+                let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
+                let u = 0.25 * t;
+                let jf = (128.0 * u).round_ties_even();
+                let r = u - jf * 0.007_812_5;
+                let off = DoubleDouble {
+                    high: FRAC_PI_2.high,
+                    low: FRAC_PI_2.low,
+                };
+                (off, z, zl, r, unsafe { jf.to_int_unchecked::<i64>() }
+                    as usize)
+            };
+            let (v, eps) = asin_tail_dd(off, z, zl, r, j);
+            let w = v * INV_PI;
+            let eps = crate::fast_mul_add(eps, INV_PI.high, w.high.abs() * crate::exp2i(-102));
+            let got = Float::with_val(250, w.high) + Float::with_val(250, w.low);
+            let truth = Float::with_val(250, x).asin_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!(
+            "asinpi fast leg: worst |err|/gate = {worst:.4} at x={worst_x:e} bits={:016x}",
+            worst_x.to_bits()
+        );
+        assert!(
+            worst < 0.5,
+            "asinpi gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst relative slip of the π-scaled double-double accurate tier vs
+    /// [`PI_SCALED_DD_EPS`], plus the tiny band's dd + cubic gate.
+    #[test]
+    fn asinpi_dd_tier_is_sound() {
+        let mut worst = 0.0f64;
+        for i in 0..5_000_000u64 {
+            let x = mix(i) as f64 / u64::MAX as f64;
+            if !(2.149_119_332_890_821e-8..1.0).contains(&x) {
+                continue;
+            }
+            let m = asin_pos(x, atan_dd) * INV_PI;
+            let got = Float::with_val(250, m.high) + Float::with_val(250, m.low);
+            let truth = Float::with_val(250, x).asin_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            worst = worst.max(abs / (PI_SCALED_DD_EPS * m.high.abs()));
+        }
+        println!("asinpi dd tier: worst |err|/gate = {worst:.4}");
+        let mut worst2 = 0.0f64;
+        let lb = crate::exp2i(-900).to_bits();
+        let hb = 2.149_119_332_890_821e-8f64.to_bits();
+        for i in 0..10_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb));
+            let zh = INV_PI.high * x;
+            #[allow(clippy::suboptimal_flops)]
+            let zl = crate::fma(INV_PI.high, x, -zh) + INV_PI.low * x;
+            let zl = crate::fma(zh * (x * x), 0.166_666_666_666_666_66, zl);
+            let eps = zh.abs() * crate::exp2i(-102);
+            let got = Float::with_val(250, zh) + Float::with_val(250, zl);
+            let truth = Float::with_val(250, x).asin_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            worst2 = worst2.max(abs / eps);
+        }
+        println!("asinpi tiny band: worst |err|/gate = {worst2:.4}");
+        assert!(
+            worst < 0.5 && worst2 < 0.5,
+            "asinpi dd/tiny gate covers only {:.2}×/{:.2}× the slip",
+            1.0 / worst,
+            1.0 / worst2
+        );
     }
 }
