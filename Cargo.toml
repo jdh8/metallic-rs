@@ -83,6 +83,10 @@ name = "atanf"
 harness = false
 
 [[bench]]
+name = "atanpif"
+harness = false
+
+[[bench]]
 name = "atanhf"
 harness = false
 
@@ -220,6 +224,10 @@ harness = false
 
 [[bench]]
 name = "atan"
+harness = false
+
+[[bench]]
+name = "atanpi"
 harness = false
 
 [[bench]]

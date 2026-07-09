@@ -155,6 +155,22 @@ pub fn asinpif(x: f32) -> f32 {
     crate::f64_::asinpi(x.into()) as f32
 }
 
+/// Arctangent in half-turns
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::atanpi`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/atanpif.rs` certifies
+/// the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn atanpif(x: f32) -> f32 {
+    // The one f32 tie the double rounding cannot steer (odd symmetry covers
+    // the negative); the exhaustive sweep found exactly this input.
+    if x.to_bits() & (u32::MAX >> 1) == 0x3F69_3531 {
+        return f32::from_bits(0x3E70_D331).copysign(x);
+    }
+    crate::f64_::atanpi(x.into()) as f32
+}
+
 /// Arccosine in half-turns
 ///
 /// Promotes to the correctly rounded f64 [`crate::f64_::acospi`] and rounds

@@ -12,7 +12,7 @@ mod misc;
 mod pow;
 mod trig;
 
-pub use atan::{acosf, acospif, asinf, asinpif, atan2f, atanf};
+pub use atan::{acosf, acospif, asinf, asinpif, atan2f, atanf, atanpif};
 pub use erf::{erfcf, erff};
 pub use exp::{exp2f, exp10f, expf, expm1f, frexpf, ldexpf};
 pub use gamma::{lgammaf, tgammaf};

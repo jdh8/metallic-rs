@@ -16,7 +16,7 @@
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::dint::Dint;
-use super::double::{DoubleDouble, sqrt_dd};
+use super::double::{DoubleDouble, fast_sum, sqrt_dd};
 use super::pow::poly_dd;
 
 /// `(-1)ᵏ/(2k+1)` as a double-double, low-degree first in `u²` — the atan series.
@@ -504,11 +504,13 @@ const INV_PI_DINT: Dint = Dint {
     m: 0xA2F9_836E_4E44_1529_FC27_57D1_F534_DDC1,
 };
 
-/// Relative Ziv gate for the π-scaled double-double accurate tier: the
-/// underlying tier is good to ≈2⁻¹⁰⁴ and the 1/π double-double truncates at
-/// ≈2⁻¹⁰⁹, so `2⁻⁹⁸` bounds the product with margin (certified by
-/// `ziv_soundness` per function); survivors take the triple-double lift.
-const PI_SCALED_DD_EPS: f64 = crate::exp2i(-98);
+/// Relative Ziv gate for the π-scaled double-double accurate tier.  The
+/// parent tiers guarantee only their own `2⁻⁹⁰` gates (`ASIN_DD_ZIV_EPS`/
+/// `ATAN_DD_ZIV_EPS`) — a 2⁻⁹⁸ gate here certified a real 2⁻⁹⁵·⁷ slip in the
+/// atan reflection (`h = −1/x` rounds once; the corpus caught the wrong side
+/// of a 2⁻⁹⁸ tie at x ≈ 1.1e12) — so the lift inherits the parent contract
+/// plus margin, and everything finer goes to the deep tier.
+const PI_SCALED_DD_EPS: f64 = crate::exp2i(-89);
 
 /// A triple-`f64` value `high + mid + low`, used only by the rare accurate
 /// fallback to round the few `f64` `asin`/`acos` arguments beyond double-double's
@@ -1561,6 +1563,157 @@ const ATAN_TINY: u64 = 0x3e40000000000000;
 const ATAN_BIG: u64 = 0x4062ded8e34a9035;
 /// `|x| ≥ 0x1.d02967c31cdb5p+53`: `atan(x)` rounds to `±π/2`, as raw bits.
 const ATAN_HUGE: u64 = 0x434d02967c31cdb5;
+
+/// `−1/3` as a double-double, the arctangent series' cubic coefficient.
+const THIRD_NEG: DoubleDouble = DoubleDouble {
+    high: -0.333_333_333_333_333_3,
+    low: -1.850_371_707_708_594_2e-17,
+};
+
+/// Tiny-band [`atanpi`] tier: `(x − x³/3 + x⁵/5)/π` carried in the 128-bit
+/// `Dint`, rounded by the subnormal-safe general finisher.
+#[cold]
+fn atanpi_tiny_accurate(x: f64) -> f64 {
+    let xx = DoubleDouble::from_product(x, x);
+    let factor = THIRD_NEG.add_ordered(DoubleDouble {
+        high: xx.high * 0.2,
+        low: 0.0,
+    });
+    let c = (xx * x) * factor; // −x³/3 + x⁵/5, double-double
+    let mut w = Dint::from_f64(x).mul(&INV_PI_DINT);
+    if c.high != 0.0 {
+        w = w.add(&Dint::from_f64(c.high).mul(&INV_PI_DINT));
+    }
+    if c.low != 0.0 {
+        w = w.add(&Dint::from_f64(c.low).mul(&INV_PI_DINT));
+    }
+    w.to_f64_general()
+}
+
+/// Accurate [`atanpi`] tier: the fine-table double-double lifted by 1/π (no
+/// cancellation anywhere in `atan`'s range, so the relative gate holds), with
+/// survivors resolved through the 128-bit `Dint` product.
+#[cold]
+#[inline(never)]
+fn atanpi_accurate(a: f64) -> f64 {
+    // Same reflection split as `atan_accurate`; the π/2 − atan(1/a) fold never
+    // cancels below π/4, so the relative gate stays sound.
+    let m = if a > 1.0 {
+        FRAC_PI_2 + neg(atan_dd(DoubleDouble { high: a, low: 0.0 }.recip()))
+    } else {
+        atan_fine_dd(a)
+    };
+    let w = m * INV_PI;
+    ziv_at(w, PI_SCALED_DD_EPS).unwrap_or_else(|| atan_dint_mag(a).mul(&INV_PI_DINT).to_f64())
+}
+
+/// [`atan_fast`] lifted by 1/π: the same three regions, with the value and the
+/// gate width rescaled before the test (certified by
+/// `ziv_soundness::atanpi_legs_are_sound`).
+#[inline]
+fn atanpi_fast(x: f64) -> Option<f64> {
+    let bits = x.to_bits();
+    let at = bits & (u64::MAX >> 1); // |x| bits
+
+    if at < ATAN_SMALL {
+        if at == 0 {
+            return Some(x); // atanpi(±0) = ±0
+        }
+        if at < ATAN_TINY {
+            // atanpi(x) = x/π·(1 − x²/3 + …); the deep tail and all subnormal
+            // results go to the 128-bit tier outright.
+            if at < 0x07b0_0000_0000_0000 {
+                return Some(atanpi_tiny_accurate(x));
+            }
+            let zh = INV_PI.high * x;
+            #[allow(clippy::suboptimal_flops)] // separate roundings are the certified budget
+            let zl = crate::fma(INV_PI.high, x, -zh) + INV_PI.low * x;
+            let zl = crate::fma(zh * (x * x), -0.333_333_333_333_333_3, zl);
+            let eps = zh.abs() * crate::exp2i(-102);
+            let lb = zh + (zl - eps);
+            let ub = zh + (zl + eps);
+            if lb == ub {
+                return Some(lb);
+            }
+            return Some(atanpi_tiny_accurate(x));
+        }
+        let x2 = x * x;
+        let x3 = x * x2;
+        let f = x3 * crate::poly(x2, &ATAN_FAST_CH2);
+        let v = fast_sum(x, f);
+        let w = v * INV_PI;
+        let eps = crate::fast_mul_add(
+            f.abs(),
+            ATAN_SMALL_UB * INV_PI.high,
+            w.high.abs() * crate::exp2i(-102),
+        );
+        let ub = w.high + (w.low + eps);
+        let lb = w.high + (w.low - eps);
+        return (ub == lb).then_some(ub);
+    }
+
+    let (h, ah, al_pre);
+    if at > ATAN_BIG {
+        ah = ATAN_PI2_HI.copysign(x);
+        let al = ATAN_PI2_LO.copysign(x);
+        if at >= ATAN_HUGE {
+            return Some(f64::copysign(0.5, x)); // atanpi(x) = ±½ to ≪ ½ ulp
+        }
+        h = -1.0 / x;
+        al_pre = al;
+    } else {
+        let bucket = ((at >> 51) - 2030) as usize;
+        let m = bits & (u64::MAX >> 13);
+        let ut = m >> 35;
+        let ut2 = (ut * ut) >> 16;
+        // SAFETY: ATAN_SMALL ≤ at ≤ ATAN_BIG ⇒ bucket ∈ 1..=30, i ∈ 0..=127
+        // (see `atan_fast`).
+        let c = unsafe { *ATAN_FAST_IDX.get_unchecked(bucket) };
+        let i = (((c[0] << 16) + ut * c[1] - ut2 * c[2]) >> 25) as usize;
+        let tab = unsafe { *ATAN_FAST_TABLE.get_unchecked(i) };
+        let sign = 1.0_f64.copysign(x);
+        let ta = sign * tab.high;
+        let id = sign * i as f64;
+        al_pre = crate::fast_mul_add(ATAN_STEP_LO, id, sign * tab.low);
+        let p = x * ta;
+        h = (x - ta) / (1.0 + p);
+        ah = ATAN_STEP_HI * id;
+    }
+
+    let f = crate::poly(h * h, &ATAN_FAST_CH);
+    let al = crate::fma(h, f, al_pre);
+    let v = fast_sum(ah, al);
+    let w = v * INV_PI;
+    let eps = crate::fast_mul_add(
+        h.abs(),
+        1.25 * (ATAN_ZIV_E * INV_PI.high),
+        w.high.abs() * crate::exp2i(-102),
+    );
+    let ub = w.high + (w.low + eps);
+    let lb = w.high + (w.low - eps);
+    (ub == lb).then_some(ub)
+}
+
+/// Arctangent in half-turns
+///
+/// `atanpi(x) = atan(x)/π` correctly rounded, by the same 1/π lift as
+/// [`asinpi`] over [`atan_fast`]'s three regions.  `atanpi(±∞) = ±½` exactly,
+/// huge finite arguments round to ±½, and the tiny band folds the −x³/3 term
+/// with the deep tail on the subnormal-safe 128-bit tier.
+#[must_use]
+#[inline]
+pub fn atanpi(x: f64) -> f64 {
+    if x.is_nan() {
+        return x;
+    }
+
+    let a = x.abs();
+    if a.is_infinite() {
+        return f64::copysign(0.5, x);
+    }
+
+    atanpi_fast(x).unwrap_or_else(|| atanpi_accurate(a).copysign(x))
+}
 
 /// CORE-MATH's plain-`f64` `atan` fast path (port of `cr_atan`'s hot path).
 ///
@@ -3103,6 +3256,85 @@ mod ziv_soundness {
             "acospi gates cover only {:.2}×/{:.2}× the slip",
             1.0 / worst,
             1.0 / worst_dd
+        );
+    }
+
+    /// Worst `|leg(x) − atan(x)/π| / eps` for [`atanpi_fast`]'s three regions,
+    /// log-uniform across the kernel band.
+    #[test]
+    fn atanpi_legs_are_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..20_000_000u64 {
+            let h = mix(i);
+            let e = -41 + ((h >> 52) % 96) as i64; // exponents −41..=54
+            let x = f64::from_bits((((e + 1023) as u64) << 52) | (h & (u64::MAX >> 12)));
+            let bits = x.to_bits();
+            let at = bits;
+            if at < ATAN_TINY || at >= ATAN_HUGE {
+                continue;
+            }
+            let (w, eps) = if at < ATAN_SMALL {
+                let x2 = x * x;
+                let x3 = x * x2;
+                let f = x3 * crate::poly(x2, &ATAN_FAST_CH2);
+                let v = fast_sum(x, f);
+                let w = v * INV_PI;
+                let eps = crate::fast_mul_add(
+                    f.abs(),
+                    ATAN_SMALL_UB * INV_PI.high,
+                    w.high.abs() * crate::exp2i(-102),
+                );
+                (w, eps)
+            } else {
+                let (h, ah, al_pre);
+                if at > ATAN_BIG {
+                    ah = ATAN_PI2_HI;
+                    al_pre = ATAN_PI2_LO;
+                    h = -1.0 / x;
+                } else {
+                    let bucket = ((at >> 51) - 2030) as usize;
+                    let m = bits & (u64::MAX >> 13);
+                    let ut = m >> 35;
+                    let ut2 = (ut * ut) >> 16;
+                    let c = ATAN_FAST_IDX[bucket];
+                    let i = (((c[0] << 16) + ut * c[1] - ut2 * c[2]) >> 25) as usize;
+                    let tab = ATAN_FAST_TABLE[i];
+                    let ta = tab.high;
+                    let id = i as f64;
+                    al_pre = crate::fast_mul_add(ATAN_STEP_LO, id, tab.low);
+                    let p = x * ta;
+                    h = (x - ta) / (1.0 + p);
+                    ah = ATAN_STEP_HI * id;
+                }
+                let f = crate::poly(h * h, &ATAN_FAST_CH);
+                let al = crate::fma(h, f, al_pre);
+                let v = fast_sum(ah, al);
+                let w = v * INV_PI;
+                let eps = crate::fast_mul_add(
+                    h.abs(),
+                    1.25 * (ATAN_ZIV_E * INV_PI.high),
+                    w.high.abs() * crate::exp2i(-102),
+                );
+                (w, eps)
+            };
+            let got = Float::with_val(250, w.high) + Float::with_val(250, w.low);
+            let truth = Float::with_val(250, x).atan_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!(
+            "atanpi fast legs: worst |err|/gate = {worst:.4} at x={worst_x:e} bits={:016x}",
+            worst_x.to_bits()
+        );
+        assert!(
+            worst < 0.5,
+            "atanpi gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
         );
     }
 

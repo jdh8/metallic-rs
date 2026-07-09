@@ -16,8 +16,8 @@ mod f64_;
 // Flat libm-style public API: `f64` keeps the bare C name, `f32` gets the `f`
 // suffix.  Implementation modules use the same names directly.
 pub use f64_::{
-    acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, cbrt, cos, cosh, cospi, erf,
-    erfc, exp, exp2, exp10, expm1, fma, frexp, hypot, ldexp, lgamma, log, log1p, log2, log10,
+    acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, atanpi, cbrt, cos, cosh, cospi,
+    erf, erfc, exp, exp2, exp10, expm1, fma, frexp, hypot, ldexp, lgamma, log, log1p, log2, log10,
     round, rsqrt, sin, sincos, sinh, sinpi, tan, tanh, tanpi, tgamma,
 };
 
@@ -25,8 +25,8 @@ pub use f64_::{
 pub use f64_::pow::pow;
 
 pub use f32_::{
-    acosf, acoshf, acospif, asinf, asinhf, asinpif, atan2f, atanf, atanhf, cbrtf, cosf, coshf,
-    cospif, erfcf, erff, exp2f, exp10f, expf, expm1f, fmaf, frexpf, hypotf, ldexpf, lgammaf,
+    acosf, acoshf, acospif, asinf, asinhf, asinpif, atan2f, atanf, atanhf, atanpif, cbrtf, cosf,
+    coshf, cospif, erfcf, erff, exp2f, exp10f, expf, expm1f, fmaf, frexpf, hypotf, ldexpf, lgammaf,
     log1pf, log2f, log10f, logf, powf, roundf, rsqrtf, sincosf, sinf, sinhf, sinpif, tanf, tanhf,
     tanpif, tgammaf,
 };
