@@ -351,6 +351,20 @@ pub fn parse_f64(s: &str) -> Result<f64, hexf_parse::ParseHexfError> {
     fn fallback(s: &str) -> Option<f64> {
         match s {
             "snan" => Some(f64::from_bits(f64::NAN.to_bits() | 1)),
+            // hexf parses only exactly-representable forms; corpus rows may
+            // carry an empty integer part (`0x.fffp-1022`) or a subnormal
+            // whose 53-bit mantissa needs rounding (`0x1.45f306dc9c882p-1024`).
+            // Rebuild a ≤53-bit mantissa exactly and let `ldexp` round once.
+            s if s.starts_with("0x") && s.contains('p') => {
+                let (mant, exp) = s[2..].split_once('p')?;
+                let frac_len = mant.split_once('.').map_or(0, |(_, frac)| frac.len());
+                let digits = mant.replace('.', "");
+                let mantissa = u64::from_str_radix(&digits, 16).ok()?;
+                (mantissa < 1 << 53).then_some(())?;
+                let exp = exp.parse::<i32>().ok()?;
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                Some(metallic::ldexp(mantissa as f64, exp - 4 * frac_len as i32))
+            }
             #[allow(clippy::cast_precision_loss)]
             s if s.starts_with("0x") => u64::from_str_radix(&s[2..], 16).ok().map(|x| x as f64),
             _ => None,

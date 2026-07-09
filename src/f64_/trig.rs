@@ -1264,6 +1264,96 @@ pub(super) fn abs_sinpi_dd_lean(x: f64) -> DoubleDouble {
     sg + bracket * d
 }
 
+/// Ziv gate for [`sinpi`]'s lean table leg, a *relative* bound on the result.
+/// The kernel's worst slip is the dropped `d⁸` cosine term ≈2⁻⁶⁶ of the unit
+/// result scale; `2⁻⁶²` bounds it with margin (certified by
+/// `ziv_soundness::sinpi_fast_leg_is_sound`), and the leading `π·f` term is
+/// relatively exact near the zeros, so the bound holds across the band.
+const SINPI_ZIV_EPS: f64 = crate::exp2i(-62);
+
+/// Sine of π·x
+///
+/// Follows C23's special-value contract: `sinpi(±0) = ±0`, `sinpi(n) =
+/// copysign(0, x)` for every integer `n` (parity-free), `sinpi(±(2k + ½)) =
+/// ±1` and `sinpi(±(2k + 1 + ½)) = ∓1` exactly, and ±∞/NaN → NaN.
+///
+/// The reduction `f = x − round(x)` is exact, so `sin(πx) =
+/// (−1)^round(x)·sin(πf)` splits into an exact sign and the lean table kernel
+/// [`abs_sinpi_dd_lean`] over `|f| ≤ ½`, whose leading `π·f` term keeps full
+/// relative accuracy near the zeros — no separate small-`|x|` band is needed
+/// above the subnormal-safe `|x| < 2⁻⁵⁴` product.  A relative Ziv gate defers
+/// straddles to the 128-bit `Dint` sin/cos kernels (≈2⁻¹²⁵).
+#[must_use]
+#[inline]
+pub fn sinpi(x: f64) -> f64 {
+    let ax = x.abs();
+
+    // NaN-propagating guard: |x| ≥ 2⁵² (every representable value there is an
+    // integer), ±∞, and NaN all reject.
+    if !(ax < crate::exp2i(52)) {
+        return if x.is_finite() {
+            f64::copysign(0.0, x)
+        } else {
+            f64::NAN
+        };
+    }
+
+    // |x| < 2⁻⁵⁴: sin(πx) rounds as the double-double product π·x.  Below
+    // 2⁻⁹⁷⁰ the product is formed at 2¹⁰⁶ scale and folded down with one FMA
+    // so the subnormal rounding happens exactly once (CORE-MATH's fold).
+    if ax < crate::exp2i(-54) {
+        if x == 0.0 {
+            return x; // ±0 keeps its sign; the product path would lose −0
+        }
+        if ax < crate::exp2i(-970) {
+            let t = x * crate::exp2i(106);
+            let zh = PI_DD.high * t;
+            let zl = crate::fma(PI_DD.high, t, -zh) + PI_DD.low * t;
+            let rs = (zh + zl) * crate::exp2i(-106);
+            let rt = rs * crate::exp2i(106);
+            return crate::fma((zh - rt) + zl, crate::exp2i(-106), rs);
+        }
+        let zh = PI_DD.high * x;
+        let zl = crate::fma(PI_DD.high, x, -zh) + PI_DD.low * x;
+        return zh + zl;
+    }
+
+    let n = x.round_ties_even();
+    let f = x - n; // exact: |f| ≤ ½
+    if f == 0.0 {
+        return f64::copysign(0.0, x); // integer x, sign preserved
+    }
+
+    // sin(πx) = (−1)ⁿ·sin(πf): the sign is exact, the magnitude is sin(π|f|).
+    // SAFETY: |n| ≤ 2⁵² fits an `i64`.
+    let odd = unsafe { n.to_int_unchecked::<i64>() } & 1 != 0;
+    let negative = (f < 0.0) != odd;
+
+    let v = abs_sinpi_dd_lean(f);
+    let eps = v.high * SINPI_ZIV_EPS; // v.high ≥ 0
+    let lo = v.high + (v.low - eps);
+    let hi = v.high + (v.low + eps);
+    if lo == hi {
+        return if negative { -lo } else { lo };
+    }
+
+    // Accurate tier: `2x − q` is exact (Sterbenz), so `π·(x − q/2)` reaches
+    // the 128-bit sin/cos kernels at ≈2⁻¹²⁵ relative — the double-double π
+    // (≈2⁻¹⁰⁷) cannot split the corpus' hardest ties.  The quadrant selection
+    // carries the sign; the result is normal (|f| ≥ 2⁻⁵³ here, so |sin πf| ≥
+    // 2⁻⁵¹), which `to_f64` requires.
+    let q = (2.0 * x).round_ties_even();
+    let theta = Dint::from_f64(2.0 * x - q).mul(&PIO2_DINT); // π(x − q/2) ∈ [−π/4, π/4]
+    // SAFETY: |q| ≤ 2⁵³ fits an `i64`.
+    let w = match unsafe { q.to_int_unchecked::<i64>() } & 3 {
+        0 => sin_dint(&theta),
+        1 => cos_dint(&theta),
+        2 => neg_dint(sin_dint(&theta)),
+        _ => neg_dint(cos_dint(&theta)),
+    };
+    w.to_f64()
+}
+
 /// Sine
 #[must_use]
 #[inline]
@@ -1514,5 +1604,50 @@ mod fold_ordering {
             .fold(0.0, |acc, c| crate::fast_mul_add(acc, wmax, c.abs()));
         let outer_min = p0_min - w2max * inner_mag;
         assert!(wmax.powi(3) * tail_mag <= 0.5 * outer_min);
+    }
+}
+
+/// MPFR-certified soundness of `sinpi`'s lean-table-leg Ziv gate.  The gate may
+/// only confirm a rounding when its relative half-width [`SINPI_ZIV_EPS`] truly
+/// exceeds the leg's error.  Run with `--features mpfr`.
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Worst `|leg(f) − sin(πf)| / (SINPI_ZIV_EPS · leg.high)` over the reduced
+    /// band, representation-uniform across `[2⁻⁵⁴, ½]` so every binade — the
+    /// near-zero relatively-exact regime and the `d → ±½` truncation-worst
+    /// regime — is covered.  A ratio `< 0.5` certifies the 2× soundness margin.
+    #[test]
+    fn sinpi_fast_leg_is_sound() {
+        let (lb, hb) = (crate::exp2i(-54).to_bits(), 0.5f64.to_bits());
+        let mut worst = 0.0f64;
+        let mut worst_f = 0.5;
+        for i in 0..30_000_000u64 {
+            let f = f64::from_bits(lb + mix(i) % (hb - lb + 1));
+            let v = abs_sinpi_dd_lean(f);
+            let got = Float::with_val(250, v.high) + Float::with_val(250, v.low);
+            let truth = Float::with_val(250, f).sin_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / (SINPI_ZIV_EPS * v.high);
+            if ratio > worst {
+                worst = ratio;
+                worst_f = f;
+            }
+        }
+        println!("sinpi fast leg: worst |err|/gate = {worst:.4} at f={worst_f:e}");
+        assert!(
+            worst < 0.5,
+            "sinpi gate covers only {:.2}× the slip at f={worst_f:e}",
+            1.0 / worst
+        );
     }
 }

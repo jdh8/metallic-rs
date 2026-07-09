@@ -118,6 +118,17 @@ pub fn sinf(x: f32) -> f32 {
     return if x.is_sign_negative() { -y } else { y };
 }
 
+/// Sine of π·x
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::sinpi`] and rounds
+/// once more to f32.  The exhaustive 2³² sweep in `tests/sinpif.rs` certifies
+/// that the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn sinpif(x: f32) -> f32 {
+    crate::f64_::sinpi(x.into()) as f32
+}
+
 /// Cosine
 #[must_use]
 #[inline]

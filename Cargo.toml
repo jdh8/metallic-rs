@@ -163,6 +163,10 @@ name = "sinhf"
 harness = false
 
 [[bench]]
+name = "sinpif"
+harness = false
+
+[[bench]]
 name = "tanf"
 harness = false
 
@@ -292,6 +296,10 @@ harness = false
 
 [[bench]]
 name = "sinh"
+harness = false
+
+[[bench]]
+name = "sinpi"
 harness = false
 
 [[bench]]
