@@ -87,6 +87,10 @@ name = "cosf"
 harness = false
 
 [[bench]]
+name = "cospif"
+harness = false
+
+[[bench]]
 name = "coshf"
 harness = false
 
@@ -288,6 +292,10 @@ harness = false
 
 [[bench]]
 name = "cos"
+harness = false
+
+[[bench]]
+name = "cospi"
 harness = false
 
 [[bench]]

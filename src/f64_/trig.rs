@@ -1878,8 +1878,8 @@ pub fn sinpi(x: f64) -> f64 {
     );
     let fc = crate::fast_mul_add(z2, SINPI_ZC[1], SINPI_ZC[0]);
     let (sg, cg) = sincosn(iq);
-    #[allow(clippy::suboptimal_flops)] // r's error budget assumes these exact roundings
-    let r = sg.low + sg.high * (z2 * fc) + cg.high * (z * fs);
+    #[allow(clippy::suboptimal_flops)] // the remaining splits are the certified budget
+    let r = crate::fast_mul_add(cg.high, z * fs, sg.low + sg.high * (z2 * fc));
     let lb = (r - SINPIN_ERR) + sg.high;
     let ub = (r + SINPIN_ERR) + sg.high;
     if lb == ub {
@@ -1913,6 +1913,144 @@ fn sinpi_accurate(x: f64) -> f64 {
         1 => cos_dint(&theta),
         2 => neg_dint(sin_dint(&theta)),
         _ => neg_dint(cos_dint(&theta)),
+    };
+    w.to_f64()
+}
+
+/// Taylor coefficients of `(cos(πx) − 1)/x²` for the small band
+/// `|x| ≤ 2⁻¹²` (CORE-MATH cospi's `c`, verbatim).
+const COSPI_SMALL_C: [f64; 4] = [
+    -4.934_802_200_544_677,
+    4.058_712_126_397_995,
+    -1.335_262_715_026_094_7,
+    0.235_267_632_957_854_3,
+];
+
+/// Cosine of π·x
+///
+/// Follows C23's special-value contract: `cospi(±0) = 1`, `cospi(k + ½) = +0`
+/// for every half-integer (sign-free), integers give ±1 by parity, and
+/// ±∞/NaN → NaN.  The structure mirrors [`sinpi`] — the quarter-turn shift
+/// rides the grid index (`+2048` before halving), the mantissa stays unsigned
+/// (cosine is even), and the cross term flips sign — with the same
+/// [`sincosn`] table, residual polynomials, and tier ladder.  The fast gate is
+/// CORE-MATH's residual-proportional `z·2⁻¹²³` plus an absolute 2⁻⁷⁷ floor
+/// for the table pair's own ≈2⁻⁷⁹ accuracy near grid points — without the
+/// floor the slope window vanishes there while the table error does not
+/// (certified at ≥2× margin by `ziv_soundness::cospi_fast_leg_is_sound`).
+#[must_use]
+#[inline]
+pub fn cospi(x: f64) -> f64 {
+    let ix = x.to_bits();
+    let ax = ix & (u64::MAX >> 1);
+    let e = (ax >> 52) as i64;
+
+    // |x| ≥ 2⁴¹ (every value is a multiple of 1/2048), ±∞, NaN.
+    if e >= 1064 {
+        if e == 0x7ff {
+            return if ix << 12 == 0 { f64::NAN } else { x + x };
+        }
+        if e > 1075 {
+            return 1.0; // |x| ≥ 2⁵³: all even integers
+        }
+        let m = (ix & (u64::MAX >> 12)) | 1 << 52;
+        // |x|·2048 + a quarter turn, exact; evenness needs no sign fold.
+        let iq = m.wrapping_shl((e - 1064) as u32).wrapping_add(1024);
+        if iq & 2047 == 0 {
+            return 0.0; // half-integer x: +0 always
+        }
+        let (sg, _) = sincosn(iq as i64);
+        return sg.high + sg.low; // exact grid point: the table is the answer
+    }
+
+    // Small band |x| ≤ 2⁻¹²: even Taylor around 1.
+    if ax <= 0x3f30_0000_0000_0000 {
+        // cos(πx) rounds to 1 for (πx)²/2 ≤ 2⁻⁵⁴ (the expression keeps
+        // CORE-MATH's shape; round-to-nearest folds it to 1.0).
+        if ax <= 0x3e2c_cf64_29be_6621 {
+            return 1.0 - crate::exp2i(-55);
+        }
+        let x2 = x * x;
+        let x4 = x2 * x2;
+        let eps = x2 * 8.659_739_592_076_221e-15;
+        #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+        let p = x2
+            * ((COSPI_SMALL_C[0] + x2 * COSPI_SMALL_C[1])
+                + x4 * (COSPI_SMALL_C[2] + x2 * COSPI_SMALL_C[3]));
+        let lb = (p - eps) + 1.0;
+        let ub = (p + eps) + 1.0;
+        if lb == ub {
+            return lb;
+        }
+        return cospi_accurate(x);
+    }
+
+    // Main band 2⁻¹² < |x| < 2⁴¹ (e ∈ [1011, 1063]): integer reduction.
+    let m = (ix & (u64::MAX >> 12)) | 1 << 52;
+    let si = e - 1011;
+    if si >= 0 && m.wrapping_shl(si as u32) == 1 << 63 {
+        return 0.0; // half-integer x: +0 always
+    }
+
+    let s = 1063 - e; // 0..=52
+    let iq = ((((m >> s).wrapping_add(2048)) & 8191).wrapping_add(1)) >> 1;
+    let k = m.wrapping_shl((e - 1000) as u32) as i64;
+    let z = k as f64;
+    let z2 = z * z;
+    let fs = crate::fast_mul_add(
+        z2,
+        crate::fast_mul_add(z2, SINPI_ZS[2], SINPI_ZS[1]),
+        SINPI_ZS[0],
+    );
+    let fc = crate::fast_mul_add(z2, SINPI_ZC[1], SINPI_ZC[0]);
+    let (sg, cg) = sincosn(iq as i64);
+    let er = crate::fast_mul_add(z.abs(), crate::exp2i(-123), crate::exp2i(-77));
+    #[allow(clippy::suboptimal_flops)] // the remaining splits are the certified budget
+    let r = crate::fast_mul_add(cg.high, z * fs, sg.low + sg.high * (z2 * fc));
+    let lb = (r - er) + sg.high;
+    let ub = (r + er) + sg.high;
+    if lb == ub {
+        return lb;
+    }
+
+    // Middle tier: the ≈2⁻¹⁰⁴ double-double kernel, relative-gated.
+    let v = cospi_dd(x);
+    let eps = v.high.abs() * SINPI_DD_EPS;
+    let lo = v.high + (v.low - eps);
+    let hi = v.high + (v.low + eps);
+    if lo == hi {
+        return lo;
+    }
+    cospi_accurate(x)
+}
+
+/// `cos(πx)` as a double-double for `|x| < 2⁵²` — [`sinpi_dd`]'s quadrant
+/// selection rotated a quarter turn.
+#[inline]
+fn cospi_dd(x: f64) -> DoubleDouble {
+    let q = (2.0 * x).round_ties_even();
+    let theta = PI_DD * (x - q * 0.5);
+    // SAFETY: `|x| < 2⁵²`, so `|q| < 2⁵³` fits an `i64`.
+    match unsafe { q.to_int_unchecked::<i64>() } & 3 {
+        0 => cos_kernel(theta),
+        1 => neg(sin_kernel(theta)),
+        2 => neg(cos_kernel(theta)),
+        _ => sin_kernel(theta),
+    }
+}
+
+/// Final [`cospi`] tier — [`sinpi_accurate`] rotated a quarter turn.
+#[cold]
+fn cospi_accurate(x: f64) -> f64 {
+    let q = (2.0 * x).round_ties_even();
+    #[allow(clippy::suboptimal_flops)] // 2x is exact; the subtraction is Sterbenz
+    let theta = Dint::from_f64(2.0 * x - q).mul(&PIO2_DINT); // π(x − q/2) ∈ [−π/4, π/4]
+    // SAFETY: |q| ≤ 2⁵³ fits an `i64`.
+    let w = match unsafe { q.to_int_unchecked::<i64>() } & 3 {
+        0 => cos_dint(&theta),
+        1 => neg_dint(sin_dint(&theta)),
+        2 => neg_dint(cos_dint(&theta)),
+        _ => sin_dint(&theta),
     };
     w.to_f64()
 }
@@ -2212,7 +2350,7 @@ mod ziv_soundness {
             );
             let fc = crate::fast_mul_add(z2, SINPI_ZC[1], SINPI_ZC[0]);
             let (sg, cg) = sincosn(iq);
-            let r = sg.low + sg.high * (z2 * fc) + cg.high * (z * fs);
+            let r = crate::fast_mul_add(cg.high, z * fs, sg.low + sg.high * (z2 * fc));
             let got = Float::with_val(250, sg.high) + Float::with_val(250, r);
             let truth = Float::with_val(250, x).sin_pi();
             let abs = Float::with_val(250, &got - &truth).abs().to_f64();
@@ -2302,6 +2440,122 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "sinpi dd-tier gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − cos(πx)| / er(z)` for the cospi main-band leg, whose
+    /// gate is CORE-MATH's residual-proportional `z·2⁻¹²³` plus the 2⁻⁷⁷
+    /// absolute floor covering the table pair's own accuracy near grid
+    /// points.  Value-uniform over `(2⁻¹², 4]`; `< 0.5` certifies the 2×
+    /// margin.
+    #[test]
+    fn cospi_fast_leg_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..30_000_000u64 {
+            let x = 2.44e-4 + mix(i) as f64 / (u64::MAX / 4) as f64;
+            let ix = x.to_bits();
+            let e = ((ix >> 52) & 0x7ff) as i64;
+            let m = (ix & (u64::MAX >> 12)) | 1 << 52;
+            let s = 1063 - e;
+            let iq = ((((m >> s).wrapping_add(2048)) & 8191).wrapping_add(1)) >> 1;
+            let k = m.wrapping_shl((e - 1000) as u32) as i64;
+            let z = k as f64;
+            let z2 = z * z;
+            let fs = crate::fast_mul_add(
+                z2,
+                crate::fast_mul_add(z2, SINPI_ZS[2], SINPI_ZS[1]),
+                SINPI_ZS[0],
+            );
+            let fc = crate::fast_mul_add(z2, SINPI_ZC[1], SINPI_ZC[0]);
+            let (sg, cg) = sincosn(iq as i64);
+            let er = crate::fast_mul_add(z.abs(), crate::exp2i(-123), crate::exp2i(-77));
+            let r = crate::fast_mul_add(cg.high, z * fs, sg.low + sg.high * (z2 * fc));
+            let got = Float::with_val(250, sg.high) + Float::with_val(250, r);
+            let truth = Float::with_val(250, x).cos_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / er;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!(
+            "cospi fast leg: worst |err|/gate = {worst:.4} at x={worst_x:e} bits={:016x}",
+            worst_x.to_bits()
+        );
+        assert!(
+            worst < 0.5,
+            "cospi gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − cos(πx)| / (x²·2⁻⁴⁷·⁵)` for the small band
+    /// `(2⁻²⁶·⁵, 2⁻¹²]`, representation-uniform across its binades.
+    #[test]
+    fn cospi_small_band_is_sound() {
+        let (lb, hb) = (0x3e2c_cf64_29be_6622u64, 0x3f30_0000_0000_0000);
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..30_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb + 1));
+            let x2 = x * x;
+            let x4 = x2 * x2;
+            let eps = x2 * 8.659_739_592_076_221e-15;
+            let p = x2
+                * ((COSPI_SMALL_C[0] + x2 * COSPI_SMALL_C[1])
+                    + x4 * (COSPI_SMALL_C[2] + x2 * COSPI_SMALL_C[3]));
+            let got = Float::with_val(250, 1.0) + Float::with_val(250, p);
+            let truth = Float::with_val(250, x).cos_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("cospi small band: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "cospi small-band gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst relative `|cospi_dd(x) − cos(πx)| / (SINPI_DD_EPS·|high|)` over
+    /// uniform and near-half-integer inputs (the fast leg's straddles).
+    #[test]
+    fn cospi_dd_tier_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..20_000_000u64 {
+            let h = mix(i);
+            let x = if i & 1 == 0 {
+                h as f64 / (u64::MAX / 4) as f64
+            } else {
+                let k = ((h >> 32) % 8) as f64 + 0.5;
+                let delta = f64::from_bits(0x3c90_0000_0000_0000 + (h & 0xF_FFFF_FFFF));
+                if h & 16 == 0 { k + delta } else { k - delta }
+            };
+            if x == 0.0 || (2.0 * x).fract() == 0.0 {
+                continue;
+            }
+            let v = cospi_dd(x);
+            let got = Float::with_val(250, v.high) + Float::with_val(250, v.low);
+            let truth = Float::with_val(250, x).cos_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / (SINPI_DD_EPS * v.high.abs());
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("cospi dd tier: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "cospi dd-tier gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
         );
     }

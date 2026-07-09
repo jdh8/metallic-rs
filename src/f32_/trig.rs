@@ -329,6 +329,67 @@ pub fn sinpif(x: f32) -> f32 {
     return r as f32;
 }
 
+/// Cosine of π·x
+///
+/// Verbatim port of CORE-MATH's `cr_cospif`, sharing [`sinpif`]'s tables: the
+/// unsigned mantissa (cosine is even) reduces to the same 1/64-half-turn grid
+/// with a `+32` quarter-turn shift, grid-exact inputs read the table
+/// directly, and the tiny band closes with a single f32 FMA around 1.  The
+/// exhaustive 2³² sweep in `tests/cospif.rs` certifies every input.
+#[must_use]
+#[inline]
+pub fn cospif(x: f32) -> f32 {
+    let ix = x.to_bits();
+    let e = ((ix >> 23) & 0xff) as i32;
+    if e == 0xff {
+        return f32::NAN; // ±∞ and NaN
+    }
+    let m = (ix & (u32::MAX >> 9)) | 1 << 23;
+    let s = 143 - e;
+    let p = e - 112;
+    if p < 0 {
+        // |x| < 2⁻¹⁵: cos(πx) = 1 − (πx)²/2 in one f32 FMA; the coefficient
+        // product underflows below 0x1.9f03p−129, where −x·x suffices.
+        return if ix & (u32::MAX >> 1) >= 0x0019_f030 {
+            crate::fmaf(-4.934_802_f32 * x, x, 1.0)
+        } else {
+            crate::fmaf(-x, x, 1.0)
+        };
+    }
+    if p > 31 {
+        if p > 63 {
+            return 1.0; // |x| ≥ 2⁴⁷·⁻: all even integers at f32 precision
+        }
+        let iq = m.wrapping_shl((p - 32) as u32);
+        return SINPIF_S[((iq.wrapping_add(32)) & 127) as usize] as f32;
+    }
+    let k = m.wrapping_shl(p as u32) as i32;
+    if k == 0 {
+        // Exactly on the 1/64 grid (integers and half-integers included).
+        let iq = m >> (32 - p);
+        return SINPIF_S[((iq.wrapping_add(32)) & 127) as usize] as f32;
+    }
+    let z = f64::from(k);
+    let z2 = z * z;
+    let fs = crate::fast_mul_add(
+        z2,
+        crate::fast_mul_add(z2, SINPIF_SN[2], SINPIF_SN[1]),
+        SINPIF_SN[0],
+    );
+    let fc = crate::fast_mul_add(
+        z2,
+        crate::fast_mul_add(z2, SINPIF_CN[2], SINPIF_CN[1]),
+        SINPIF_CN[0],
+    );
+    let iq = ((m >> s) + 1) >> 1;
+    let ts = SINPIF_S[((iq + 32) & 127) as usize]; // cosine by quarter-turn shift
+    let tc = SINPIF_S[(iq & 127) as usize];
+    #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+    let r = ts + (ts * z2) * fc - (tc * z) * fs;
+    #[allow(clippy::cast_possible_truncation)]
+    return r as f32;
+}
+
 /// Cosine
 #[must_use]
 #[inline]
