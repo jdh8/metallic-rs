@@ -13,55 +13,55 @@ use super::pow::poly_dd;
 const SIN_KERNEL: [DoubleDouble; 13] = [
     DoubleDouble {
         high: 1.0,
-        low: -5.0987018554029683e-39,
+        low: -5.098_701_855_402_968_3e-39,
     },
     DoubleDouble {
-        high: -0.16666666666666666,
-        low: -9.25185853854297e-18,
+        high: -0.166_666_666_666_666_66,
+        low: -9.251_858_538_542_97e-18,
     },
     DoubleDouble {
-        high: 0.008333333333333333,
-        low: 1.156482317317869e-19,
+        high: 0.008_333_333_333_333_333,
+        low: 1.156_482_317_317_869e-19,
     },
     DoubleDouble {
-        high: -0.0001984126984126984,
-        low: -1.7209558292516092e-22,
+        high: -0.000_198_412_698_412_698_4,
+        low: -1.720_955_829_251_609_2e-22,
     },
     DoubleDouble {
-        high: 2.7557319223985893e-06,
-        low: -1.858393275722529e-22,
+        high: 2.755_731_922_398_589_3e-06,
+        low: -1.858_393_275_722_529e-22,
     },
     DoubleDouble {
-        high: -2.505210838544172e-08,
-        low: 1.4488159186621237e-24,
+        high: -2.505_210_838_544_172e-08,
+        low: 1.448_815_918_662_123_7e-24,
     },
     DoubleDouble {
-        high: 1.6059043836821613e-10,
-        low: 1.2572222845296136e-26,
+        high: 1.605_904_383_682_161_3e-10,
+        low: 1.257_222_284_529_613_6e-26,
     },
     DoubleDouble {
-        high: -7.647163731819815e-13,
-        low: -4.606435501111483e-29,
+        high: -7.647_163_731_819_815e-13,
+        low: -4.606_435_501_111_483e-29,
     },
     DoubleDouble {
-        high: 2.81145725434532e-15,
-        low: 5.160177200634138e-32,
+        high: 2.811_457_254_345_32e-15,
+        low: 5.160_177_200_634_138e-32,
     },
     DoubleDouble {
-        high: -8.220635246177278e-18,
-        low: -5.582599714358412e-34,
+        high: -8.220_635_246_177_278e-18,
+        low: -5.582_599_714_358_412e-34,
     },
     DoubleDouble {
-        high: 1.95729403918814e-20,
-        low: 1.4084261345322546e-36,
+        high: 1.957_294_039_188_14e-20,
+        low: 1.408_426_134_532_254_6e-36,
     },
     DoubleDouble {
-        high: -3.868105107347916e-23,
-        low: 2.2080719840678897e-39,
+        high: -3.868_105_107_347_916e-23,
+        low: 2.208_071_984_067_889_7e-39,
     },
     DoubleDouble {
-        high: 6.41022925531651e-26,
-        low: 2.880120311859419e-42,
+        high: 6.410_229_255_316_51e-26,
+        low: 2.880_120_311_859_419e-42,
     },
 ];
 
@@ -69,55 +69,55 @@ const SIN_KERNEL: [DoubleDouble; 13] = [
 const COS_KERNEL: [DoubleDouble; 13] = [
     DoubleDouble {
         high: 1.0,
-        low: -1.3761459043912074e-37,
+        low: -1.376_145_904_391_207_4e-37,
     },
     DoubleDouble {
         high: -0.5,
-        low: 7.540540356661797e-35,
+        low: 7.540_540_356_661_797e-35,
     },
     DoubleDouble {
-        high: 0.041666666666666664,
-        low: 2.312964634635736e-18,
+        high: 0.041_666_666_666_666_664,
+        low: 2.312_964_634_635_736e-18,
     },
     DoubleDouble {
-        high: -0.001388888888888889,
-        low: 5.300543954397993e-20,
+        high: -0.001_388_888_888_888_889,
+        low: 5.300_543_954_397_993e-20,
     },
     DoubleDouble {
-        high: 2.48015873015873e-05,
-        low: 2.1511943343054862e-23,
+        high: 2.480_158_730_158_73e-05,
+        low: 2.151_194_334_305_486_2e-23,
     },
     DoubleDouble {
-        high: -2.755731922398589e-07,
-        low: -2.376766475147913e-23,
+        high: -2.755_731_922_398_589e-07,
+        low: -2.376_766_475_147_913e-23,
     },
     DoubleDouble {
-        high: 2.08767569878681e-09,
-        low: -1.2108731843273183e-25,
+        high: 2.087_675_698_786_81e-09,
+        low: -1.210_873_184_327_318_3e-25,
     },
     DoubleDouble {
-        high: -1.1470745597729723e-11,
-        low: -1.5011050364192592e-28,
+        high: -1.147_074_559_772_972_3e-11,
+        low: -1.501_105_036_419_259_2e-28,
     },
     DoubleDouble {
-        high: 4.779477332386843e-14,
-        low: -3.9852328581359e-31,
+        high: 4.779_477_332_386_843e-14,
+        low: -3.985_232_858_135_9e-31,
     },
     DoubleDouble {
-        high: -1.561920696737958e-16,
-        low: 7.95243117129581e-33,
+        high: -1.561_920_696_737_958e-16,
+        low: 7.952_431_171_295_81e-33,
     },
     DoubleDouble {
-        high: 4.110317442059798e-19,
-        low: 1.3835401064045195e-35,
+        high: 4.110_317_442_059_798e-19,
+        low: 1.383_540_106_404_519_5e-35,
     },
     DoubleDouble {
-        high: -8.89661576927929e-22,
-        low: 1.9801804476213101e-38,
+        high: -8.896_615_769_279_29e-22,
+        low: 1.980_180_447_621_310_1e-38,
     },
     DoubleDouble {
-        high: 1.6018249140912734e-24,
-        low: -7.728223090239399e-41,
+        high: 1.601_824_914_091_273_4e-24,
+        low: -7.728_223_090_239_399e-41,
     },
 ];
 
@@ -127,24 +127,24 @@ const COS_KERNEL: [DoubleDouble; 13] = [
 /// `sin(r)/r` ≈ 2⁻⁷⁴, so once evaluated in plain `f64` the fast kernel is good
 /// to ≈2⁻⁶⁰ — enough for the Ziv gate, far cheaper than the double-double Horner.
 const SIN_TAIL: [f64; 6] = [
-    -0.0001984126984126984,
-    2.7557319223985634e-06,
-    -2.505210838495563e-08,
-    1.6059043500527755e-10,
-    -7.647058546227501e-13,
-    2.7962863666189794e-15,
+    -0.000_198_412_698_412_698_4,
+    2.755_731_922_398_563_4e-06,
+    -2.505_210_838_495_563e-08,
+    1.605_904_350_052_775_5e-10,
+    -7.647_058_546_227_501e-13,
+    2.796_286_366_618_979_4e-15,
 ];
 
 /// Fast-path tail of `cos(r)`: the `u³` remainder after the three exact leading
 /// terms (`cos(r) = 1 − u/2 + u²/24 + u³·COS_TAIL(u)`).  Approximation error on
 /// `cos(r)` ≈ 2⁻⁷⁰.  See [`SIN_TAIL`].
 const COS_TAIL: [f64; 6] = [
-    -0.001388888888888889,
-    2.4801587301586814e-05,
-    -2.755731922306274e-07,
-    2.087675634918288e-09,
-    -1.1470545821738428e-11,
-    4.750660993437302e-14,
+    -0.001_388_888_888_888_889,
+    2.480_158_730_158_681_4e-05,
+    -2.755_731_922_306_274e-07,
+    2.087_675_634_918_288e-09,
+    -1.147_054_582_173_842_8e-11,
+    4.750_660_993_437_302e-14,
 ];
 
 /// Leading 6 terms of `tan(r)/r = Σ bₖ·v^k` (`v = r²`), as double-doubles,
@@ -158,24 +158,24 @@ const TAN_LEADS: [DoubleDouble; 6] = [
         low: 0.0,
     },
     DoubleDouble {
-        high: 0.3333333333333333,
-        low: 1.850371707708594e-17,
+        high: 0.333_333_333_333_333_3,
+        low: 1.850_371_707_708_594e-17,
     },
     DoubleDouble {
-        high: 0.13333333333333333,
-        low: 1.8503717077085942e-18,
+        high: 0.133_333_333_333_333_33,
+        low: 1.850_371_707_708_594_2e-18,
     },
     DoubleDouble {
-        high: 0.05396825396825397,
-        low: -2.5552752154071065e-18,
+        high: 0.053_968_253_968_253_97,
+        low: -2.555_275_215_407_106_5e-18,
     },
     DoubleDouble {
-        high: 0.021869488536155203,
-        low: -1.7377829530067485e-19,
+        high: 0.021_869_488_536_155_203,
+        low: -1.737_782_953_006_748_5e-19,
     },
     DoubleDouble {
-        high: 0.008863235529902197,
-        low: -7.63300580171831e-19,
+        high: 0.008_863_235_529_902_197,
+        low: -7.633_005_801_718_31e-19,
     },
 ];
 
@@ -184,21 +184,21 @@ const TAN_LEADS: [DoubleDouble; 6] = [
 /// `[−π/4, π/4]` octant the assembled kernel reaches ≈2⁻⁶¹ relative — enough that
 /// the reciprocal of the odd-quadrant path still clears the `2⁻⁵⁹` gate.
 const TAN_TAIL: [f64; 15] = [
-    0.003592128036572481,
-    0.001455834387051282,
-    0.0005900274409499761,
-    0.0002391291140349121,
-    9.691538474772203e-05,
-    3.9278246728957075e-05,
-    1.591965246822141e-05,
-    6.44674860195779e-06,
-    2.6377035355686352e-06,
-    9.839484146788608e-07,
-    6.078285342856009e-07,
-    -1.204289917739238e-07,
-    3.9928830670121667e-07,
-    -2.0027017684620337e-07,
-    9.276165196030918e-08,
+    0.003_592_128_036_572_481,
+    0.001_455_834_387_051_282,
+    0.000_590_027_440_949_976_1,
+    0.000_239_129_114_034_912_1,
+    9.691_538_474_772_203e-05,
+    3.927_824_672_895_707_5e-05,
+    1.591_965_246_822_141e-05,
+    6.446_748_601_957_79e-06,
+    2.637_703_535_568_635_2e-06,
+    9.839_484_146_788_608e-07,
+    6.078_285_342_856_009e-07,
+    -1.204_289_917_739_238e-07,
+    3.992_883_067_012_166_7e-07,
+    -2.002_701_768_462_033_7e-07,
+    9.276_165_196_030_918e-08,
 ];
 
 /// Relative half-width of the trig fast-path Ziv gate.  Over a dense sweep of
@@ -206,7 +206,7 @@ const TAN_TAIL: [f64; 15] = [
 /// (cos) and ≈2⁻⁶⁵ (sin); `2⁻⁵⁹` keeps a ~6× margin over that while the gate
 /// stays tight enough that only a few percent of inputs fall through to the
 /// accurate kernel.
-const TRIG_ZIV_EPS: f64 = 1.734723475976807e-18; // 2⁻⁵⁹
+const TRIG_ZIV_EPS: f64 = 1.734_723_475_976_807e-18; // 2⁻⁵⁹
 
 /// `1` as a double-double.
 const ONE: DoubleDouble = DoubleDouble {
@@ -218,27 +218,27 @@ const ONE: DoubleDouble = DoubleDouble {
 /// `sin(r)/r`.  Carried in double-double so the term does not cap the fast
 /// kernel at the `f64` rounding of `1/120` (≈2⁻⁵⁹).
 const FRAC_1_120: DoubleDouble = DoubleDouble {
-    high: 0.008333333333333333,
-    low: 1.1564823173178714e-19,
+    high: 0.008_333_333_333_333_333,
+    low: 1.156_482_317_317_871_4e-19,
 };
 
 /// `−1/6` as a double-double — the exact `u` coefficient peeled from
 /// `sin(r)/r`, carried as a constant so the term is one double-double multiply
 /// instead of `Div<f64>`'s two serial divisions.  See [`FRAC_1_120`].
 const NEG_FRAC_1_6: DoubleDouble = DoubleDouble {
-    high: -0.16666666666666666,
-    low: -9.25185853854297e-18,
+    high: -0.166_666_666_666_666_66,
+    low: -9.251_858_538_542_97e-18,
 };
 
 /// `1/24` as a double-double — the exact `u²` coefficient peeled from `cos(r)`.
 /// See [`FRAC_1_120`].
 const FRAC_1_24: DoubleDouble = DoubleDouble {
-    high: 0.041666666666666664,
-    low: 2.3129646346357427e-18,
+    high: 0.041_666_666_666_666_664,
+    low: 2.312_964_634_635_742_7e-18,
 };
 
 /// 2/π as f64, for the medium-range quotient `round(x·2/π)`.
-const FRAC_2_PI_F64: f64 = 0.6366197723675814;
+const FRAC_2_PI_F64: f64 = 0.636_619_772_367_581_4;
 
 /// π/2 in four words (≈2⁻¹⁵⁶ relative); each of `PIO2_1..PIO2_4` has ≥21 low
 /// mantissa bits clear, so `q·PIO2_k` is exact for `|q| < 2²¹` (the medium range
@@ -246,15 +246,15 @@ const FRAC_2_PI_F64: f64 = 0.6366197723675814;
 /// residual), the fourth folds into the low part, leaving the reduced angle
 /// accurate to ≈2⁻¹³⁰ — past the ≈117-bit ceiling of a 3-word split, which is what
 /// keeps the relative Ziv gate sound near a multiple of π/2.
-const PIO2_1: f64 = 1.5707963267341256;
-const PIO2_2: f64 = 6.077100506303966e-11;
-const PIO2_3: f64 = 2.0222662487111665e-21;
-const PIO2_4: f64 = 8.478427660348229e-32;
+const PIO2_1: f64 = 1.570_796_326_734_125_6;
+const PIO2_2: f64 = 6.077_100_506_303_966e-11;
+const PIO2_3: f64 = 2.022_266_248_711_166_5e-21;
+const PIO2_4: f64 = 8.478_427_660_348_229e-32;
 
 /// π/2 as a double-double, for the Payne–Hanek reconstruction.
 const PIO2: DoubleDouble = DoubleDouble {
-    high: 1.5707963267948966,
-    low: 6.123233995736766e-17,
+    high: 1.570_796_326_794_896_6,
+    low: 6.123_233_995_736_766e-17,
 };
 
 /// Below this magnitude `sin(x)` and `tan(x)` round to `x`, and `cos(x)` rounds
@@ -262,7 +262,7 @@ const PIO2: DoubleDouble = DoubleDouble {
 /// under half an ulp here, so the fast return is correctly rounded (with a ~6×
 /// margin) — the same short-circuit `core-math` takes, sparing the kernel on the
 /// roughly half of all `f64` bit patterns that are this small.
-const SMALL: f64 = 7.450580596923828e-9; // 2⁻²⁷
+const SMALL: f64 = 7.450_580_596_923_828e-9; // 2⁻²⁷
 
 /// Fractional bits of 2/π, most-significant 64-bit group first (`FRAC_2_PI[0]`
 /// holds bits 1..64).  Used by [`payne_hanek`] for `|x| ≥ 2²⁰`.
@@ -907,256 +907,256 @@ const SINPI_TABLE: [DoubleDouble; 65] = [
         low: 0.0,
     },
     DoubleDouble {
-        high: 0.024541228522912288,
-        low: -9.186849012577878e-20,
+        high: 0.024_541_228_522_912_288,
+        low: -9.186_849_012_577_878e-20,
     },
     DoubleDouble {
-        high: 0.049067674327418015,
-        low: -6.79610372051828e-19,
+        high: 0.049_067_674_327_418_015,
+        low: -6.796_103_720_518_28e-19,
     },
     DoubleDouble {
-        high: 0.07356456359966743,
-        low: -2.7784941506273593e-18,
+        high: 0.073_564_563_599_667_43,
+        low: -2.778_494_150_627_359_3e-18,
     },
     DoubleDouble {
-        high: 0.0980171403295606,
-        low: -1.634582362244256e-18,
+        high: 0.098_017_140_329_560_6,
+        low: -1.634_582_362_244_256e-18,
     },
     DoubleDouble {
-        high: 0.1224106751992162,
-        low: 2.8354501489965335e-18,
+        high: 0.122_410_675_199_216_2,
+        low: 2.835_450_148_996_533_5e-18,
     },
     DoubleDouble {
-        high: 0.14673047445536175,
-        low: 3.726947147046568e-18,
+        high: 0.146_730_474_455_361_75,
+        low: 3.726_947_147_046_568e-18,
     },
     DoubleDouble {
-        high: 0.17096188876030122,
-        low: 9.19199801817591e-18,
+        high: 0.170_961_888_760_301_22,
+        low: 9.191_998_018_175_91e-18,
     },
     DoubleDouble {
-        high: 0.19509032201612828,
-        low: -7.991079068461731e-18,
+        high: 0.195_090_322_016_128_28,
+        low: -7.991_079_068_461_731e-18,
     },
     DoubleDouble {
-        high: 0.2191012401568698,
-        low: -3.6513812299150776e-19,
+        high: 0.219_101_240_156_869_8,
+        low: -3.651_381_229_915_077_6e-19,
     },
     DoubleDouble {
-        high: 0.2429801799032639,
-        low: -8.751431529719663e-18,
+        high: 0.242_980_179_903_263_9,
+        low: -8.751_431_529_719_663e-18,
     },
     DoubleDouble {
-        high: 0.26671275747489837,
-        low: 2.0941222578826688e-17,
+        high: 0.266_712_757_474_898_37,
+        low: 2.094_122_257_882_668_8e-17,
     },
     DoubleDouble {
-        high: 0.2902846772544624,
-        low: -1.892797870777425e-17,
+        high: 0.290_284_677_254_462_4,
+        low: -1.892_797_870_777_425e-17,
     },
     DoubleDouble {
-        high: 0.31368174039889146,
-        low: 1.4560447299968912e-17,
+        high: 0.313_681_740_398_891_46,
+        low: 1.456_044_729_996_891_2e-17,
     },
     DoubleDouble {
-        high: 0.33688985339222005,
-        low: -4.200094003347509e-19,
+        high: 0.336_889_853_392_220_05,
+        low: -4.200_094_003_347_509e-19,
     },
     DoubleDouble {
-        high: 0.35989503653498817,
-        low: -1.7601687123839282e-17,
+        high: 0.359_895_036_534_988_17,
+        low: -1.760_168_712_383_928_2e-17,
     },
     DoubleDouble {
-        high: 0.3826834323650898,
-        low: -1.0050772696461588e-17,
+        high: 0.382_683_432_365_089_8,
+        low: -1.005_077_269_646_158_8e-17,
     },
     DoubleDouble {
-        high: 0.40524131400498986,
-        low: 9.911140194289988e-18,
+        high: 0.405_241_314_004_989_86,
+        low: 9.911_140_194_289_988e-18,
     },
     DoubleDouble {
-        high: 0.4275550934302821,
-        low: 9.411189816295473e-18,
+        high: 0.427_555_093_430_282_1,
+        low: 9.411_189_816_295_473e-18,
     },
     DoubleDouble {
-        high: 0.4496113296546066,
-        low: 4.883192423203524e-18,
+        high: 0.449_611_329_654_606_6,
+        low: 4.883_192_423_203_524e-18,
     },
     DoubleDouble {
-        high: 0.47139673682599764,
-        low: 6.516678136069013e-18,
+        high: 0.471_396_736_825_997_64,
+        low: 6.516_678_136_069_013e-18,
     },
     DoubleDouble {
-        high: 0.49289819222978404,
-        low: -1.0257831676562186e-18,
+        high: 0.492_898_192_229_784_04,
+        low: -1.025_783_167_656_218_6e-18,
     },
     DoubleDouble {
-        high: 0.5141027441932218,
-        low: -4.5712707523615624e-17,
+        high: 0.514_102_744_193_221_8,
+        low: -4.571_270_752_361_562_4e-17,
     },
     DoubleDouble {
-        high: 0.5349976198870973,
-        low: -5.3683132708358134e-17,
+        high: 0.534_997_619_887_097_3,
+        low: -5.368_313_270_835_813_4e-17,
     },
     DoubleDouble {
-        high: 0.5555702330196022,
-        low: 4.709410940561677e-17,
+        high: 0.555_570_233_019_602_2,
+        low: 4.709_410_940_561_677e-17,
     },
     DoubleDouble {
-        high: 0.5758081914178453,
-        low: -3.7909495458942734e-17,
+        high: 0.575_808_191_417_845_3,
+        low: -3.790_949_545_894_273_4e-17,
     },
     DoubleDouble {
-        high: 0.5956993044924334,
-        low: -1.3438641936579467e-17,
+        high: 0.595_699_304_492_433_4,
+        low: -1.343_864_193_657_946_7e-17,
     },
     DoubleDouble {
-        high: 0.6152315905806268,
-        low: 2.623141776726695e-17,
+        high: 0.615_231_590_580_626_8,
+        low: 2.623_141_776_726_695e-17,
     },
     DoubleDouble {
-        high: 0.6343932841636455,
-        low: 1.0420901929280035e-17,
+        high: 0.634_393_284_163_645_5,
+        low: 1.042_090_192_928_003_5e-17,
     },
     DoubleDouble {
-        high: 0.6531728429537768,
-        low: 8.569564206002624e-18,
+        high: 0.653_172_842_953_776_8,
+        low: 8.569_564_206_002_624e-18,
     },
     DoubleDouble {
-        high: 0.6715589548470184,
-        low: -4.048903774929669e-17,
+        high: 0.671_558_954_847_018_4,
+        low: -4.048_903_774_929_669e-17,
     },
     DoubleDouble {
-        high: 0.6895405447370669,
-        low: -1.588932329480679e-17,
+        high: 0.689_540_544_737_066_9,
+        low: -1.588_932_329_480_679e-17,
     },
     DoubleDouble {
-        high: 0.7071067811865476,
-        low: -4.833646656726457e-17,
+        high: 0.707_106_781_186_547_6,
+        low: -4.833_646_656_726_457e-17,
     },
     DoubleDouble {
-        high: 0.7242470829514669,
-        low: 2.9198471334403004e-17,
+        high: 0.724_247_082_951_466_9,
+        low: 2.919_847_133_440_300_4e-17,
     },
     DoubleDouble {
-        high: 0.7409511253549591,
-        low: -1.4708616952297345e-17,
+        high: 0.740_951_125_354_959_1,
+        low: -1.470_861_695_229_734_5e-17,
     },
     DoubleDouble {
-        high: 0.7572088465064846,
-        low: -1.9909098777335502e-17,
+        high: 0.757_208_846_506_484_6,
+        low: -1.990_909_877_733_550_2e-17,
     },
     DoubleDouble {
-        high: 0.773010453362737,
-        low: -3.256590703364977e-17,
+        high: 0.773_010_453_362_737,
+        low: -3.256_590_703_364_977e-17,
     },
     DoubleDouble {
-        high: 0.7883464276266062,
-        low: 3.439699315405971e-17,
+        high: 0.788_346_427_626_606_2,
+        low: 3.439_699_315_405_971e-17,
     },
     DoubleDouble {
-        high: 0.8032075314806449,
-        low: -3.306060980481491e-17,
+        high: 0.803_207_531_480_644_9,
+        low: -3.306_060_980_481_491e-17,
     },
     DoubleDouble {
-        high: 0.8175848131515837,
-        low: -1.4883149812426772e-17,
+        high: 0.817_584_813_151_583_7,
+        low: -1.488_314_981_242_677_2e-17,
     },
     DoubleDouble {
-        high: 0.8314696123025452,
-        low: 1.4073856984728024e-18,
+        high: 0.831_469_612_302_545_2,
+        low: 1.407_385_698_472_802_4e-18,
     },
     DoubleDouble {
-        high: 0.8448535652497071,
-        low: -4.363136029687964e-17,
+        high: 0.844_853_565_249_707_1,
+        low: -4.363_136_029_687_964e-17,
     },
     DoubleDouble {
-        high: 0.8577286100002721,
-        low: -4.818344793633662e-17,
+        high: 0.857_728_610_000_272_1,
+        low: -4.818_344_793_633_662e-17,
     },
     DoubleDouble {
-        high: 0.8700869911087115,
-        low: -4.188851086854997e-17,
+        high: 0.870_086_991_108_711_5,
+        low: -4.188_851_086_854_997e-17,
     },
     DoubleDouble {
-        high: 0.881921264348355,
-        low: -1.9843248405890562e-17,
+        high: 0.881_921_264_348_355,
+        low: -1.984_324_840_589_056_2e-17,
     },
     DoubleDouble {
-        high: 0.8932243011955153,
-        low: -4.116123915190891e-18,
+        high: 0.893_224_301_195_515_3,
+        low: -4.116_123_915_190_891e-18,
     },
     DoubleDouble {
-        high: 0.9039892931234433,
-        low: -6.609754468748431e-18,
+        high: 0.903_989_293_123_443_3,
+        low: -6.609_754_468_748_431e-18,
     },
     DoubleDouble {
-        high: 0.9142097557035307,
-        low: -3.631618252781442e-17,
+        high: 0.914_209_755_703_530_7,
+        low: -3.631_618_252_781_442e-17,
     },
     DoubleDouble {
-        high: 0.9238795325112867,
-        low: 1.7645047084336677e-17,
+        high: 0.923_879_532_511_286_7,
+        low: 1.764_504_708_433_667_7e-17,
     },
     DoubleDouble {
-        high: 0.9329927988347388,
-        low: 4.2041415555384355e-17,
+        high: 0.932_992_798_834_738_8,
+        low: 4.204_141_555_538_435_5e-17,
     },
     DoubleDouble {
-        high: 0.9415440651830208,
-        low: -2.789637954769834e-17,
+        high: 0.941_544_065_183_020_8,
+        low: -2.789_637_954_769_834e-17,
     },
     DoubleDouble {
-        high: 0.9495281805930367,
-        low: -7.55441519280433e-18,
+        high: 0.949_528_180_593_036_7,
+        low: -7.554_415_192_804_33e-18,
     },
     DoubleDouble {
-        high: 0.9569403357322088,
-        low: 4.05538698618757e-17,
+        high: 0.956_940_335_732_208_8,
+        low: 4.055_386_986_187_57e-17,
     },
     DoubleDouble {
-        high: 0.9637760657954398,
-        low: 2.646395056122003e-17,
+        high: 0.963_776_065_795_439_8,
+        low: 2.646_395_056_122_003e-17,
     },
     DoubleDouble {
-        high: 0.970031253194544,
-        low: 1.8365300348428844e-17,
+        high: 0.970_031_253_194_544,
+        low: 1.836_530_034_842_884_4e-17,
     },
     DoubleDouble {
-        high: 0.9757021300385286,
-        low: -2.5572556081259686e-17,
+        high: 0.975_702_130_038_528_6,
+        low: -2.557_255_608_125_968_6e-17,
     },
     DoubleDouble {
-        high: 0.9807852804032304,
-        low: 1.8546939997825006e-17,
+        high: 0.980_785_280_403_230_4,
+        low: 1.854_693_999_782_500_6e-17,
     },
     DoubleDouble {
-        high: 0.9852776423889412,
-        low: 2.3155637027900207e-17,
+        high: 0.985_277_642_388_941_2,
+        low: 2.315_563_702_790_020_7e-17,
     },
     DoubleDouble {
-        high: 0.989176509964781,
-        low: -4.098730993704711e-17,
+        high: 0.989_176_509_964_781,
+        low: -4.098_730_993_704_711e-17,
     },
     DoubleDouble {
-        high: 0.99247953459871,
-        low: 3.1093055095428906e-17,
+        high: 0.992_479_534_598_71,
+        low: 3.109_305_509_542_890_6e-17,
     },
     DoubleDouble {
-        high: 0.9951847266721969,
-        low: -4.248691367830441e-17,
+        high: 0.995_184_726_672_196_9,
+        low: -4.248_691_367_830_441e-17,
     },
     DoubleDouble {
-        high: 0.9972904566786902,
-        low: 9.164769537110173e-18,
+        high: 0.997_290_456_678_690_2,
+        low: 9.164_769_537_110_173e-18,
     },
     DoubleDouble {
-        high: 0.9987954562051724,
-        low: -1.2291693337075465e-17,
+        high: 0.998_795_456_205_172_4,
+        low: -1.229_169_333_707_546_5e-17,
     },
     DoubleDouble {
-        high: 0.9996988186962042,
-        low: -2.985148640379975e-17,
+        high: 0.999_698_818_696_204_2,
+        low: -2.985_148_640_379_975e-17,
     },
     DoubleDouble {
         high: 1.0,
@@ -1169,25 +1169,25 @@ const SINPI_TABLE: [DoubleDouble; 65] = [
 /// leading `C1` is double-double, the rest `f64`.  Residual angle `|πd/128| ≤
 /// π/256`, so the dropped `d⁸` term is ≈2⁻⁶⁶.  See [`abs_sinpi_dd_lean`].
 const SINPI_C1: DoubleDouble = DoubleDouble {
-    high: -0.0003011964233730883,
-    low: -1.9120164516417576e-20,
+    high: -0.000_301_196_423_373_088_3,
+    low: -1.912_016_451_641_757_6e-20,
 };
-const SINPI_C2: f64 = 1.5119880908790113e-8;
-const SINPI_C3: f64 = -3.036036034369748e-13;
+const SINPI_C2: f64 = 1.511_988_090_879_011_3e-8;
+const SINPI_C3: f64 = -3.036_036_034_369_748e-13;
 
 /// Taylor coefficients of `sin(πd/128)/d = S0 + d²(S1 + d²(S2 + d²·S3))`
 /// (`Sₖ = (−1)ᵏ(π/128)^{2k+1}/(2k+1)!`); `S0`, `S1` double-double, the rest `f64`.
 /// See [`SINPI_C1`].
 const SINPI_S0: DoubleDouble = DoubleDouble {
-    high: 0.02454369260617026,
-    low: 9.567553118338697e-19,
+    high: 0.024_543_692_606_170_26,
+    low: 9.567_553_118_338_697e-19,
 };
 const SINPI_S1: DoubleDouble = DoubleDouble {
-    high: -2.4641574764489986e-6,
-    low: 1.0807811177153324e-22,
+    high: -2.464_157_476_448_998_6e-6,
+    low: 1.080_781_117_715_332_4e-22,
 };
-const SINPI_S2: f64 = 7.421954185344935e-11;
-const SINPI_S3: f64 = -1.064507645268961e-15;
+const SINPI_S2: f64 = 7.421_954_185_344_935e-11;
+const SINPI_S3: f64 = -1.064_507_645_268_961e-15;
 
 /// `sin(πx)` as a double-double for `|x| < 2⁵²`, where `x − q/2` is exact — the
 /// accurate ≈2⁻¹²² kernel for the `lgamma` middle Ziv tier ([`abs_sinpi_dd`]).
@@ -1264,12 +1264,498 @@ pub(super) fn abs_sinpi_dd_lean(x: f64) -> DoubleDouble {
     sg + bracket * d
 }
 
-/// Ziv gate for [`sinpi`]'s lean table leg, a *relative* bound on the result.
-/// The kernel's worst slip is the dropped `d⁸` cosine term ≈2⁻⁶⁶ of the unit
-/// result scale; `2⁻⁶²` bounds it with margin (certified by
-/// `ziv_soundness::sinpi_fast_leg_is_sound`), and the leading `π·f` term is
-/// relatively exact near the zeros, so the bound holds across the band.
-const SINPI_ZIV_EPS: f64 = crate::exp2i(-62);
+/// sin(πi/64), i = 0..=32, as (short-high, low) — CORE-MATH sinpi `Sn`; the ≤25-bit highs keep the cross products below exact.
+const SINCOSN_SN: [DoubleDouble; 33] = [
+    DoubleDouble {
+        high: 0.0,
+        low: 0.0,
+    },
+    DoubleDouble {
+        high: 0.049_067_676_067_352_295,
+        low: -1.739_934_280_666_92e-09,
+    },
+    DoubleDouble {
+        high: 0.098_017_141_222_953_8,
+        low: -8.933_931_943_925_232e-10,
+    },
+    DoubleDouble {
+        high: 0.146_730_467_677_116_4,
+        low: 6.778_245_357_615_882e-09,
+    },
+    DoubleDouble {
+        high: 0.195_090_323_686_599_73,
+        low: -1.670_471_463_597_027_6e-09,
+    },
+    DoubleDouble {
+        high: 0.242_980_182_170_867_92,
+        low: -2.267_604_029_973_601e-09,
+    },
+    DoubleDouble {
+        high: 0.290_284_678_339_958_2,
+        low: -1.085_495_823_281_776_4e-09,
+    },
+    DoubleDouble {
+        high: 0.336_889_848_113_06,
+        low: 5.279_160_053_130_66e-09,
+    },
+    DoubleDouble {
+        high: 0.382_683_426_141_738_9,
+        low: 6.223_350_880_126_897e-09,
+    },
+    DoubleDouble {
+        high: 0.427_555_099_129_676_8,
+        low: -5.699_394_724_526_69e-09,
+    },
+    DoubleDouble {
+        high: 0.471_396_744_251_251_2,
+        low: -7.425_253_572_146_738e-09,
+    },
+    DoubleDouble {
+        high: 0.514_102_742_075_920_1,
+        low: 2.117_301_621_613_225e-09,
+    },
+    DoubleDouble {
+        high: 0.555_570_229_887_962_3,
+        low: 3.131_639_883_434_237_2e-09,
+    },
+    DoubleDouble {
+        high: 0.595_699_310_302_734_4,
+        low: -5.810_301_031_532_963e-09,
+    },
+    DoubleDouble {
+        high: 0.634_393_289_685_249_3,
+        low: -5.521_603_830_398_11e-09,
+    },
+    DoubleDouble {
+        high: 0.671_558_961_272_239_7,
+        low: -6.425_221_284_433_217e-09,
+    },
+    DoubleDouble {
+        high: 0.707_106_783_986_091_6,
+        low: -2.799_544_089_368_687e-09,
+    },
+    DoubleDouble {
+        high: 0.740_951_120_853_424_1,
+        low: 4.501_535_018_909_992e-09,
+    },
+    DoubleDouble {
+        high: 0.773_010_447_621_345_5,
+        low: 5.741_391_440_791_375e-09,
+    },
+    DoubleDouble {
+        high: 0.803_207_531_571_388_2,
+        low: -9.074_333_482_222_974e-11,
+    },
+    DoubleDouble {
+        high: 0.831_469_610_333_442_7,
+        low: 1.969_102_549_090_507e-09,
+    },
+    DoubleDouble {
+        high: 0.857_728_615_403_175_4,
+        low: -5.402_903_284_101_636e-09,
+    },
+    DoubleDouble {
+        high: 0.881_921_261_548_996,
+        low: 2.799_359_058_033_069_2e-09,
+    },
+    DoubleDouble {
+        high: 0.903_989_300_131_797_8,
+        low: -7.008_354_458_941_143_6e-09,
+    },
+    DoubleDouble {
+        high: 0.923_879_534_006_118_8,
+        low: -1.494_832_018_285_879_3e-09,
+    },
+    DoubleDouble {
+        high: 0.941_544_070_839_881_9,
+        low: -5.656_861_118_560_147e-09,
+    },
+    DoubleDouble {
+        high: 0.956_940_338_015_556_3,
+        low: -2.283_347_470_513_420_7e-09,
+    },
+    DoubleDouble {
+        high: 0.970_031_246_542_930_6,
+        low: 6.651_613_389_576_641e-09,
+    },
+    DoubleDouble {
+        high: 0.980_785_280_466_079_7,
+        low: -6.284_926_278_788_026e-11,
+    },
+    DoubleDouble {
+        high: 0.989_176_511_764_526_4,
+        low: -1.799_745_393_735_826_3e-09,
+    },
+    DoubleDouble {
+        high: 0.995_184_719_562_530_5,
+        low: 7.109_666_368_666_712e-09,
+    },
+    DoubleDouble {
+        high: 0.998_795_449_733_734_1,
+        low: 6.471_438_261_855_397e-09,
+    },
+    DoubleDouble {
+        high: 1.0,
+        low: 0.0,
+    },
+];
+/// sin(πj/2048), j = 0..=31, short-high — CORE-MATH sinpi `Sm`.
+const SINCOSN_SM: [DoubleDouble; 32] = [
+    DoubleDouble {
+        high: 0.0,
+        low: 0.0,
+    },
+    DoubleDouble {
+        high: 0.001_533_985_137_939_453_1,
+        low: -4.951_654_687_512_696e-09,
+    },
+    DoubleDouble {
+        high: 0.003_067_955_374_717_712_4,
+        low: 1.388_248_263_867_801_6e-09,
+    },
+    DoubleDouble {
+        high: 0.004_601_925_611_495_972,
+        low: 5.089_525_990_852_142e-10,
+    },
+    DoubleDouble {
+        high: 0.006_135_880_947_113_037,
+        low: 3.702_041_438_250_265_2e-09,
+    },
+    DoubleDouble {
+        high: 0.007_669_821_381_568_909,
+        low: 7.357_962_188_783_592e-09,
+    },
+    DoubleDouble {
+        high: 0.009_203_761_816_024_78,
+        low: -7.033_964_960_958_335e-09,
+    },
+    DoubleDouble {
+        high: 0.010_737_657_546_997_07,
+        low: 1.620_267_421_101_041_4e-09,
+    },
+    DoubleDouble {
+        high: 0.012_271_538_376_808_167,
+        low: -9.108_824_042_449_799e-11,
+    },
+    DoubleDouble {
+        high: 0.013_805_389_404_296_875,
+        low: -8.762_364_842_765_772e-10,
+    },
+    DoubleDouble {
+        high: 0.015_339_210_629_463_196,
+        low: -4.344_475_094_756_629_4e-09,
+    },
+    DoubleDouble {
+        high: 0.016_872_987_151_145_935,
+        low: 7.961_357_789_957_462e-10,
+    },
+    DoubleDouble {
+        high: 0.018_406_733_870_506_287,
+        low: -3.964_701_465_693_727e-09,
+    },
+    DoubleDouble {
+        high: 0.019_940_435_886_383_057,
+        low: -7.334_868_616_996_781e-09,
+    },
+    DoubleDouble {
+        high: 0.021_474_078_297_615_05,
+        low: 1.977_854_456_148_843_7e-09,
+    },
+    DoubleDouble {
+        high: 0.023_007_676_005_363_464,
+        low: 5.463_475_908_531_014e-09,
+    },
+    DoubleDouble {
+        high: 0.024_541_229_009_628_296,
+        low: -4.867_160_078_667_03e-10,
+    },
+    DoubleDouble {
+        high: 0.026_074_722_409_248_352,
+        low: -4.580_144_452_217_713_4e-09,
+    },
+    DoubleDouble {
+        high: 0.027_608_141_303_062_44,
+        low: 4.475_903_302_647_511e-09,
+    },
+    DoubleDouble {
+        high: 0.029_141_515_493_392_944,
+        low: -6.729_199_220_273_736e-09,
+    },
+    DoubleDouble {
+        high: 0.030_674_800_276_756_287,
+        low: 2.899_880_339_312_927_2e-09,
+    },
+    DoubleDouble {
+        high: 0.032_208_025_455_474_854,
+        low: -4.717_026_914_923_44e-11,
+    },
+    DoubleDouble {
+        high: 0.033_741_176_128_387_45,
+        low: -4.277_009_866_338_159e-09,
+    },
+    DoubleDouble {
+        high: 0.035_274_237_394_332_886,
+        low: 1.503_881_064_953_040_8e-09,
+    },
+    DoubleDouble {
+        high: 0.036_807_224_154_472_35,
+        low: -1.213_113_518_749_886e-09,
+    },
+    DoubleDouble {
+        high: 0.038_340_121_507_644_65,
+        low: -1.134_091_957_521_976_4e-09,
+    },
+    DoubleDouble {
+        high: 0.039_872_929_453_849_79,
+        low: -1.866_109_981_351_89e-09,
+    },
+    DoubleDouble {
+        high: 0.041_405_647_993_087_77,
+        low: -7.016_011_028_543_694e-09,
+    },
+    DoubleDouble {
+        high: 0.042_938_262_224_197_39,
+        low: -5.289_256_564_618_188e-09,
+    },
+    DoubleDouble {
+        high: 0.044_470_772_147_178_65,
+        low: -2.922_399_832_767_137_4e-10,
+    },
+    DoubleDouble {
+        high: 0.046_003_177_762_031_555,
+        low: 4.368_883_073_638_521e-09,
+    },
+    DoubleDouble {
+        high: 0.047_535_479_068_756_104,
+        low: 5.088_203_201_777_006_5e-09,
+    },
+];
+/// cos(πj/2048), j = 0..=31, short-high — CORE-MATH sinpi `Cm`.
+const SINCOSN_CM: [DoubleDouble; 32] = [
+    DoubleDouble {
+        high: 1.0,
+        low: 0.0,
+    },
+    DoubleDouble {
+        high: 0.999_998_822_808_265_7,
+        low: 6.434_362_238_938_694e-10,
+    },
+    DoubleDouble {
+        high: 0.999_995_291_233_062_7,
+        low: 2.576_513_427_370_955_3e-09,
+    },
+    DoubleDouble {
+        high: 0.999_989_405_274_391_2,
+        low: 5.807_537_199_303_066e-09,
+    },
+    DoubleDouble {
+        high: 0.999_981_179_833_412_2,
+        low: -4.550_811_027_753_166e-09,
+    },
+    DoubleDouble {
+        high: 0.999_970_585_107_803_3,
+        low: 1.323_170_765_261_301_7e-09,
+    },
+    DoubleDouble {
+        high: 0.999_957_650_899_887_1,
+        low: -6.347_923_218_627_816_6e-09,
+    },
+    DoubleDouble {
+        high: 0.999_942_347_407_341,
+        low: 2.268_682_899_721_971e-09,
+    },
+    DoubleDouble {
+        high: 0.999_924_704_432_487_5,
+        low: -2.593_342_946_871_322_3e-09,
+    },
+    DoubleDouble {
+        high: 0.999_904_707_074_165_3,
+        low: -5.991_312_499_669_271e-09,
+    },
+    DoubleDouble {
+        high: 0.999_882_340_431_213_4,
+        low: 7.022_999_146_726_8e-09,
+    },
+    DoubleDouble {
+        high: 0.999_857_634_305_954,
+        low: 6.699_869_852_087_387e-09,
+    },
+    DoubleDouble {
+        high: 0.999_830_588_698_387_1,
+        low: -6.902_563_723_980_372e-09,
+    },
+    DoubleDouble {
+        high: 0.999_801_173_806_190_5,
+        low: -3.918_306_258_833_877e-09,
+    },
+    DoubleDouble {
+        high: 0.999_769_404_530_525_2,
+        low: 8.206_901_141_380_857e-10,
+    },
+    DoubleDouble {
+        high: 0.999_735_280_871_391_3,
+        low: 7.389_170_418_050_369_5e-09,
+    },
+    DoubleDouble {
+        high: 0.999_698_817_729_95,
+        low: 9.662_542_689_438_906e-10,
+    },
+    DoubleDouble {
+        high: 0.999_660_000_205_04,
+        low: -3.461_080_731_579_902_5e-09,
+    },
+    DoubleDouble {
+        high: 0.999_618_828_296_661_4,
+        low: -5.801_482_779_836_294e-09,
+    },
+    DoubleDouble {
+        high: 0.999_575_302_004_814_1,
+        low: -5.958_064_891_169_264e-09,
+    },
+    DoubleDouble {
+        high: 0.999_529_421_329_498_3,
+        low: -3.828_405_127_935_921e-09,
+    },
+    DoubleDouble {
+        high: 0.999_481_186_270_713_8,
+        low: 6.954_531_594_847_833e-10,
+    },
+    DoubleDouble {
+        high: 0.999_430_611_729_621_9,
+        low: -7.174_160_115_188_023e-09,
+    },
+    DoubleDouble {
+        high: 0.999_377_667_903_900_1,
+        low: 2.484_102_734_197_949e-09,
+    },
+    DoubleDouble {
+        high: 0.999_322_384_595_871,
+        low: -7.521_470_783_466_49e-12,
+    },
+    DoubleDouble {
+        high: 0.999_264_746_904_373_2,
+        low: 3.822_212_906_968_520_6e-10,
+    },
+    DoubleDouble {
+        high: 0.999_204_754_829_406_7,
+        low: 3.788_957_157_211_7e-09,
+    },
+    DoubleDouble {
+        high: 0.999_142_423_272_132_9,
+        low: -4.547_315_934_063_858e-09,
+    },
+    DoubleDouble {
+        high: 0.999_077_722_430_229_2,
+        low: 5.322_416_195_877_063e-09,
+    },
+    DoubleDouble {
+        high: 0.999_010_682_106_018_1,
+        low: 3.748_055_265_759_627e-09,
+    },
+    DoubleDouble {
+        high: 0.998_941_287_398_338_3,
+        low: 5.788_518_532_762_837e-09,
+    },
+    DoubleDouble {
+        high: 0.998_869_553_208_351_1,
+        low: -3.294_067_547_934_001e-09,
+    },
+];
+
+/// `sin(θ)/z` and `(cos(θ) − 1)/z²` residual Taylor coefficients in the
+/// fixed-point scale `z = residual·2⁶³` of the grid unit (CORE-MATH sinpi's
+/// `sn`/`cn`, verbatim): the reduction below keeps the residual as the low
+/// bits of `x·2⁷⁵`, so the coefficients absorb the 2⁻⁶³ rescale.
+const SINPI_ZS: [f64; 3] = [
+    8.315_726_513_883_19e-23,
+    -9.584_056_014_373_668e-68,
+    3.313_749_950_895_967_4e-113,
+];
+const SINPI_ZC: [f64; 2] = [-3.457_565_372_684_991_5e-45, 1.992_459_659_126_081_7e-90];
+
+/// Taylor coefficients of `(sin(πx) − πx)/x³` for the small band
+/// `|x| ≤ 0x1.2p−5` (CORE-MATH sinpi's `c`, verbatim).
+const SINPI_SMALL_C: [f64; 4] = [
+    -5.167_712_780_049_968_5,
+    2.550_164_039_866_476,
+    -0.599_264_504_695_894_2,
+    0.082_123_115_663_778_14,
+];
+
+/// Relative Ziv gate for the middle [`sinpi_dd`] tier: the double-double π
+/// truncates at ≈2⁻¹⁰⁹ and the kernel/multiply roundings sit near 2⁻¹⁰⁴, so
+/// `2⁻¹⁰¹` bounds the tier with margin (certified by
+/// `ziv_soundness::sinpi_dd_tier_is_sound`); the rare survivors take the
+/// 128-bit `Dint` kernels.
+const SINPI_DD_EPS: f64 = crate::exp2i(-101);
+
+/// `(sin, cos)` at the grid angle `s·π/2048` as loose double-doubles — a port
+/// of CORE-MATH sinpi's `sincosn` two-level table.  `s` is taken modulo 4096
+/// through two's-complement bit logic (works for negative `s` unchanged): the
+/// low ten bits index within a quadrant (reflected in odd quadrants), split
+/// into the π/64 level ([`SINCOSN_SN`], cosine by complement) and the π/2048
+/// level ([`SINCOSN_SM`]/[`SINCOSN_CM`]); the angle-addition cross products of
+/// the ≤25-bit table highs are exact, so one Fast2Sum per component
+/// renormalizes the pair.  Bits 11/12 of `s` supply the half-turn signs.
+#[inline]
+pub fn sincosn(s: i64) -> (DoubleDouble, DoubleDouble) {
+    let j0 = s & 0x3ff;
+    let it = -((s >> 10) & 1); // odd quadrant: reflect j → 1024 − j
+    let j = (!it & j0) - (it << 10) - (it & j0);
+    let is = (j >> 5) as usize;
+    let jm = (j & 0x1f) as usize;
+    // Branchless sign bits: the quadrant bits flip the components by XOR on
+    // the sign bit (a 50/50 data-dependent branch would mispredict on random
+    // input).
+    let ssgn = (((s >> 11) & 1) as u64) << 63;
+    let csgn = ((((s + 1024) >> 11) & 1) as u64) << 63;
+
+    // SAFETY: `j ∈ [0, 1024]` by the reflection above, so `is ∈ [0, 32]` and
+    // `jm ∈ [0, 31]`; the compiler cannot see the range, and the elided bounds
+    // checks are worth ≈1 ns on the hot path.
+    let (sb, cb, sm, cm) = unsafe {
+        (
+            *SINCOSN_SN.get_unchecked(is),      // sin at is·π/64
+            *SINCOSN_SN.get_unchecked(32 - is), // cos at is·π/64, by complement
+            *SINCOSN_SM.get_unchecked(jm),      // sin at jm·π/2048
+            *SINCOSN_CM.get_unchecked(jm),      // cos at jm·π/2048
+        )
+    };
+
+    // Angle addition with exact high×high products (≤25-bit factors).
+    let sbf = sb.high + sb.low;
+    let cbf = cb.high + cb.low;
+    // Not FMA sites: the ≤25-bit high×high products are exact, and the error
+    // budget assumes each term rounds on its own.
+    #[allow(clippy::suboptimal_flops)]
+    let ch = cb.high * cm.high - sb.high * sm.high;
+    #[allow(clippy::suboptimal_flops)]
+    let cl = cm.high * cb.low - sm.high * sb.low + (cbf * cm.low - sbf * sm.low);
+    #[allow(clippy::suboptimal_flops)]
+    let sh = sb.high * cm.high + cb.high * sm.high;
+    #[allow(clippy::suboptimal_flops)]
+    let sl = sm.high * cb.low + cm.high * sb.low + (cbf * sm.low + sbf * cm.low);
+
+    let (s2, c2) = (fast_sum(sh, sl), fast_sum(ch, cl));
+    (
+        DoubleDouble {
+            high: f64::from_bits(s2.high.to_bits() ^ ssgn),
+            low: f64::from_bits(s2.low.to_bits() ^ ssgn),
+        },
+        DoubleDouble {
+            high: f64::from_bits(c2.high.to_bits() ^ csgn),
+            low: f64::from_bits(c2.low.to_bits() ^ csgn),
+        },
+    )
+}
+
+/// Ziv gate for [`sinpi`]'s grid fast leg, an *absolute* bound on the
+/// correction `r` (everything below the leading table word): the exact `u`
+/// keeps the polynomial terms clean, so the slip is a handful of f64
+/// roundings at `r`'s ≈2⁻⁶³ ulp scale.  Certified with ≥2× margin by
+/// `ziv_soundness::sinpi_fast_leg_is_sound`; near-zero table words (inputs
+/// within ≈2⁻⁹ of an integer) never certify and take the `Dint` tier.
+const SINPIN_ERR: f64 = 5.5e-19;
 
 /// Sine of π·x
 ///
@@ -1277,72 +1763,149 @@ const SINPI_ZIV_EPS: f64 = crate::exp2i(-62);
 /// copysign(0, x)` for every integer `n` (parity-free), `sinpi(±(2k + ½)) =
 /// ±1` and `sinpi(±(2k + 1 + ½)) = ∓1` exactly, and ±∞/NaN → NaN.
 ///
-/// The reduction `f = x − round(x)` is exact, so `sin(πx) =
-/// (−1)^round(x)·sin(πf)` splits into an exact sign and the lean table kernel
-/// [`abs_sinpi_dd_lean`] over `|f| ≤ ½`, whose leading `π·f` term keeps full
-/// relative accuracy near the zeros — no separate small-`|x|` band is needed
-/// above the subnormal-safe `|x| < 2⁻⁵⁴` product.  A relative Ziv gate defers
-/// straddles to the 128-bit `Dint` sin/cos kernels (≈2⁻¹²⁵).
+/// Mirrors CORE-MATH's `cr_sinpi` fast path: an integer reduction of the
+/// signed mantissa puts the grid index (1/2048 half-turns) and the exact
+/// residual bits in two shifts, [`sincosn`]'s two's-complement bit logic
+/// folds quadrants and signs, and short plain-f64 residual polynomials feed
+/// the absolute Ziv gate.  The small band `|x| ≤ 0x1.2p−5` keeps relative
+/// accuracy through a double-double `π·x` with a cubic correction.
+/// Straddles fall to the relative-gated [`sinpi_dd`] middle tier, and the
+/// rare survivors to the 128-bit `Dint` sin/cos kernels (≈2⁻¹²⁵) — CORE-MATH
+/// needs an exception database at this depth; the `Dint` tier does not.
 #[must_use]
 #[inline]
 pub fn sinpi(x: f64) -> f64 {
-    let ax = x.abs();
+    let ix = x.to_bits();
+    let e = ((ix >> 52) & 0x7ff) as i64;
 
-    // NaN-propagating guard: |x| ≥ 2⁵² (every representable value there is an
-    // integer), ±∞, and NaN all reject.
-    if !(ax < crate::exp2i(52)) {
-        return if x.is_finite() {
-            f64::copysign(0.0, x)
+    // |x| ≥ 2⁴¹ (every value is a multiple of 1/2048), ±∞, NaN.
+    if e >= 1064 {
+        if e == 0x7ff {
+            return if ix << 12 == 0 { f64::NAN } else { x + x };
+        }
+        if e > 1074 {
+            return f64::copysign(0.0, x); // |x| ≥ 2⁵²: all integers
+        }
+        let sgn = (ix as i64) >> 63;
+        let m = ((((ix & (u64::MAX >> 12)) | 1 << 52) as i64) ^ sgn) - sgn;
+        // x·2048 is an exact integer here; two's complement keeps the sign.
+        let iq = (m as u64).wrapping_shl((e - 1064) as u32);
+        if iq & 2047 == 0 {
+            return f64::copysign(0.0, x); // integer x
+        }
+        let (sg, _) = sincosn(iq as i64);
+        return sg.high + sg.low; // exact grid point: the table is the answer
+    }
+
+    let ax = ix & (u64::MAX >> 1);
+    // Small band |x| ≤ 0x1.2p−5: relative accuracy through double-double π·x.
+    if ax <= 0x3fa2_0000_0000_0000 {
+        if x == 0.0 {
+            return x; // ±0 keeps its sign
+        }
+        // |x| < 2⁻⁵⁴: sin(πx) rounds as the product π·x.  Below 2⁻⁹⁷⁰ the
+        // product is formed at 2¹⁰⁶ scale and folded down with one FMA so the
+        // subnormal rounding happens exactly once (CORE-MATH's fold).
+        if ax < 0x3c90_0000_0000_0000 {
+            if ax < (53 << 52) {
+                let t = x * crate::exp2i(106);
+                let zh = PI_DD.high * t;
+                #[allow(clippy::suboptimal_flops)] // CORE-MATH's exact op sequence
+                let zl = crate::fma(PI_DD.high, t, -zh) + PI_DD.low * t;
+                let rs = (zh + zl) * crate::exp2i(-106);
+                let rt = rs * crate::exp2i(106);
+                return crate::fma((zh - rt) + zl, crate::exp2i(-106), rs);
+            }
+            let zh = PI_DD.high * x;
+            #[allow(clippy::suboptimal_flops)] // CORE-MATH's exact op sequence
+            let zl = crate::fma(PI_DD.high, x, -zh) + PI_DD.low * x;
+            return zh + zl;
+        }
+        // π·x as a double-double plus the odd Taylor correction.  The gate is
+        // CORE-MATH's width with the x²-term half again wider — the measured
+        // slip reaches 0.58× the original window, short of the 2× margin
+        // `ziv_soundness::sinpi_small_band_is_sound` certifies.
+        let zh = PI_DD.high * x;
+        #[allow(clippy::suboptimal_flops)] // CORE-MATH's exact op sequence
+        let zl = crate::fma(PI_DD.high, x, -zh) + PI_DD.low * x;
+        let x2 = x * x;
+        let x3 = x2 * x;
+        let x4 = x2 * x2;
+        let eps = x * crate::fast_mul_add(x2, 1.5 * crate::exp2i(-47), crate::exp2i(-102));
+        #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+        let zl = zl
+            + x3 * ((SINPI_SMALL_C[0] + x2 * SINPI_SMALL_C[1])
+                + x4 * (SINPI_SMALL_C[2] + x2 * SINPI_SMALL_C[3]));
+        let lb = (zl - eps) + zh;
+        let ub = (zl + eps) + zh;
+        if lb == ub {
+            return lb;
+        }
+        return sinpi_accurate(x);
+    }
+
+    // Main band 0x1.2p−5 < |x| < 2⁴¹ (e ∈ [1018, 1063]): integer reduction.
+    let m0 = (ix & (u64::MAX >> 12)) | 1 << 52;
+    let si = e - 1011;
+    if si >= 0 && m0.wrapping_shl((si + 1) as u32) == 0 {
+        // x is an integer or half-integer (si ≥ 7 in this band).
+        if m0.wrapping_shl(si as u32) == 0 {
+            return f64::copysign(0.0, x);
+        }
+        // |x| mod 2 = ½ → ±1; = 3/2 → ∓1.
+        let t = m0.wrapping_shl((si - 1) as u32) >> 63;
+        return if t == 0 {
+            f64::copysign(1.0, x)
         } else {
-            f64::NAN
+            -f64::copysign(1.0, x)
         };
     }
 
-    // |x| < 2⁻⁵⁴: sin(πx) rounds as the double-double product π·x.  Below
-    // 2⁻⁹⁷⁰ the product is formed at 2¹⁰⁶ scale and folded down with one FMA
-    // so the subnormal rounding happens exactly once (CORE-MATH's fold).
-    if ax < crate::exp2i(-54) {
-        if x == 0.0 {
-            return x; // ±0 keeps its sign; the product path would lose −0
-        }
-        if ax < crate::exp2i(-970) {
-            let t = x * crate::exp2i(106);
-            let zh = PI_DD.high * t;
-            let zl = crate::fma(PI_DD.high, t, -zh) + PI_DD.low * t;
-            let rs = (zh + zl) * crate::exp2i(-106);
-            let rt = rs * crate::exp2i(106);
-            return crate::fma((zh - rt) + zl, crate::exp2i(-106), rs);
-        }
-        let zh = PI_DD.high * x;
-        let zl = crate::fma(PI_DD.high, x, -zh) + PI_DD.low * x;
-        return zh + zl;
+    let sgn = (ix as i64) >> 63;
+    let m = ((m0 as i64) ^ sgn) - sgn;
+    let s = 1063 - e; // 0..=45
+    let iq = ((m >> s) + 1) >> 1; // round(x·2048) in 1/2048 half-turns
+    // The residual keeps all its bits: the shifted-out top is the integer
+    // part already in `iq`.  The i64 → f64 rounding of the lowest bits is
+    // inside the gate's budget.
+    let k = (m as u64).wrapping_shl((e - 1000) as u32) as i64;
+    let z = k as f64;
+    let z2 = z * z;
+    let fs = crate::fast_mul_add(
+        z2,
+        crate::fast_mul_add(z2, SINPI_ZS[2], SINPI_ZS[1]),
+        SINPI_ZS[0],
+    );
+    let fc = crate::fast_mul_add(z2, SINPI_ZC[1], SINPI_ZC[0]);
+    let (sg, cg) = sincosn(iq);
+    #[allow(clippy::suboptimal_flops)] // r's error budget assumes these exact roundings
+    let r = sg.low + sg.high * (z2 * fc) + cg.high * (z * fs);
+    let lb = (r - SINPIN_ERR) + sg.high;
+    let ub = (r + SINPIN_ERR) + sg.high;
+    if lb == ub {
+        return lb;
     }
 
-    let n = x.round_ties_even();
-    let f = x - n; // exact: |f| ≤ ½
-    if f == 0.0 {
-        return f64::copysign(0.0, x); // integer x, sign preserved
-    }
-
-    // sin(πx) = (−1)ⁿ·sin(πf): the sign is exact, the magnitude is sin(π|f|).
-    // SAFETY: |n| ≤ 2⁵² fits an `i64`.
-    let odd = unsafe { n.to_int_unchecked::<i64>() } & 1 != 0;
-    let negative = (f < 0.0) != odd;
-
-    let v = abs_sinpi_dd_lean(f);
-    let eps = v.high * SINPI_ZIV_EPS; // v.high ≥ 0
+    // Middle tier: the ≈2⁻¹⁰⁴ double-double kernel, relative-gated.
+    let v = sinpi_dd(x);
+    let eps = v.high.abs() * SINPI_DD_EPS;
     let lo = v.high + (v.low - eps);
     let hi = v.high + (v.low + eps);
     if lo == hi {
-        return if negative { -lo } else { lo };
+        return lo;
     }
+    sinpi_accurate(x)
+}
 
-    // Accurate tier: `2x − q` is exact (Sterbenz), so `π·(x − q/2)` reaches
-    // the 128-bit sin/cos kernels at ≈2⁻¹²⁵ relative — the double-double π
-    // (≈2⁻¹⁰⁷) cannot split the corpus' hardest ties.  The quadrant selection
-    // carries the sign; the result is normal (|f| ≥ 2⁻⁵³ here, so |sin πf| ≥
-    // 2⁻⁵¹), which `to_f64` requires.
+/// Final [`sinpi`] tier: `2x − q` is exact (Sterbenz), so `π·(x − q/2)`
+/// reaches the 128-bit sin/cos kernels at ≈2⁻¹²⁵ relative — the double-double
+/// π (≈2⁻¹⁰⁹) cannot split the corpus' hardest ties.  The quadrant selection
+/// carries the sign; the result is normal (|x − round(x)| ≥ 2⁻⁵³ here, so the
+/// magnitude is ≥ 2⁻⁵¹), which `to_f64` requires.
+#[cold]
+fn sinpi_accurate(x: f64) -> f64 {
     let q = (2.0 * x).round_ties_even();
+    #[allow(clippy::suboptimal_flops)] // 2x is exact; the subtraction is Sterbenz
     let theta = Dint::from_f64(2.0 * x - q).mul(&PIO2_DINT); // π(x − q/2) ∈ [−π/4, π/4]
     // SAFETY: |q| ≤ 2⁵³ fits an `i64`.
     let w = match unsafe { q.to_int_unchecked::<i64>() } & 3 {
@@ -1622,31 +2185,123 @@ mod ziv_soundness {
         z ^ (z >> 31)
     }
 
-    /// Worst `|leg(f) − sin(πf)| / (SINPI_ZIV_EPS · leg.high)` over the reduced
-    /// band, representation-uniform across `[2⁻⁵⁴, ½]` so every binade — the
-    /// near-zero relatively-exact regime and the `d → ±½` truncation-worst
-    /// regime — is covered.  A ratio `< 0.5` certifies the 2× soundness margin.
+    /// Worst `|leg(x) − sin(πx)| / SINPIN_ERR` for the main-band integer-
+    /// reduction leg — its unrounded value is `sg.high + r` with `sg.high`
+    /// exact, so the absolute gate is sound iff the slip stays below the
+    /// window.  Value-uniform over `(0x1.2p−5, 4]` (every grid cell ×
+    /// residual; sign-symmetric by construction); a ratio `< 0.5` certifies
+    /// the 2× soundness margin.
     #[test]
     fn sinpi_fast_leg_is_sound() {
-        let (lb, hb) = (crate::exp2i(-54).to_bits(), 0.5f64.to_bits());
         let mut worst = 0.0f64;
-        let mut worst_f = 0.5;
+        let mut worst_x = 0.5;
         for i in 0..30_000_000u64 {
-            let f = f64::from_bits(lb + mix(i) % (hb - lb + 1));
-            let v = abs_sinpi_dd_lean(f);
-            let got = Float::with_val(250, v.high) + Float::with_val(250, v.low);
-            let truth = Float::with_val(250, f).sin_pi();
+            let x = 0.035_156_25 + mix(i) as f64 / (u64::MAX / 4) as f64;
+            let ix = x.to_bits();
+            let e = ((ix >> 52) & 0x7ff) as i64;
+            let m = ((ix & (u64::MAX >> 12)) | 1 << 52) as i64;
+            let s = 1063 - e;
+            let iq = ((m >> s) + 1) >> 1;
+            let k = (m as u64).wrapping_shl((e - 1000) as u32) as i64;
+            let z = k as f64;
+            let z2 = z * z;
+            let fs = crate::fast_mul_add(
+                z2,
+                crate::fast_mul_add(z2, SINPI_ZS[2], SINPI_ZS[1]),
+                SINPI_ZS[0],
+            );
+            let fc = crate::fast_mul_add(z2, SINPI_ZC[1], SINPI_ZC[0]);
+            let (sg, cg) = sincosn(iq);
+            let r = sg.low + sg.high * (z2 * fc) + cg.high * (z * fs);
+            let got = Float::with_val(250, sg.high) + Float::with_val(250, r);
+            let truth = Float::with_val(250, x).sin_pi();
             let abs = Float::with_val(250, &got - &truth).abs().to_f64();
-            let ratio = abs / (SINPI_ZIV_EPS * v.high);
+            let ratio = abs / SINPIN_ERR;
             if ratio > worst {
                 worst = ratio;
-                worst_f = f;
+                worst_x = x;
             }
         }
-        println!("sinpi fast leg: worst |err|/gate = {worst:.4} at f={worst_f:e}");
+        println!("sinpi fast leg: worst |err|/gate = {worst:.4} at x={worst_x:e}");
         assert!(
             worst < 0.5,
-            "sinpi gate covers only {:.2}× the slip at f={worst_f:e}",
+            "sinpi gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − sin(πx)| / eps(x)` for the small band
+    /// `(2⁻⁵⁴, 0x1.2p−5]`, representation-uniform so every binade appears.
+    /// The gate width is CORE-MATH's `x·(x²·2⁻⁴⁷ + 2⁻¹⁰²)` with the x²-term
+    /// widened 1.5× to restore the 2× margin.
+    #[test]
+    fn sinpi_small_band_is_sound() {
+        let (lb, hb) = (0x3c90_0000_0000_0000u64, 0x3fa2_0000_0000_0000);
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..30_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb + 1));
+            let zh = PI_DD.high * x;
+            let zl = crate::fma(PI_DD.high, x, -zh) + PI_DD.low * x;
+            let x2 = x * x;
+            let x3 = x2 * x;
+            let x4 = x2 * x2;
+            let eps = x * crate::fast_mul_add(x2, 1.5 * crate::exp2i(-47), crate::exp2i(-102));
+            let zl = zl
+                + x3 * ((SINPI_SMALL_C[0] + x2 * SINPI_SMALL_C[1])
+                    + x4 * (SINPI_SMALL_C[2] + x2 * SINPI_SMALL_C[3]));
+            let got = Float::with_val(250, zh) + Float::with_val(250, zl);
+            let truth = Float::with_val(250, x).sin_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("sinpi small band: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "sinpi small-band gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst relative `|sinpi_dd(x) − sin(πx)| / (SINPI_DD_EPS·|high|)` over
+    /// the middle tier's traffic: uniform across the band plus near-integer
+    /// clusters (the fast leg's systematic straddles).  A ratio `< 0.5`
+    /// certifies the 2× soundness margin.
+    #[test]
+    fn sinpi_dd_tier_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..20_000_000u64 {
+            let h = mix(i);
+            let x = if i & 1 == 0 {
+                h as f64 / (u64::MAX / 4) as f64
+            } else {
+                // near-integer: k ± tiny, the fast leg's straddle population
+                let k = ((h >> 32) % 8) as f64;
+                let delta = f64::from_bits(0x3c90_0000_0000_0000 + (h & 0xF_FFFF_FFFF));
+                if h & 16 == 0 { k + delta } else { k - delta }
+            };
+            if x == 0.0 || x.fract() == 0.0 {
+                continue;
+            }
+            let v = sinpi_dd(x);
+            let got = Float::with_val(250, v.high) + Float::with_val(250, v.low);
+            let truth = Float::with_val(250, x).sin_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / (SINPI_DD_EPS * v.high.abs());
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("sinpi dd tier: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "sinpi dd-tier gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
         );
     }

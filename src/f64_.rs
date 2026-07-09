@@ -16,7 +16,7 @@ pub mod pow;
 mod pow_accurate;
 mod pow_consts;
 mod qint;
-mod trig;
+pub mod trig;
 
 pub use atan::{acos, asin, atan, atan2};
 pub use erf::{erf, erfc};
