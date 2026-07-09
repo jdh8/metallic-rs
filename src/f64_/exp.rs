@@ -1403,6 +1403,196 @@ fn exp10_accurate(x: f64) -> f64 {
     exp_two_level_finish(t, dx)
 }
 
+/// `ln 10` as a double-double, the tiny-band slope of [`exp10m1`].
+const LN10_DD: DoubleDouble = DoubleDouble {
+    high: 2.302_585_092_994_046,
+    low: -2.170_756_223_382_249_4e-16,
+};
+
+/// `ln 10` as a 128-bit `Dint`, for [`exp10m1_deep`].
+const LN10_DINT: Dint = Dint {
+    sgn: false,
+    ex: 1,
+    m: 0x935d_8ddd_aaa8_ac16_ea56_d62b_82d3_0a29,
+};
+
+/// `(10ˣ − 1 − x·ln 10)/x²` Taylor coefficients (`ln10^(k+2)/(k+2)!`) as
+/// double-doubles, the small-band correction of [`exp10m1`]; the 19-term tail
+/// at the 0.0625 band edge sits at ≈2⁻¹²¹.
+const EXP10M1_U_COEFFS: [(f64, f64); 19] = [
+    (2.650_949_055_239_199, -2.093_588_783_050_335_8e-16),
+    (2.034_678_592_293_476, 1.674_908_643_489_877_8e-16),
+    (1.171_255_148_912_267, 6.633_480_942_205_599e-17),
+    (0.539_382_929_195_581_4, 1.482_341_161_284_422_3e-17),
+    (0.206_995_848_696_868_1, -4.369_036_101_220_552e-18),
+    (0.068_089_365_074_437_07, -4.173_011_268_248_855e-18),
+    (0.019_597_694_626_478_524, -4.467_811_592_850_79e-19),
+    (0.005_013_928_833_775_44, -4.615_608_815_771_097_4e-20),
+    (0.001_154_499_778_998_434_8, 8.749_798_732_312_397e-20),
+    (0.000_241_666_725_544_246_94, -6.070_520_707_955_216e-22),
+    (4.637_151_664_257_219_6e-5, 7.067_659_896_818_048e-22),
+    (8.213_412_535_439_387e-6, 8.391_087_285_556_089e-22),
+    (1.350_862_947_622_368_7e-6, 7.966_129_604_956_205e-23),
+    (2.073_651_257_248_841_9e-7, -9.123_044_359_351_558e-24),
+    (2.984_224_045_630_965e-8, -1.969_707_442_884_593e-24),
+    (4.042_017_530_367_202e-9, -3.379_383_006_557_621e-25),
+    (5.170_605_172_802_292e-10, -4.206_349_810_753_552_4e-27),
+    (6.266_188_627_711_821e-11, 2.240_356_657_867_701_4e-27),
+    (7.214_216_262_029_027e-12, 2.554_075_497_152_682_6e-28),
+];
+
+/// Deep [`exp10m1`] tier for `|x| ≤ 0.0625` — [`exp2m1_deep`] with the base-10
+/// slope; replaces CORE-MATH's 145-entry exception table.
+#[cold]
+fn exp10m1_deep(x: f64, c: DoubleDouble) -> f64 {
+    let mut w = Dint::from_f64(x).mul(&LN10_DINT);
+    if c.high != 0.0 {
+        w = w.add(&Dint::from_f64(c.high));
+    }
+    if c.low != 0.0 {
+        w = w.add(&Dint::from_f64(c.low));
+    }
+    w.to_f64_general()
+}
+
+/// Correctly-rounded `10ˣ − 1` for `|x| ≤ 0.0625` — [`exp2m1_small`]'s
+/// result-anchored leg with the base-10 series.
+#[inline]
+fn exp10m1_small(x: f64) -> f64 {
+    if x.abs() < crate::exp2i(-900) {
+        return exp10m1_deep(
+            x,
+            DoubleDouble {
+                high: 0.0,
+                low: 0.0,
+            },
+        );
+    }
+
+    let (high, low) = EXP10M1_U_COEFFS[EXP10M1_U_COEFFS.len() - 1];
+    let mut u = DoubleDouble { high, low };
+    for &(high, low) in EXP10M1_U_COEFFS[..EXP10M1_U_COEFFS.len() - 1].iter().rev() {
+        u = u * x + DoubleDouble { high, low };
+    }
+    let c = DoubleDouble::from_product(x, x) * u;
+    let w = LN10_DD * x;
+    let w = w.add_ordered(c); // |c| ≤ |w|·|x|·1.15, ordered at the band edge
+    let eps = w.high.abs() * EXP2M1_SMALL_EPS;
+    let lo = w.high + (w.low - eps);
+    let hi = w.high + (w.low + eps);
+    if lo == hi {
+        return lo;
+    }
+    exp10m1_deep(x, c)
+}
+
+/// Correctly-rounded `10ˣ − 1` for `|x| > 0.0625` — [`exp2m1_general`]'s
+/// mantissa-space subtraction over the base-10 accurate reduction
+/// ([`exp10_accurate`]'s double-double `δ·ln10`).
+#[cold]
+#[inline(never)]
+fn exp10m1_general(x: f64) -> f64 {
+    if let Ok(i) = EXP10M1_HARD.binary_search_by_key(&x.to_bits(), |&(input, _)| input) {
+        return f64::from_bits(EXP10M1_HARD[i].1);
+    }
+
+    let tf = (x * N_LOG2_10_4096).round_ties_even();
+    // SAFETY: `|x| < 324`, so `|tf| < 2²²`.
+    let t = unsafe { tf.to_int_unchecked::<i64>() };
+    let dx0 = crate::fma(tf, -LOG10_2_OVER_4096_HI, x);
+    let dxl = tf * LOG10_2_OVER_4096_MID;
+    let dxll = crate::fma(
+        tf,
+        LOG10_2_OVER_4096_LO,
+        crate::fma(tf, LOG10_2_OVER_4096_MID, -dxl),
+    );
+    let dh = dx0 + dxl;
+    let delta = DoubleDouble {
+        high: dh,
+        low: ((dx0 - dh) + dxl) + dxll,
+    };
+    let dx = DoubleDouble {
+        high: LN10_HI,
+        low: LN10_LO,
+    } * delta;
+    let (mant, ie) = exp_two_level_mantissa_of(t, dx);
+
+    let off = f64::from_bits(((2048 + 1023 - ie) as u64) << 52);
+    let s = if ie < 53 {
+        fast_sum(off, mant.high)
+    } else {
+        fast_sum(mant.high, off)
+    };
+    let fh = fast_sum(s.high, mant.low + s.low).high;
+    fast_ldexp(fh, ie)
+}
+
+/// Hard-to-round database for [`exp10m1_general`], in the [`EXP2M1_HARD`]
+/// discipline (corpus residuals, each MPFR-confirmed by
+/// `exp2m1_soundness::exp10m1_database_is_correct`).
+#[rustfmt::skip]
+const EXP10M1_HARD: [(u64, u64); 10] = [
+    (0x3fb76bd8057c5e82, 0x3fce03ee2e457a0b),
+    (0x3fb9a4fa3d4e586e, 0x3fd09a7b16f688cd),
+    (0x3fbba4d6b3e1398d, 0x3fd210ee0144e997),
+    (0x3fdc3e364da53c4c, 0x3ffc3310c87526d5),
+    (0x4012d5494eb1dd13, 0x40e8f169a48a6a87),
+    (0x40658c1635f834d6, 0x63b8b2dcb245522f),
+    (0x406cde37694f4d10, 0x6fe2210fd5a164b7),
+    (0xbfb7510cd4059d09, 0xbfc8375a0efabd75),
+    (0xc01d3c1633a449a3, 0xbfefffffe5a00421),
+    (0xc024657d88b39382, 0xbfeffffffff74aeb),
+];
+
+/// 10 raised to the power `x`, minus 1
+///
+/// `exp10m1(x) = 10ˣ − 1` correctly rounded — [`exp2m1`]'s architecture with
+/// the base-10 reduction: the mantissa-space `− 1` over [`exp10`]'s fold, the
+/// result-anchored small band at `|x| ≤ 0.0625`, and the 128-bit deep tier in
+/// place of CORE-MATH's exception table.  Rounds to −1 exactly from
+/// `x ≤ −0x1.041704c068ef0p+4` (where `10ˣ ≤ 2⁻⁵⁴`) and overflows above
+/// `x = 0x1.34413509f79fep+8`.
+#[must_use]
+#[inline]
+pub fn exp10m1(x: f64) -> f64 {
+    if x.is_nan() || x == 0.0 {
+        return x; // NaN propagates; ±0 keeps its sign
+    }
+    if x >= f64::from_bits(0x4073_4413_509f_79ff) {
+        return f64::INFINITY;
+    }
+    if x <= f64::from_bits(0xc030_4170_4c06_8ef0) {
+        return -1.0; // 10ˣ ≤ 2⁻⁵⁴ (ties-to-even at the threshold)
+    }
+    if x.to_bits() & (!0u64 >> 1) <= 0x3fb0_0000_0000_0000 {
+        return exp10m1_small(x);
+    }
+
+    let scaled = (x * N_LOG2_10_4096).round_ties_even();
+    // SAFETY: `|x| < 324`, so `|scaled| < 2²³`.
+    let t = unsafe { scaled.to_int_unchecked::<i64>() };
+    let dh = crate::fma(-scaled, LOG10_2_OVER_4096_HI, x);
+    let delta = crate::fma(scaled, LOG10_2_OVER_4096_MID, dh);
+    let (th, fl, q) = two_level_fold(t, delta, &EXP10_FAST3_COEFFS);
+    let off = f64::from_bits(((2048 + 1023 - q) as u64) << 52);
+    let s = if q < 53 {
+        fast_sum(off, th)
+    } else if q < 75 {
+        fast_sum(th, off)
+    } else {
+        DoubleDouble { high: th, low: 0.0 }
+    };
+    let high = s.high;
+    let low = fl + s.low;
+    let lo = high + (low - EXP_TWO_LEVEL_ZIV_EPS);
+    let hi = high + (low + EXP_TWO_LEVEL_ZIV_EPS);
+    if lo == hi {
+        return fast_ldexp(lo, q);
+    }
+
+    exp10m1_general(x)
+}
+
 /// Compute `exp(x) − 1` accurately, especially for small `x`
 #[must_use]
 #[inline]
@@ -1617,6 +1807,20 @@ mod exp2m1_soundness {
         }
     }
 
+    /// Every [`EXP10M1_HARD`] entry must be the 200-bit MPFR rounding.
+    #[test]
+    fn exp10m1_database_is_correct() {
+        for &(input, result) in &EXP10M1_HARD {
+            let x = f64::from_bits(input);
+            let truth = Float::with_val(200, x).exp10_m1().to_f64();
+            assert!(
+                truth.to_bits() == result,
+                "database entry for {x:e} is {:e}, MPFR says {truth:e}",
+                f64::from_bits(result)
+            );
+        }
+    }
+
     /// Worst `|leg(x) − (2ˣ−1)| / (EXP2M1_SMALL_EPS·|w.high|)` over ±(0, ¼).
     #[test]
     fn exp2m1_small_is_sound() {
@@ -1651,6 +1855,45 @@ mod exp2m1_soundness {
         assert!(
             worst < 0.5,
             "exp2m1 small gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − (10ˣ−1)| / (EXP2M1_SMALL_EPS·|w.high|)` over
+    /// ±(0, 0.0625].
+    #[test]
+    fn exp10m1_small_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.01;
+        for i in 0..20_000_000u64 {
+            let x = (mix(i) as f64 / u64::MAX as f64 - 0.5) * 0.125;
+            if x == 0.0 || x.abs() < crate::exp2i(-900) {
+                continue;
+            }
+            let (high, low) = EXP10M1_U_COEFFS[EXP10M1_U_COEFFS.len() - 1];
+            let mut u = DoubleDouble { high, low };
+            for &(high, low) in EXP10M1_U_COEFFS[..EXP10M1_U_COEFFS.len() - 1].iter().rev() {
+                u = u * x + DoubleDouble { high, low };
+            }
+            let c = DoubleDouble::from_product(x, x) * u;
+            let w = LN10_DD * x;
+            let w = w.add_ordered(c);
+            let got = Float::with_val(250, w.high) + Float::with_val(250, w.low);
+            let truth = Float::with_val(250, x).exp10_m1();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / (EXP2M1_SMALL_EPS * w.high.abs());
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!(
+            "exp10m1 small leg: worst |err|/gate = {worst:.4} at x={worst_x:e} bits={:016x}",
+            worst_x.to_bits()
+        );
+        assert!(
+            worst < 0.5,
+            "exp10m1 small gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
         );
     }

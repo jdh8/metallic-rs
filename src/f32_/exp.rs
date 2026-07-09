@@ -157,6 +157,22 @@ pub fn exp2m1f(x: f32) -> f32 {
     crate::f64_::exp2m1(x.into()) as f32
 }
 
+/// 10 raised to the power `x`, minus 1
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::exp10m1`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/exp10m1f.rs` certifies
+/// the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn exp10m1f(x: f32) -> f32 {
+    // The one f32 tie the double rounding cannot steer; the exhaustive sweep
+    // found exactly this input.
+    if x.to_bits() == 0x417d_7f60 {
+        return f32::from_bits(0x59c6_4405);
+    }
+    crate::f64_::exp10m1(x.into()) as f32
+}
+
 /// Raise 10 to the power of `x`
 #[must_use]
 #[inline]

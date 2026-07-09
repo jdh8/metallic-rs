@@ -20,7 +20,7 @@ pub mod trig;
 
 pub use atan::{acos, acospi, asin, asinpi, atan, atan2, atan2pi, atanpi};
 pub use erf::{erf, erfc};
-pub use exp::{exp, exp2, exp2m1, exp10, expm1};
+pub use exp::{exp, exp2, exp2m1, exp10, exp10m1, expm1};
 pub use gamma::{lgamma, tgamma};
 pub use hyp::{acosh, asinh, atanh, cosh, sinh, tanh};
 pub use log::{ln_dd, ln_dd_fast, ln_fast, ln_fast_scaled, log, log1p, log2, log10};

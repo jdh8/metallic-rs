@@ -127,6 +127,10 @@ name = "exp10f"
 harness = false
 
 [[bench]]
+name = "exp10m1f"
+harness = false
+
+[[bench]]
 name = "frexpf"
 harness = false
 
@@ -284,6 +288,10 @@ harness = false
 
 [[bench]]
 name = "exp10"
+harness = false
+
+[[bench]]
+name = "exp10m1"
 harness = false
 
 [[bench]]
