@@ -2055,6 +2055,390 @@ fn cospi_accurate(x: f64) -> f64 {
     w.to_f64()
 }
 
+/// `tan(πk/64)` as (low, high) double-doubles, `k = 0..=32` — CORE-MATH
+/// tanpi's `T`; `T[32]` backs the pole-adjacent cotangent cell.
+const TANPI_T: [DoubleDouble; 32] = [
+    DoubleDouble {
+        high: 0.0,
+        low: 0.0,
+    },
+    DoubleDouble {
+        high: 0.049_126_849_769_467_254,
+        low: 9.097_765_655_528_944e-20,
+    },
+    DoubleDouble {
+        high: 0.098_491_403_357_164_25,
+        low: 5.310_067_116_282_243_5e-18,
+    },
+    DoubleDouble {
+        high: 0.148_335_987_538_347_42,
+        low: 4.079_064_681_800_001e-18,
+    },
+    DoubleDouble {
+        high: 0.198_912_367_379_658,
+        low: 8.391_794_477_636_538e-19,
+    },
+    DoubleDouble {
+        high: 0.250_486_960_191_305_45,
+        low: 9.389_934_381_474_096e-18,
+    },
+    DoubleDouble {
+        high: 0.303_346_683_607_342_4,
+        low: -1.276_699_084_782_640_5e-17,
+    },
+    DoubleDouble {
+        high: 0.357_805_721_314_524_1,
+        low: 1.021_619_914_947_303_3e-17,
+    },
+    DoubleDouble {
+        high: 0.414_213_562_373_095_03,
+        low: 1.434_936_932_798_652_3e-17,
+    },
+    DoubleDouble {
+        high: 0.472_964_775_891_319_9,
+        low: 1.741_884_799_204_787e-17,
+    },
+    DoubleDouble {
+        high: 0.534_511_135_950_791_7,
+        low: -5.262_646_938_926_216_7e-17,
+    },
+    DoubleDouble {
+        high: 0.599_376_933_681_923_8,
+        low: -2.956_664_144_125_357_6e-17,
+    },
+    DoubleDouble {
+        high: 0.668_178_637_919_298_9,
+        low: 4.104_227_023_361_000_4e-17,
+    },
+    DoubleDouble {
+        high: 0.741_650_546_272_035_4,
+        low: -4.623_665_809_492_506e-17,
+    },
+    DoubleDouble {
+        high: 0.820_678_790_828_660_4,
+        low: -2.292_314_759_467_573_8e-17,
+    },
+    DoubleDouble {
+        high: 0.906_347_169_019_147_1,
+        low: 2.156_436_726_364_040_7e-17,
+    },
+    DoubleDouble {
+        high: 1.0,
+        low: 0.0,
+    },
+    DoubleDouble {
+        high: 1.103_329_975_733_475_6,
+        low: 8.769_565_272_746_272e-17,
+    },
+    DoubleDouble {
+        high: 1.218_503_525_587_976_4,
+        low: -2.124_478_869_914_842_8e-17,
+    },
+    DoubleDouble {
+        high: 1.348_343_913_486_720_1,
+        low: 3.925_166_267_193_778_7e-17,
+    },
+    DoubleDouble {
+        high: 1.496_605_762_665_489,
+        low: 6.974_100_888_958_305e-17,
+    },
+    DoubleDouble {
+        high: 1.668_399_205_583_507,
+        low: -2.379_727_775_726_225_2e-17,
+    },
+    DoubleDouble {
+        high: 1.870_868_411_789_389_5,
+        low: 2.945_807_107_795_785e-17,
+    },
+    DoubleDouble {
+        high: 2.114_322_357_548_640_5,
+        low: 8.259_485_526_521_204e-17,
+    },
+    DoubleDouble {
+        high: 2.414_213_562_373_095,
+        low: 1.253_716_717_905_021_7e-16,
+    },
+    DoubleDouble {
+        high: 2.794_812_772_490_476_8,
+        low: 2.323_777_298_243_400_3e-17,
+    },
+    DoubleDouble {
+        high: 3.296_558_208_938_320_5,
+        low: -9.532_957_799_369_16e-17,
+    },
+    DoubleDouble {
+        high: 3.992_223_783_770_084_5,
+        low: -4.271_622_592_512_587e-17,
+    },
+    DoubleDouble {
+        high: 5.027_339_492_125_848,
+        low: 2.953_791_810_373_67e-17,
+    },
+    DoubleDouble {
+        high: 6.741_452_405_414_988_5,
+        low: -1.865_800_913_055_832_1e-16,
+    },
+    DoubleDouble {
+        high: 10.153_170_387_608_86,
+        low: 5.362_306_887_894_472e-16,
+    },
+    DoubleDouble {
+        high: 20.355_467_624_987_188,
+        low: -2.379_288_158_189_244_4e-17,
+    },
+];
+/// `(tan(θ) − θ)/z³` residual coefficients in the 2⁻⁶³·2⁻⁷ fixed-point `z` scale — CORE-MATH tanpi's `c`.
+const TANPI_ZC: [f64; 4] = [
+    6.281_006_949_579_927e-63,
+    1.779_055_995_675_284e-104,
+    5.099_053_215_602_634e-146,
+    1.464_047_974_240_423_7e-187,
+];
+/// `(tan(πx) − πx)/x³` coefficients for the small band — CORE-MATH tanpi's `c2`.
+const TANPI_SMALL_C: [f64; 3] = [
+    10.335_425_560_099_94,
+    40.802_624_638_036_22,
+    163.000_010_260_546_4,
+];
+
+/// `π·2⁻⁷⁰` as a double-double — the slope of the residual angle in
+/// [`tanpi`]'s fixed-point `z` scale.
+const TANPI_PH: DoubleDouble = DoubleDouble {
+    high: 2.661_032_484_442_620_7e-21,
+    low: 1.037_316_187_627_327_8e-37,
+};
+
+/// Reconstruct `tan(π(a + θ)) = (n + t)/(1 − n·t)` from the grid tangent
+/// `n = ±TANPI_T[iq]` and the residual tangent `t` — CORE-MATH's fused
+/// double-double divide, ported verbatim.  `iq == 32` is the pole-adjacent
+/// cell, where the identity collapses to `−1/t`.
+#[inline]
+fn tanpi_reconstruct(t: DoubleDouble, iq: usize, neg_n: bool) -> DoubleDouble {
+    if iq == 32 {
+        let ith = -1.0 / t.high;
+        #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+        let tl = (crate::fma(ith, t.high, 1.0) + t.low * ith) * ith;
+        return DoubleDouble { high: ith, low: tl };
+    }
+    let sgn = if neg_n { 1u64 << 63 } else { 0 };
+    let nh = f64::from_bits(TANPI_T[iq].high.to_bits() ^ sgn);
+    let nl = f64::from_bits(TANPI_T[iq].low.to_bits() ^ sgn);
+
+    // m = 1 − n·t (dd), num = n + t (dd), result = num/m with one refined
+    // reciprocal — CORE-MATH's operation order, kept for the certified eps.
+    #[allow(clippy::suboptimal_flops)]
+    let mh0 = nh * t.high;
+    let ml0 = crate::fma(nh, t.high, -mh0) + (nh * t.low + nl * t.high);
+    let m = fast_sum(1.0, -mh0);
+    let ml = m.low - ml0;
+    let n = fast_sum(nh, t.high);
+    let nl = nl + (n.low + t.low);
+    let imh = 1.0 / m.high;
+    let th = n.high * imh;
+    #[allow(clippy::suboptimal_flops)]
+    let tl = crate::fma(n.high, imh, -th)
+        + (nl + n.high * (crate::fma(-m.high, imh, 1.0) - ml * imh)) * imh;
+    DoubleDouble { high: th, low: tl }
+}
+
+/// Final [`tanpi`] tier: the 128-bit `Dint` sine/cosine ratio at the exact
+/// reduced angle — `tan(πr)` in even half-quadrants, `−cot(πr)` in odd ones —
+/// replacing CORE-MATH's exception database.
+#[cold]
+fn tanpi_accurate(x: f64) -> f64 {
+    let q = (2.0 * x).round_ties_even();
+    #[allow(clippy::suboptimal_flops)] // 2x is exact; the subtraction is Sterbenz
+    let theta = Dint::from_f64(2.0 * x - q).mul(&PIO2_DINT); // π(x − q/2) ∈ [−π/4, π/4]
+    let (s, c) = sin_cos_dint(&theta);
+    // SAFETY: |q| ≤ 2⁵³ fits an `i64`.
+    let w = if unsafe { q.to_int_unchecked::<i64>() } & 1 == 0 {
+        s.mul(&recip_dint(&c))
+    } else {
+        neg_dint(c.mul(&recip_dint(&s)))
+    };
+    w.to_f64()
+}
+
+/// Signed zero/pole returns for on-grid [`tanpi`] arguments: `jq` counts
+/// half-quadrants, odd ones are poles (±∞ by direction), even ones zeros
+/// (sign by the period-1 half `jq & 2` against the argument sign).
+#[inline]
+const fn tanpi_grid_special(jq: i64, sgn: i64) -> f64 {
+    if jq & 1 == 1 {
+        return if jq & 2 == 2 {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
+    }
+    if (jq ^ sgn) & 2 == 2 { -0.0 } else { 0.0 }
+}
+
+/// Tangent of π·x
+///
+/// Follows C23's special-value contract: `tanpi(±0) = ±0`, integer `x` gives
+/// signed zeros by half-period parity, half-integers give ±∞ (a pole entered
+/// from below or above), `tanpi(±(k + ¼)) = ±1` exactly, and ±∞/NaN → NaN.
+///
+/// Mirrors CORE-MATH's `cr_tanpi`: the signed-mantissa reduction folds the
+/// period and the half-period reflection into a 1/64 grid (`iq ∈ 0..=32`,
+/// [`TANPI_T`]), the exact fixed-point residual takes a short odd tangent
+/// polynomial, and [`tanpi_reconstruct`] finishes through the angle-addition
+/// quotient — `−1/t` in the pole-adjacent cell.  The double-double fast leg
+/// is already accurate-tier quality (eps ≈ 2⁻¹⁰⁴ relative, growing with
+/// `tan²`), so straddles go directly to the 128-bit `Dint` ratio — CORE-MATH
+/// needs an exception database at this depth; the `Dint` tier does not.
+#[must_use]
+#[inline]
+#[allow(clippy::too_many_lines)]
+pub fn tanpi(x: f64) -> f64 {
+    let ix = x.to_bits();
+    let ax = ix & (u64::MAX >> 1);
+
+    // |x| < 2⁻¹²: π·x with an odd cubic correction.
+    if ax < 0x3f3 << 52 {
+        if ax == 0 {
+            return x; // ±0 keeps its sign
+        }
+        if ax < 0x3ca << 52 {
+            // |x| < 2⁻⁵³: tan(πx) rounds as the double-double product π·x.
+            if ax < 0x06b << 52 {
+                // |x| < 2⁻⁹¹⁶: form the product at a 2^(1022−e) scale and fold
+                // down so the subnormal rounding happens once (CORE-MATH).
+                let e = (ax >> 52) as i64;
+                #[allow(clippy::cast_sign_loss)]
+                let sc = f64::from_bits(((2045 - e) as u64) << 52);
+                #[allow(clippy::cast_sign_loss)]
+                let isc = f64::from_bits(((1 + e) as u64) << 52);
+                let t = PI_DD * (x * sc);
+                let res = t.high * isc;
+                if res.abs() < f64::MIN_POSITIVE {
+                    let o = f64::copysign(crate::exp2i(-1022), x);
+                    let v0h = res * sc;
+                    let tl = t.low + (t.high - v0h);
+                    #[allow(clippy::suboptimal_flops)] // CORE-MATH's exact fold order
+                    let v0b = (o + res) * sc + tl;
+                    #[allow(clippy::suboptimal_flops)] // CORE-MATH's exact fold order
+                    return v0b * isc - o;
+                }
+                // Normal result: round in the scaled domain (the 2^-e scale is
+                // exact), gated like the band above — CORE-MATH leans on its
+                // database here instead.
+                let eps = t.high.abs() * crate::exp2i(-102);
+                let lb = t.high + (t.low - eps);
+                let ub = t.high + (t.low + eps);
+                if lb == ub {
+                    return lb * isc;
+                }
+                return tanpi_accurate(x);
+            }
+            let t = PI_DD * x;
+            let eps = t.high.abs() * crate::exp2i(-102);
+            let lb = t.high + (t.low - eps);
+            let ub = t.high + (t.low + eps);
+            if lb == ub {
+                return lb;
+            }
+            return tanpi_accurate(x);
+        }
+        // 2⁻⁵³ ≤ |x| < 2⁻¹²: π·x plus the odd tangent series, CORE-MATH's gate.
+        let x2 = x * x;
+        let x3 = x * x2;
+        #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+        let f = x3 * (TANPI_SMALL_C[0] + x2 * (TANPI_SMALL_C[1] + x2 * TANPI_SMALL_C[2]));
+        let p = PI_DD * x;
+        let s = fast_sum(p.high, f);
+        let t = DoubleDouble {
+            high: s.high,
+            low: s.low + p.low,
+        };
+        let eps = x * crate::fast_mul_add(x2, 1.328_125 * crate::exp2i(-47), crate::exp2i(-101));
+        let lb = t.high + (t.low - eps);
+        let ub = t.high + (t.low + eps);
+        if lb == ub {
+            return lb;
+        }
+        return tanpi_accurate(x);
+    }
+
+    // |x| ≥ 2⁴⁶: every value is a multiple of 1/64 — poles, zeros, ±1, and
+    // the grid table are the whole story.  ±∞/NaN reject here too.
+    if ax >= 0x42d << 52 {
+        if ax >= 0x7ff << 52 {
+            return if ax > 0x7ff << 52 { x + x } else { f64::NAN };
+        }
+        let e = (ax >> 52) as i64;
+        let s = e - 1069;
+        if s > 6 {
+            return f64::copysign(0.0, x); // |x| ≥ 2⁵³: all even integers
+        }
+        let sgn = (ix as i64) >> 63;
+        let m = ax as i64; // only the low mantissa bits survive the mask below
+        let iq = ((((m ^ sgn) - sgn) as u64).wrapping_shl(s as u32) & 127) as i64;
+        if iq & 31 == 0 {
+            return tanpi_grid_special(iq >> 5, sgn);
+        }
+        let v = if iq & 32 != 0 {
+            neg(TANPI_T[(32 - (iq & 31)) as usize])
+        } else {
+            TANPI_T[(iq & 31) as usize]
+        };
+        return v.high + v.low;
+    }
+
+    // Main band 2⁻¹² ≤ |x| < 2⁴⁶ (e ∈ [1011, 1068]): fold the period and the
+    // half-period tangent reflection into the 1/64 grid.
+    let e = (ax >> 52) as i64;
+    let s = 1068 - e; // 0..=57
+    let s1 = e - 1011; // 0..=57
+    let m = ((ax & (u64::MAX >> 12)) | 1 << 52) as i64;
+    let ms = (((m as u64).wrapping_shl(s1 as u32)) as i64) >> 63; // the ½-weight bit of x
+    let sgn = (ix as i64) >> 63;
+    let iq = ((((m ^ ms) >> s) as u64 & 63) + 1) >> 1; // 0..=32 on the 1/64 grid
+    let ms = ms ^ sgn;
+    let sm = (m ^ sgn) - sgn;
+    let k = ((sm as u64).wrapping_shl((e - 1005) as u32)) as i64; // residual ≤ 2⁻⁷ bits
+    let mut z = k as f64;
+    if (k as u64).wrapping_shl(1) == 0 {
+        // x is a multiple of 2⁻⁸: poles, zeros, and ±¼-type exact ±1.
+        if k == 0 {
+            if iq & 31 == 0 {
+                return tanpi_grid_special(sm >> (s + 6), sgn);
+            }
+            let kq = ((m as u64).wrapping_shl(s1 as u32)) >> 58;
+            if kq == 0x10 {
+                return f64::copysign(1.0, x); // |x| = ¼ mod 1
+            }
+            if kq == 0x30 {
+                return -f64::copysign(1.0, x); // |x| = ¾ mod 1
+            }
+        }
+        z *= f64::copysign(1.0, x); // k = i64::MIN carries the wrong sign
+    }
+
+    let z2 = z * z;
+    let z4 = z2 * z2;
+    let z3 = z * z2;
+    #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+    let f = z3 * ((TANPI_ZC[0] + z2 * TANPI_ZC[1]) + z4 * (TANPI_ZC[2] + z2 * TANPI_ZC[3]));
+    #[allow(clippy::suboptimal_flops)]
+    let eps = z3 * crate::exp2i(-256) + f64::copysign(crate::exp2i(-103), z);
+    let p = TANPI_PH * z;
+    let sum = fast_sum(p.high, f);
+    let t = DoubleDouble {
+        high: sum.high,
+        low: sum.low + p.low,
+    };
+    let t = tanpi_reconstruct(t, iq as usize, ms != 0);
+    let eps = 1.25 * crate::fast_mul_add(eps, t.high * t.high, eps);
+    let lb = t.high + (t.low - eps);
+    let ub = t.high + (t.low + eps);
+    if lb == ub {
+        return lb;
+    }
+    tanpi_accurate(x)
+}
+
 /// Sine
 #[must_use]
 #[inline]
@@ -2521,6 +2905,117 @@ mod ziv_soundness {
             worst < 0.5,
             "cospi small-band gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − tan(πx)| / eps(x, tan²)` for tanpi's main-band leg —
+    /// grid reduction, residual tangent, and the reconstruction quotient —
+    /// value-uniform over `(2⁻¹², 4]`.  A ratio `< 0.5` certifies the 2×
+    /// margin of CORE-MATH's tan²-scaled window.
+    #[test]
+    fn tanpi_fast_leg_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        for i in 0..30_000_000u64 {
+            let x = 2.442e-4 + mix(i) as f64 / (u64::MAX / 4) as f64;
+            let ix = x.to_bits();
+            let ax = ix & (u64::MAX >> 1);
+            let e = (ax >> 52) as i64;
+            let s = 1068 - e;
+            let s1 = e - 1011;
+            let m = ((ax & (u64::MAX >> 12)) | 1 << 52) as i64;
+            let ms = (((m as u64).wrapping_shl(s1 as u32)) as i64) >> 63;
+            let iq = ((((m ^ ms) >> s) as u64 & 63) + 1) >> 1;
+            let sm = m; // x > 0 in this sweep
+            let k = ((sm as u64).wrapping_shl((e - 1005) as u32)) as i64;
+            if (k as u64).wrapping_shl(1) == 0 {
+                continue; // exact lattice points return early in the real leg
+            }
+            let z = k as f64;
+            let z2 = z * z;
+            let z4 = z2 * z2;
+            let z3 = z * z2;
+            let f = z3 * ((TANPI_ZC[0] + z2 * TANPI_ZC[1]) + z4 * (TANPI_ZC[2] + z2 * TANPI_ZC[3]));
+            let eps = z3 * crate::exp2i(-256) + f64::copysign(crate::exp2i(-103), z);
+            let p = TANPI_PH * z;
+            let sum = fast_sum(p.high, f);
+            let t = DoubleDouble {
+                high: sum.high,
+                low: sum.low + p.low,
+            };
+            let t = tanpi_reconstruct(t, iq as usize, ms != 0);
+            let eps = (1.25 * crate::fast_mul_add(eps, t.high * t.high, eps)).abs();
+            let got = Float::with_val(250, t.high) + Float::with_val(250, t.low);
+            let truth = Float::with_val(250, x).tan_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!(
+            "tanpi fast leg: worst |err|/gate = {worst:.4} at x={worst_x:e} bits={:016x}",
+            worst_x.to_bits()
+        );
+        assert!(
+            worst < 0.5,
+            "tanpi gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − tan(πx)| / eps(x)` for the small band
+    /// `[2⁻⁵³, 2⁻¹²)` and the double-double π·x tiny band below it,
+    /// representation-uniform across the binades.
+    #[test]
+    fn tanpi_small_band_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.5;
+        // Small band with the odd tangent series.
+        let (lb, hb) = (0x3ca0_0000_0000_0000u64, 0x3f30_0000_0000_0000);
+        for i in 0..20_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb));
+            let x2 = x * x;
+            let x3 = x * x2;
+            let f = x3 * (TANPI_SMALL_C[0] + x2 * (TANPI_SMALL_C[1] + x2 * TANPI_SMALL_C[2]));
+            let p = PI_DD * x;
+            let s = fast_sum(p.high, f);
+            let t = DoubleDouble {
+                high: s.high,
+                low: s.low + p.low,
+            };
+            let eps =
+                x * crate::fast_mul_add(x2, 1.328_125 * crate::exp2i(-47), crate::exp2i(-101));
+            let got = Float::with_val(250, t.high) + Float::with_val(250, t.low);
+            let truth = Float::with_val(250, x).tan_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("tanpi small band: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        // Tiny band: the plain double-double product, relative gate 2⁻¹⁰⁴.
+        let mut worst2 = 0.0f64;
+        let (lb, hb) = (0x06b0_0000_0000_0000u64, 0x3ca0_0000_0000_0000);
+        for i in 0..10_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb));
+            let t = PI_DD * x;
+            let eps = t.high.abs() * crate::exp2i(-102);
+            let got = Float::with_val(250, t.high) + Float::with_val(250, t.low);
+            let truth = Float::with_val(250, x).tan_pi();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / eps;
+            worst2 = worst2.max(ratio);
+        }
+        println!("tanpi tiny band: worst |err|/gate = {worst2:.4}");
+        assert!(
+            worst < 0.5 && worst2 < 0.5,
+            "tanpi small/tiny gate covers only {:.2}×/{:.2}× the slip",
+            1.0 / worst,
+            1.0 / worst2
         );
     }
 

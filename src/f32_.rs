@@ -20,7 +20,7 @@ pub use hyp::{acoshf, asinhf, atanhf, coshf, sinhf, tanhf};
 pub use log::{log1pf, log2f, log10f, logf};
 pub use misc::{cbrtf, fmaf, hypotf, roundf, rsqrtf};
 pub use pow::powf;
-pub use trig::{cosf, cospif, sincosf, sinf, sinpif, tanf};
+pub use trig::{cosf, cospif, sincosf, sinf, sinpif, tanf, tanpif};
 
 // Internal helpers shared across this module's submodules (reached as `super::…`).
 pub use misc::{EXP_SHIFT, LN_2_HI, LN_2_LO, Magnitude, normalize, u32_sign_bit};

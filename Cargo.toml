@@ -175,6 +175,10 @@ name = "tanf"
 harness = false
 
 [[bench]]
+name = "tanpif"
+harness = false
+
+[[bench]]
 name = "tanhf"
 harness = false
 
@@ -300,6 +304,10 @@ harness = false
 
 [[bench]]
 name = "tan"
+harness = false
+
+[[bench]]
+name = "tanpi"
 harness = false
 
 [[bench]]

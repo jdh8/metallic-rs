@@ -436,6 +436,78 @@ pub fn sincosf(x: f32) -> (f32, f32) {
     (s, c)
 }
 
+/// Odd rational `tan(πz)·(¼ − z²)/(z − z³)` numerator/denominator
+/// coefficients over the reduced period — CORE-MATH tanpif's `cn`/`cd`; the
+/// `(¼ − z²)` factor bakes in the poles and `(z − z³)` the zeros.
+const TANPIF_CN: [f64; 4] = [
+    0.785_398_163_397_448_4,
+    -0.280_538_726_488_783_2,
+    0.022_011_589_086_914_73,
+    -0.000_231_039_590_123_269_23,
+];
+const TANPIF_CD: [f64; 4] = [
+    1.0,
+    -0.647_061_134_091_576_7,
+    0.097_314_025_548_005_4,
+    -0.003_226_980_548_916_333_3,
+];
+
+/// Tangent of π·x
+///
+/// Verbatim port of CORE-MATH's `cr_tanpif`: one odd rational in f64 over the
+/// reduced period `z = x − round(x)`, with the poles and zeros carried by
+/// exact factors, quarter-integers returned as ±1/±0/±∞ up front, and
+/// CORE-MATH's two directed-rounding patch points kept for bit fidelity.  The
+/// exhaustive 2³² sweep in `tests/tanpif.rs` certifies every input.
+#[must_use]
+#[inline]
+pub fn tanpif(x: f32) -> f32 {
+    let ix = x.to_bits();
+    let e = ix & (0xff << 23);
+    if e > 150 << 23 {
+        if e == 0xff << 23 {
+            return if ix << 9 == 0 { f32::NAN } else { x + x };
+        }
+        return f32::copysign(0.0, x); // |x| > 2²³: all even integers
+    }
+    let x4 = 4.0 * x;
+    let dx4 = x4 - x4.round_ties_even();
+    let zf = x - x.round_ties_even();
+    if dx4 == 0.0 {
+        // 4x is an integer: the exact ±1 / signed-zero / pole lattice.
+        // SAFETY: |4x| ≤ 2²⁵ fits an `i32`.
+        let k = unsafe { x4.to_int_unchecked::<i32>() };
+        if k & 1 == 1 {
+            return f32::copysign(1.0, zf); // x = ¼ mod ½
+        }
+        return match k & 6 {
+            0 => f32::copysign(0.0, x),  // x = 0 mod 2
+            4 => -f32::copysign(0.0, x), // x = 1 mod 2
+            2 => f32::INFINITY,          // x = ½ mod 2
+            _ => f32::NEG_INFINITY,      // x = −½ mod 2
+        };
+    }
+    // CORE-MATH's two patch points (directed-rounding shims kept verbatim).
+    let a = zf.to_bits() & (u32::MAX >> 1);
+    if a == 0x3e93_3802 {
+        return f32::copysign(1.268_794_7, zf) + f32::copysign(2.980_232_2e-08, zf);
+    }
+    if a == 0x38f2_6685 {
+        return f32::copysign(0.000_363_122_73, zf) + f32::copysign(7.275_958e-12, zf);
+    }
+
+    let z = f64::from(zf);
+    let z2 = z * z;
+    let z4 = z2 * z2;
+    #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+    let r = (z - z * z2)
+        * ((TANPIF_CN[0] + z2 * TANPIF_CN[1]) + z4 * (TANPIF_CN[2] + z2 * TANPIF_CN[3]))
+        / (((TANPIF_CD[0] + z2 * TANPIF_CD[1]) + z4 * (TANPIF_CD[2] + z2 * TANPIF_CD[3]))
+            * (0.25 - z2));
+    #[allow(clippy::cast_possible_truncation)]
+    return r as f32;
+}
+
 /// Tangent function
 ///
 /// After [`rem_pio2`] reduces `x` to `y ∈ [-π/4, π/4]` with quadrant
