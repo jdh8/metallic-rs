@@ -155,6 +155,17 @@ pub fn asinpif(x: f32) -> f32 {
     crate::f64_::asinpi(x.into()) as f32
 }
 
+/// Arccosine in half-turns
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::acospi`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/acospif.rs` certifies
+/// the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn acospif(x: f32) -> f32 {
+    crate::f64_::acospi(x.into()) as f32
+}
+
 /// Arccosine
 ///
 /// `acos(x) = π/2 − asin(x)`.  For `|x| < ½` this subtracts the near-zero

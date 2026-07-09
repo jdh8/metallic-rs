@@ -18,7 +18,7 @@ mod pow_consts;
 mod qint;
 pub mod trig;
 
-pub use atan::{acos, asin, asinpi, atan, atan2};
+pub use atan::{acos, acospi, asin, asinpi, atan, atan2};
 pub use erf::{erf, erfc};
 pub use exp::{exp, exp2, exp10, expm1};
 pub use gamma::{lgamma, tgamma};

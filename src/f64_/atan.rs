@@ -1708,6 +1708,124 @@ fn atan_accurate(a: f64) -> f64 {
     ziv_at(m, ATAN_DD_ZIV_EPS).unwrap_or_else(|| atan_dint_mag(a).to_f64())
 }
 
+/// Full-domain `acos(x)` as a triple-double: `π/2 ∓ asin` below ½ in
+/// magnitude, the cancellation-free reflection `2·asin(√u)` (and `π − …` for
+/// negative `x`) above — the deep tier behind [`acospi`].
+#[cold]
+fn acos_td(x: f64) -> TripleDouble {
+    let a = x.abs();
+    if a < 0.5 {
+        let s = asin_direct_td(a);
+        return if x.is_sign_negative() {
+            td_add(FRAC_PI_2_TD, s)
+        } else {
+            td_add(FRAC_PI_2_TD, td_neg(s))
+        };
+    }
+    let u = 0.5 * (1.0 - a);
+    let b = asin_b_td(DoubleDouble { high: u, low: 0.0 });
+    let s = sqrt_td(u);
+    let asin_s = td_add_f64(
+        dd_mul_td(
+            DoubleDouble {
+                high: s.high,
+                low: s.mid,
+            },
+            b,
+        ),
+        s.low * b.high,
+    );
+    let two_asin = td_mul_f64(asin_s, 2.0);
+    if x.is_sign_negative() {
+        td_add(td_mul_f64(FRAC_PI_2_TD, 2.0), td_neg(two_asin))
+    } else {
+        two_asin
+    }
+}
+
+/// Accurate [`acospi`] tier: the double-double `acos` lifted by 1/π, with the
+/// rare survivors resolved through the triple-double lift.
+#[cold]
+#[inline(never)]
+fn acospi_accurate(x: f64) -> f64 {
+    let a = x.abs();
+    let s = asin_pos(a, atan_dd);
+    let m = if x.is_sign_negative() {
+        FRAC_PI_2 + s
+    } else {
+        FRAC_PI_2 + neg(s)
+    };
+    let w = m * INV_PI;
+    // The π/2 − asin cancellation near x → 1 destroys *relative* accuracy, so
+    // this tier gates absolutely at the π/2-scale error bound; the whole
+    // cancellation zone simply falls to the triple-double lift.
+    let eps = 0.5 * PI_SCALED_DD_EPS;
+    let lo = w.high + (w.low - eps);
+    let hi = w.high + (w.low + eps);
+    if lo == hi {
+        return lo;
+    }
+    td_round(td_over_pi(acos_td(x)))
+}
+
+/// Arccosine in half-turns
+///
+/// `acospi(x) = acos(x)/π` correctly rounded, by the same 1/π lift as
+/// [`asinpi`] over [`acos`]'s branch setup.  `acospi(1) = +0`, `acospi(0) =
+/// ½`, and `acospi(−1) = 1` exactly; no tiny band is needed — tiny `x` rides
+/// the direct cell (the result sits near ½) and the result never goes
+/// subnormal (it is ≥ ≈2⁻²⁸ at the domain edge).
+#[must_use]
+#[inline]
+pub fn acospi(x: f64) -> f64 {
+    let a = x.abs();
+
+    let (off, z, zl, r, j) = if a < 0.5 {
+        // acos(x)/π = ½ + (−x)·B(x²)/π
+        let jf = (128.0 * (x * x)).round_ties_even();
+        let r = crate::fma(x, x, -(jf * 0.007_812_5));
+        // SAFETY: x² < ¼ puts jf in 0..=32 (see `asin`).
+        (
+            FRAC_PI_2,
+            -x,
+            0.0,
+            r,
+            unsafe { jf.to_int_unchecked::<i64>() } as usize,
+        )
+    } else {
+        if !(a < 1.0) {
+            if a == 1.0 {
+                // acospi(1) = +0, acospi(−1) = 1 exactly.
+                return if x.is_sign_negative() { 1.0 } else { 0.0 };
+            }
+            return f64::NAN; // |x| > 1 or NaN
+        }
+        let t = 2.0 * (1.0 - a);
+        let z = t.sqrt().copysign(x);
+        let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
+        let u = 0.25 * t;
+        let jf = (128.0 * u).round_ties_even();
+        let r = u - jf * 0.007_812_5;
+        let off = DoubleDouble {
+            high: FRAC_PI_2.high - FRAC_PI_2.high.copysign(x),
+            low: FRAC_PI_2.low - FRAC_PI_2.low.copysign(x),
+        };
+        // SAFETY: u = ¼t ≤ ¼ puts jf in 0..=32.
+        (off, z, zl, r, unsafe { jf.to_int_unchecked::<i64>() }
+            as usize)
+    };
+
+    let (v, eps) = asin_tail_dd(off, z, zl, r, j);
+    let w = v * INV_PI;
+    let eps = crate::fast_mul_add(eps, INV_PI.high, w.high.abs() * crate::exp2i(-102));
+    let lo = w.high + (w.low - eps);
+    let hi = w.high + (w.low + eps);
+    if lo == hi {
+        return lo;
+    }
+    acospi_accurate(x)
+}
+
 /// Arctangent
 #[must_use]
 #[inline]
@@ -2917,6 +3035,74 @@ mod ziv_soundness {
             worst < 0.5,
             "asinpi gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
+        );
+    }
+
+    /// Worst `|leg(x) − acos(x)/π| / eps` for [`acospi`]'s rescaled fast tail
+    /// and its π-scaled double-double accurate tier, value-uniform over
+    /// `(−1, 1)`.
+    #[test]
+    fn acospi_legs_are_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_dd = 0.0f64;
+        for i in 0..20_000_000u64 {
+            let x = mix(i) as f64 / (u64::MAX / 2) as f64 - 1.0;
+            if !(x.abs() < 1.0) || x == 0.0 {
+                continue;
+            }
+            let a = x.abs();
+            let (off, z, zl, r, j) = if a < 0.5 {
+                let jf = (128.0 * (x * x)).round_ties_even();
+                let r = crate::fma(x, x, -(jf * 0.007_812_5));
+                (
+                    FRAC_PI_2,
+                    -x,
+                    0.0,
+                    r,
+                    unsafe { jf.to_int_unchecked::<i64>() } as usize,
+                )
+            } else {
+                let t = 2.0 * (1.0 - a);
+                let z = t.sqrt().copysign(x);
+                let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
+                let u = 0.25 * t;
+                let jf = (128.0 * u).round_ties_even();
+                let r = u - jf * 0.007_812_5;
+                let off = DoubleDouble {
+                    high: FRAC_PI_2.high - FRAC_PI_2.high.copysign(x),
+                    low: FRAC_PI_2.low - FRAC_PI_2.low.copysign(x),
+                };
+                (off, z, zl, r, unsafe { jf.to_int_unchecked::<i64>() }
+                    as usize)
+            };
+            let (v, eps) = asin_tail_dd(off, z, zl, r, j);
+            let w = v * INV_PI;
+            let eps = crate::fast_mul_add(eps, INV_PI.high, w.high.abs() * crate::exp2i(-102));
+            let truth = Float::with_val(250, x).acos_pi();
+            let got = Float::with_val(250, w.high) + Float::with_val(250, w.low);
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            worst = worst.max(abs / eps);
+
+            if i % 8 == 0 {
+                let s = asin_pos(a, atan_dd);
+                let m = if x.is_sign_negative() {
+                    FRAC_PI_2 + s
+                } else {
+                    FRAC_PI_2 + neg(s)
+                };
+                let wm = m * INV_PI;
+                let gotm = Float::with_val(250, wm.high) + Float::with_val(250, wm.low);
+                let absm = Float::with_val(250, &gotm - &truth).abs().to_f64();
+                worst_dd = worst_dd.max(absm / (0.5 * PI_SCALED_DD_EPS));
+            }
+        }
+        println!("acospi fast leg: worst |err|/gate = {worst:.4}");
+        println!("acospi dd tier: worst |err|/gate = {worst_dd:.4}");
+        assert!(
+            worst < 0.5 && worst_dd < 0.5,
+            "acospi gates cover only {:.2}×/{:.2}× the slip",
+            1.0 / worst,
+            1.0 / worst_dd
         );
     }
 

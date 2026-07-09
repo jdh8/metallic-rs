@@ -59,6 +59,10 @@ name = "acosf"
 harness = false
 
 [[bench]]
+name = "acospif"
+harness = false
+
+[[bench]]
 name = "acoshf"
 harness = false
 
@@ -192,6 +196,10 @@ harness = false
 
 [[bench]]
 name = "acos"
+harness = false
+
+[[bench]]
+name = "acospi"
 harness = false
 
 [[bench]]
