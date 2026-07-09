@@ -146,6 +146,17 @@ pub fn exp2f(x: f32) -> f32 {
     fast_ldexp(x, n as i64) as f32
 }
 
+/// 2 raised to the power `x`, minus 1
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::exp2m1`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/exp2m1f.rs` certifies
+/// the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn exp2m1f(x: f32) -> f32 {
+    crate::f64_::exp2m1(x.into()) as f32
+}
+
 /// Raise 10 to the power of `x`
 #[must_use]
 #[inline]

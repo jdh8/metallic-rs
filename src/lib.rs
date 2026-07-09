@@ -17,8 +17,8 @@ mod f64_;
 // suffix.  Implementation modules use the same names directly.
 pub use f64_::{
     acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atan2pi, atanh, atanpi, cbrt, cos, cosh,
-    cospi, erf, erfc, exp, exp2, exp10, expm1, fma, frexp, hypot, ldexp, lgamma, log, log1p, log2,
-    log10, round, rsqrt, sin, sincos, sinh, sinpi, tan, tanh, tanpi, tgamma,
+    cospi, erf, erfc, exp, exp2, exp2m1, exp10, expm1, fma, frexp, hypot, ldexp, lgamma, log,
+    log1p, log2, log10, round, rsqrt, sin, sincos, sinh, sinpi, tan, tanh, tanpi, tgamma,
 };
 
 /// To avoid name collisions with the module [`f64_::pow`].
@@ -26,9 +26,9 @@ pub use f64_::pow::pow;
 
 pub use f32_::{
     acosf, acoshf, acospif, asinf, asinhf, asinpif, atan2f, atan2pif, atanf, atanhf, atanpif,
-    cbrtf, cosf, coshf, cospif, erfcf, erff, exp2f, exp10f, expf, expm1f, fmaf, frexpf, hypotf,
-    ldexpf, lgammaf, log1pf, log2f, log10f, logf, powf, roundf, rsqrtf, sincosf, sinf, sinhf,
-    sinpif, tanf, tanhf, tanpif, tgammaf,
+    cbrtf, cosf, coshf, cospif, erfcf, erff, exp2f, exp2m1f, exp10f, expf, expm1f, fmaf, frexpf,
+    hypotf, ldexpf, lgammaf, log1pf, log2f, log10f, logf, powf, roundf, rsqrtf, sincosf, sinf,
+    sinhf, sinpif, tanf, tanhf, tanpif, tgammaf,
 };
 
 // Crate-internal `f64` primitives, reached as `crate::exp2i` / `crate::fast_mul_add`

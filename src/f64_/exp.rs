@@ -8,6 +8,7 @@
     clippy::approx_constant
 )]
 
+use super::dint::Dint;
 use super::double::{DoubleDouble, fast_ldexp, fast_sum};
 
 const LN2_OVER_N_HI: f64 = 0.005415212348111709;
@@ -862,6 +863,24 @@ pub(super) fn exp_two_level_mantissa_accurate(x: f64) -> (DoubleDouble, i64) {
 /// `2`<sup>`ie`</sup>` · 2`<sup>`j/4096`</sup>` · exp(dx)` correctly rounded
 /// (subnormal-safe).
 fn exp_two_level_finish(jt: i64, dx: DoubleDouble) -> f64 {
+    let (m, ie) = exp_two_level_mantissa_of(jt, dx);
+
+    // Normalize the mantissa into [1, 2) (folding its exponent into `ie`) for the
+    // subnormal-safe final rounding.
+    let (mantissa, ie) = if m.high < 1.0 {
+        (m * 2.0, ie - 1)
+    } else if m.high >= 2.0 {
+        (m * 0.5, ie + 1)
+    } else {
+        (m, ie)
+    };
+    super::double::round_general64(mantissa, ie)
+}
+
+/// The un-normalized accurate mantissa `2^(j/4096)·exp(dx)` and exponent of
+/// [`exp_two_level_finish`] — split out so [`exp2m1_general`] can subtract 1 in
+/// mantissa space before the single rounding.
+fn exp_two_level_mantissa_of(jt: i64, dx: DoubleDouble) -> (DoubleDouble, i64) {
     let i0 = ((jt >> 6) & 63) as usize;
     let i1 = (jt & 63) as usize;
     let ie = jt >> 12;
@@ -903,16 +922,7 @@ fn exp_two_level_finish(jt: i64, dx: DoubleDouble) -> f64 {
         table.add_ordered(em1 * table)
     };
 
-    // Normalize the mantissa into [1, 2) (folding its exponent into `ie`) for the
-    // subnormal-safe final rounding.
-    let (mantissa, ie) = if m.high < 1.0 {
-        (m * 2.0, ie - 1)
-    } else if m.high >= 2.0 {
-        (m * 0.5, ie + 1)
-    } else {
-        (m, ie)
-    };
-    super::double::round_general64(mantissa, ie)
+    (m, ie)
 }
 
 /// Hard-to-round database for [`exp2_accurate`]: inputs whose `2ˣ` lies within
@@ -1064,6 +1074,203 @@ pub fn exp2(x: f64) -> f64 {
     }
 
     exp2_accurate(x)
+}
+
+/// `ln 2` as a double-double, the tiny-band slope of [`exp2m1`].
+const LN2_DD: DoubleDouble = DoubleDouble {
+    high: 0.693_147_180_559_945_3,
+    low: 2.319_046_813_846_299_6e-17,
+};
+
+/// `ln 2` as a 128-bit `Dint`, for [`exp2m1_deep`].
+const LN2_DINT: Dint = Dint {
+    sgn: false,
+    ex: -1,
+    m: 0xb172_17f7_d1cf_79ab_c9e3_b398_03f2_f6af,
+};
+
+/// `(2ˣ − 1 − x·ln 2)/x²` Taylor coefficients (`ln2^(k+2)/(k+2)!`) as
+/// double-doubles, the small-band correction of [`exp2m1`].
+const EXP2M1_U_COEFFS: [(f64, f64); 19] = [
+    (0.240_226_506_959_100_72, -9.493_931_253_182_876e-18),
+    (0.055_504_108_664_821_58, -3.165_822_290_391_280_4e-18),
+    (0.009_618_129_107_628_477, 2.832_460_678_438_1e-19),
+    (0.001_333_355_814_642_844_3, 1.392_805_956_317_258_6e-20),
+    (0.000_154_035_303_933_816_1, 1.178_361_843_990_756_2e-20),
+    (1.525_273_380_405_984_1e-05, -8.027_446_755_055_875e-22),
+    (1.321_548_679_014_431e-06, -2.016_273_232_362_902_3e-24),
+    (1.017_808_600_923_97e-07, -1.949_520_713_756_723e-24),
+    (7.054_911_620_801_123e-09, -2.911_045_396_560_940_6e-26),
+    (4.445_538_271_870_811_6e-10, -1.273_105_148_506_095_4e-26),
+    (2.567_843_599_348_820_6e-11, -3.697_091_209_830_256_3e-28),
+    (1.369_148_885_390_412_8e-12, 7.770_795_328_665_668e-29),
+    (6.778_726_354_822_545e-14, 5.716_403_362_114_485_4e-30),
+    (3.132_436_707_088_428_7e-15, -3.931_855_814_059_875_6e-32),
+    (1.357_024_794_875_514_8e-16, -1.057_117_616_368_963e-32),
+    (5.533_046_532_458_242e-18, -1.282_482_474_149_019_7e-34),
+    (2.130_675_335_489_118e-19, -3.836_913_975_940_952e-36),
+    (7.773_008_428_857_357e-21, -2.181_933_661_678_416e-37),
+    (2.693_919_438_465_583_6e-22, -2.261_283_757_164_579_8e-38),
+];
+
+/// Deep [`exp2m1`] tier for `|x| < ¼`: `x·ln2 + c` carried in the 128-bit
+/// `Dint` (the double-double correction `c = x²·U(x)` enters limb-wise),
+/// rounded by the subnormal-safe general finisher — this replaces CORE-MATH's
+/// 56-entry exception table outright.
+#[cold]
+fn exp2m1_deep(x: f64, c: DoubleDouble) -> f64 {
+    let mut w = Dint::from_f64(x).mul(&LN2_DINT);
+    if c.high != 0.0 {
+        w = w.add(&Dint::from_f64(c.high));
+    }
+    if c.low != 0.0 {
+        w = w.add(&Dint::from_f64(c.low));
+    }
+    w.to_f64_general()
+}
+
+/// Correctly-rounded `2ˣ − 1` for `|x| < ¼`: the double-double `x·ln2 + x²·U(x)`
+/// under a relative gate, with straddles, the deep tail, and every subnormal
+/// result resolved by [`exp2m1_deep`].
+#[inline]
+fn exp2m1_small(x: f64) -> f64 {
+    // Below 2⁻⁹⁰⁰ the relative gate's width itself would go subnormal (and the
+    // results eventually do); the 128-bit tier owns the rounding outright.
+    if x.abs() < crate::exp2i(-900) {
+        return exp2m1_deep(
+            x,
+            DoubleDouble {
+                high: 0.0,
+                low: 0.0,
+            },
+        );
+    }
+
+    let (high, low) = EXP2M1_U_COEFFS[EXP2M1_U_COEFFS.len() - 1];
+    let mut u = DoubleDouble { high, low };
+    for &(high, low) in EXP2M1_U_COEFFS[..EXP2M1_U_COEFFS.len() - 1].iter().rev() {
+        u = u * x + DoubleDouble { high, low };
+    }
+    let c = DoubleDouble::from_product(x, x) * u;
+    let w = LN2_DD * x;
+    let w = w.add_ordered(c); // |c| ≤ |w|·|x|·0.35, ordered
+    let eps = w.high.abs() * EXP2M1_SMALL_EPS;
+    let lo = w.high + (w.low - eps);
+    let hi = w.high + (w.low + eps);
+    if lo == hi {
+        return lo;
+    }
+    exp2m1_deep(x, c)
+}
+
+/// Relative Ziv gate for [`exp2m1_small`]: the double-double slope truncates
+/// at ≈2⁻¹⁰⁷ and the Horner/product roundings sit near 2⁻¹⁰⁴, so `2⁻¹⁰⁰`
+/// bounds the leg with margin (certified by
+/// `ziv_soundness::exp2m1_small_is_sound`).
+const EXP2M1_SMALL_EPS: f64 = crate::exp2i(-100);
+
+/// Correctly-rounded `2ˣ − 1` for `|x| ≥ ¼` — [`expm1_general`]'s
+/// mantissa-space subtraction over the base-2 accurate reduction
+/// (`exp2_accurate`'s double-double `dx`, [`exp_two_level_mantissa_of`]).
+/// Hard-to-round database for [`exp2m1_general`]: the residuals metallic's
+/// double-double accurate path leaves on the `exp2m1.wc` corpus — the corpus
+/// enumerates every input with ≥ 43 hard-to-round bits, and the double-double
+/// path resolves everything below its ≈2⁻¹⁰⁵ reach, so these are exactly the
+/// inputs it cannot round.  Each result is independently confirmed correctly
+/// rounded by a 200-bit MPFR `exp2m1`
+/// (`exp2m1_soundness::exp2m1_database_is_correct`).
+/// `(input_bits, result_bits)`, sorted for binary search.
+#[rustfmt::skip]
+const EXP2M1_HARD: [(u64, u64); 3] = [
+    (0x3fe1e5f48d8ba05a, 0x3fde4f0e78affdcd),
+    (0xbfd5ea0338c1d1f1, 0xbfcb0b1993050635),
+    (0xc01558cf280fde2a, 0xbfef354a4865f051),
+];
+
+#[cold]
+#[inline(never)]
+fn exp2m1_general(x: f64) -> f64 {
+    if let Ok(i) = EXP2M1_HARD.binary_search_by_key(&x.to_bits(), |&(input, _)| input) {
+        return f64::from_bits(EXP2M1_HARD[i].1);
+    }
+
+    let tf = (x * 4096.0).round_ties_even();
+    // SAFETY: |x| < 1025, so |tf| < 2²².
+    let t = unsafe { tf.to_int_unchecked::<i64>() };
+    let sigma = crate::fma(x, 4096.0, -tf);
+
+    let p = DoubleDouble::from_product(sigma, L2H);
+    let q = DoubleDouble::from_product(sigma, -L2L);
+    let hi = p.high + q.high;
+    let e = (p.high - hi) + q.high;
+    let dx = DoubleDouble {
+        high: hi,
+        low: e + (p.low + crate::fma(sigma, -L2LL, q.low)),
+    };
+    let (mant, ie) = exp_two_level_mantissa_of(t, dx);
+
+    // 2ˣ − 1 = 2^ie·(mantissa − 2^(−ie)); |x| ≥ ¼ keeps ie ∈ [−54, 1023] and
+    // bounds the cancellation to ~3 bits (see `expm1_general`).
+    let off = f64::from_bits(((2048 + 1023 - ie) as u64) << 52);
+    let s = if ie < 53 {
+        fast_sum(off, mant.high)
+    } else {
+        fast_sum(mant.high, off)
+    };
+    let fh = fast_sum(s.high, mant.low + s.low).high;
+    fast_ldexp(fh, ie)
+}
+
+/// 2 raised to the power `x`, minus 1
+///
+/// `exp2m1(x) = 2ˣ − 1` correctly rounded: [`expm1`]'s mantissa-space
+/// subtraction rides [`exp2`]'s exact reduction on the main band, the small
+/// band `|x| < ¼` goes result-anchored through `x·ln2 + x²·U(x)`, and the
+/// hard ties everywhere fall to a 128-bit tier instead of CORE-MATH's
+/// exception table.  `exp2m1(x) = −1` exactly for `x ≤ −54` and overflows
+/// above `x = 1024`.
+#[must_use]
+#[inline]
+pub fn exp2m1(x: f64) -> f64 {
+    if x.is_nan() || x == 0.0 {
+        return x; // NaN propagates; ±0 keeps its sign
+    }
+    if x >= 1024.0 {
+        return f64::INFINITY;
+    }
+    // 2ˣ ≤ 2⁻⁵⁴: the result rounds to −1 (ties-to-even at x = −54 exactly).
+    if x <= -54.0 {
+        return -1.0;
+    }
+    if x.to_bits() & (!0u64 >> 1) < 0x3fd0_0000_0000_0000 {
+        return exp2m1_small(x);
+    }
+
+    // Main band: `2ˣ = (th + fl)·2^q` by the exact base-2 reduction, then the
+    // `− 1` in mantissa space exactly as in [`expm1`].
+    let scaled4 = (x * 4096.0).round_ties_even();
+    // SAFETY: |x| < 1025, so |scaled4| < 2²².
+    let t = unsafe { scaled4.to_int_unchecked::<i64>() };
+    let sigma4 = crate::fma(x, 4096.0, -scaled4);
+    let dx = crate::fma(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
+    let (th, fl, q) = exp_two_level_fold(t, dx);
+    let off = f64::from_bits(((2048 + 1023 - q) as u64) << 52);
+    let s = if q < 53 {
+        fast_sum(off, th)
+    } else if q < 75 {
+        fast_sum(th, off)
+    } else {
+        DoubleDouble { high: th, low: 0.0 }
+    };
+    let high = s.high;
+    let low = fl + s.low;
+    let lo = high + (low - EXP_TWO_LEVEL_ZIV_EPS);
+    let hi = high + (low + EXP_TWO_LEVEL_ZIV_EPS);
+    if lo == hi {
+        return fast_ldexp(lo, q);
+    }
+
+    exp2m1_general(x)
 }
 
 /// 10 raised to the power `x`
@@ -1382,6 +1589,71 @@ fn expm1_general(x: f64) -> f64 {
     };
     let fh = fast_sum(s.high, mant.low + s.low).high;
     fast_ldexp(fh, ie)
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod exp2m1_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Every [`EXP2M1_HARD`] entry must be the 200-bit MPFR rounding.
+    #[test]
+    fn exp2m1_database_is_correct() {
+        for &(input, result) in &EXP2M1_HARD {
+            let x = f64::from_bits(input);
+            let truth = Float::with_val(200, x).exp2_m1().to_f64();
+            assert!(
+                truth.to_bits() == result,
+                "database entry for {x:e} is {:e}, MPFR says {truth:e}",
+                f64::from_bits(result)
+            );
+        }
+    }
+
+    /// Worst `|leg(x) − (2ˣ−1)| / (EXP2M1_SMALL_EPS·|w.high|)` over ±(0, ¼).
+    #[test]
+    fn exp2m1_small_is_sound() {
+        let mut worst = 0.0f64;
+        let mut worst_x = 0.1;
+        for i in 0..20_000_000u64 {
+            let x = (mix(i) as f64 / u64::MAX as f64 - 0.5) * 0.5;
+            if x == 0.0 || x.abs() < crate::exp2i(-900) {
+                continue;
+            }
+            let (high, low) = EXP2M1_U_COEFFS[EXP2M1_U_COEFFS.len() - 1];
+            let mut u = DoubleDouble { high, low };
+            for &(high, low) in EXP2M1_U_COEFFS[..EXP2M1_U_COEFFS.len() - 1].iter().rev() {
+                u = u * x + DoubleDouble { high, low };
+            }
+            let c = DoubleDouble::from_product(x, x) * u;
+            let w = LN2_DD * x;
+            let w = w.add_ordered(c);
+            let got = Float::with_val(250, w.high) + Float::with_val(250, w.low);
+            let truth = Float::with_val(250, x).exp2_m1();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs / (EXP2M1_SMALL_EPS * w.high.abs());
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!(
+            "exp2m1 small leg: worst |err|/gate = {worst:.4} at x={worst_x:e} bits={:016x}",
+            worst_x.to_bits()
+        );
+        assert!(
+            worst < 0.5,
+            "exp2m1 small gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
 }
 
 #[cfg(all(test, feature = "mpfr"))]

@@ -119,6 +119,10 @@ name = "exp2f"
 harness = false
 
 [[bench]]
+name = "exp2m1f"
+harness = false
+
+[[bench]]
 name = "exp10f"
 harness = false
 
@@ -272,6 +276,10 @@ harness = false
 
 [[bench]]
 name = "exp2"
+harness = false
+
+[[bench]]
+name = "exp2m1"
 harness = false
 
 [[bench]]

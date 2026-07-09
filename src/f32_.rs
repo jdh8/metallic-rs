@@ -14,7 +14,7 @@ mod trig;
 
 pub use atan::{acosf, acospif, asinf, asinpif, atan2f, atan2pif, atanf, atanpif};
 pub use erf::{erfcf, erff};
-pub use exp::{exp2f, exp10f, expf, expm1f, frexpf, ldexpf};
+pub use exp::{exp2f, exp2m1f, exp10f, expf, expm1f, frexpf, ldexpf};
 pub use gamma::{lgammaf, tgammaf};
 pub use hyp::{acoshf, asinhf, atanhf, coshf, sinhf, tanhf};
 pub use log::{log1pf, log2f, log10f, logf};

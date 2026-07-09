@@ -2550,6 +2550,7 @@ fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f64 {
         }
     }
 
+    #[allow(clippy::branches_sharing_code)] // the scaling mirrors atan2_mag's shape
     let inner = if q < 9.094_947_017_729_282e-13 {
         // Unlike atan2, the rounded IEEE quotient is *not* the answer after
         // the 1/π lift — its ½-ulp rounding error survives the multiply — so
@@ -2624,6 +2625,7 @@ pub fn atan2pi(y: f64, x: f64) -> f64 {
     atan2pi_mag(x.abs(), y.abs(), x.is_sign_negative()).copysign(y)
 }
 
+/// Arctangent of `y/x` in the correct quadrant
 #[must_use]
 #[inline]
 pub fn atan2(y: f64, x: f64) -> f64 {
