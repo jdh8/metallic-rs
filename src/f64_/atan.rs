@@ -2469,6 +2469,161 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
 ///
 /// The result is the angle in `(-π, π]` between the positive `x`-axis and the
 /// point `(x, y)`, carrying the sign of `y`.
+/// `1/π` as a `Tint` (the 192-bit 2/π mantissa at `ex = −1`, round-to-nearest).
+const INV_PI_TINT: Tint = Tint {
+    sgn: false,
+    ex: -1,
+    hi: 0xa2f9_836e_4e44_1529_fc27_57d1_f534_ddc0,
+    lo: 0xdb62_9599_3c43_9042,
+};
+
+/// [`atan2_tint_mag`] lifted by 1/π: the same 192-bit ladder with one more
+/// `Tint` multiply before the rounding, and the ulp bounds doubled to absorb
+/// it.  Owns the tiny-ratio corner too (its result may be subnormal; the
+/// `Tint` rounder handles that).
+#[cold]
+fn atan2pi_tint_mag(a: f64, b: f64, x_negative: bool) -> f64 {
+    let inv = b > a;
+    let (num, den) = if inv { (a, b) } else { (b, a) };
+    let mut z = Tint::div_d(num, den);
+
+    if !inv && !x_negative && z.ex <= -96 {
+        // atan(z)/π ≈ z/π, with CORE-MATH's hair-toward-zero perturbation.
+        let (lo, borrow) = z.lo.overflowing_sub(2);
+        z.lo = lo;
+        z.hi = z.hi.wrapping_sub(u128::from(borrow));
+        return z.mul(&INV_PI_TINT).to_f64(8);
+    }
+
+    let mut p = P_TINT[29];
+    let mut q = Q_TINT[29];
+    for i in (0..29).rev() {
+        p = p.mul(&z);
+        q = q.mul(&z);
+        p = p.add(&P_TINT[i]);
+        q = q.add(&Q_TINT[i]);
+    }
+    p = p.mul(&z);
+    let mut z = Tint::div(&p, &q);
+
+    if inv {
+        z = PI2_TINT.add(&z.neg());
+    }
+    if x_negative {
+        z = PI_TINT.add(&z.neg());
+    }
+    let err = if x_negative {
+        532
+    } else if inv {
+        1048
+    } else {
+        1324
+    };
+
+    z.mul(&INV_PI_TINT).to_f64(err)
+}
+
+/// [`atan2_mag`] lifted by 1/π — the same three tiers, each rescaled: the
+/// plain-f64 leg's absolute gate scales with the value, the double-double
+/// tier keeps its scale-invariant relative gate, and the 192-bit tier takes
+/// the lift inside [`atan2pi_tint_mag`].
+fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f64 {
+    let (big, small, swapped) = if a >= b { (a, b, false) } else { (b, a, true) };
+    let q = small / big;
+
+    // Deep-tail corner, much wider than `atan2_mag`'s: below q ≈ 2⁻⁹⁵⁵ the
+    // relative Ziv gate's width itself goes subnormal (and the π-scaled
+    // results eventually do), so the 192-bit tier owns the rounding outright.
+    if !swapped && !x_negative && q > 0.0 && q <= crate::exp2i(-955) {
+        return atan2pi_tint_mag(a, b, x_negative);
+    }
+
+    if (crate::exp2i(-960)..=crate::exp2i(1020)).contains(&big) {
+        let (inner, e) = atan_ratio(big, small, q);
+        let v = atan2_octant(inner, swapped, x_negative);
+        let w = v * INV_PI;
+        let eps = crate::fast_mul_add(e, INV_PI.high, w.high.abs() * crate::exp2i(-102));
+        let lo = w.high + (w.low - eps);
+        let hi = w.high + (w.low + eps);
+        if lo == hi {
+            return lo;
+        }
+    }
+
+    let inner = if q < 9.094_947_017_729_282e-13 {
+        // Unlike atan2, the rounded IEEE quotient is *not* the answer after
+        // the 1/π lift — its ½-ulp rounding error survives the multiply — so
+        // the tiny ratio needs the exact double-double quotient.  Scale the
+        // larger leg into [1, 2) first: near the subnormal floor the raw
+        // quotient's fma residual quantizes to subnormals and the low word
+        // degrades to ≈2⁻⁵⁵ (caught by the wide-magnitude sweep).  atan's own
+        // −q³/3 term sits at ≈2⁻⁸¹ relative, inside the gate.
+        let (_, exp) = super::frexp(big);
+        DoubleDouble::from_quotient(super::ldexp(small, 1 - exp), super::ldexp(big, 1 - exp))
+    } else {
+        let (_, exp) = super::frexp(big);
+        let big = super::ldexp(big, 1 - exp);
+        let small = super::ldexp(small, 1 - exp);
+
+        let k = (q * 8.0).round_ties_even();
+        let c = k * 0.125;
+        // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
+        let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
+
+        let num = DoubleDouble {
+            high: small,
+            low: 0.0,
+        } + neg(DoubleDouble::from_product(c, big));
+        let den = DoubleDouble {
+            high: big,
+            low: 0.0,
+        } + DoubleDouble::from_product(c, small);
+        let u = num * den.recip();
+
+        atan_cell_fast(table, u)
+    };
+
+    // The relative gate is scale-invariant, so the parent's width carries
+    // over; the 1/π multiply adds only ≈2⁻¹⁰⁴ relative.
+    ziv(atan2_octant(inner, swapped, x_negative) * INV_PI)
+        .unwrap_or_else(|| atan2pi_tint_mag(a, b, x_negative))
+}
+
+/// Arctangent of `y/x` in half-turns, in the correct quadrant
+///
+/// `atan2pi(y, x) = atan2(y, x)/π` correctly rounded.  Every special ray is
+/// exactly representable in half-turns: `(±0, x>0) = ±0`, `(±0, x<0) = ±1`,
+/// `(y, ±0) = ±½`, `(±∞, ±∞) = ±¼`, `(±∞, ∓∞) = ±¾`, `(±∞, finite) = ±½`,
+/// and `(finite, ∓∞) = ±1`.
+#[must_use]
+#[inline]
+pub fn atan2pi(y: f64, x: f64) -> f64 {
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+
+    if x.is_infinite() || y.is_infinite() {
+        let magnitude: f64 = match (x.is_infinite(), y.is_infinite()) {
+            (true, true) if x.is_sign_positive() => 0.25,
+            (true, true) => 0.75,
+            (true, false) if x.is_sign_positive() => 0.0,
+            (true, false) => 1.0,
+            (false, true) => 0.5,
+            (false, false) => unreachable!(),
+        };
+        return magnitude.copysign(y);
+    }
+
+    if y == 0.0 {
+        return if x.is_sign_positive() { 0.0_f64 } else { 1.0 }.copysign(y);
+    }
+    if x == 0.0 {
+        return f64::copysign(0.5, y);
+    }
+
+    atan2pi_mag(x.abs(), y.abs(), x.is_sign_negative()).copysign(y)
+}
+
 #[must_use]
 #[inline]
 pub fn atan2(y: f64, x: f64) -> f64 {

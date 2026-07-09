@@ -155,6 +155,19 @@ pub fn asinpif(x: f32) -> f32 {
     crate::f64_::asinpi(x.into()) as f32
 }
 
+/// Arctangent of `y/x` in half-turns, in the correct quadrant
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::atan2pi`] and rounds
+/// once more to f32 — **faithful (≤ 1 ulp), not yet correctly rounded**: 189
+/// of CORE-MATH's bivariate near-midpoint ties double-round (issue #7 tracks
+/// the dedicated binary32 port; the strict corpus gate is `#[ignore]`d until
+/// then).
+#[must_use]
+#[inline]
+pub fn atan2pif(y: f32, x: f32) -> f32 {
+    crate::f64_::atan2pi(y.into(), x.into()) as f32
+}
+
 /// Arctangent in half-turns
 ///
 /// Promotes to the correctly rounded f64 [`crate::f64_::atanpi`] and rounds

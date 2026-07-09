@@ -235,6 +235,14 @@ name = "atan2"
 harness = false
 
 [[bench]]
+name = "atan2pi"
+harness = false
+
+[[bench]]
+name = "atan2pif"
+harness = false
+
+[[bench]]
 name = "atanh"
 harness = false
 
