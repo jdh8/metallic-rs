@@ -307,6 +307,136 @@ fn hypot_hard(big_s: f64, small_s: f64) -> f64 {
     f64::from_bits((((0x3fe + re) as u64) << EXP_SHIFT) + rm)
 }
 
+/// The reciprocal square root
+///
+/// Computes `1/√x` correctly rounded, mirroring CORE-MATH's `cr_rsqrt`.  The
+/// seed `(1/x)·√x` issues the division and the square root together so the
+/// pair costs one long-latency slot, one FMA-based Newton step lands the fast
+/// leg at ≈2⁻¹⁰⁴ relative, and a bit-pattern window defers the rare
+/// hard-to-round residuals to the exact integer refinement.  The result is
+/// never subnormal (outputs span ≈[2⁻⁵¹², 2⁵³⁷]), so plain rounding suffices.
+#[must_use]
+#[inline]
+pub fn rsqrt(x: f64) -> f64 {
+    let ix = x.to_bits();
+
+    let r = if ix < 1 << 52 {
+        // Positive subnormal or +0: `1/x` would overflow, but `√x/x` stays finite.
+        if ix == 0 {
+            return f64::INFINITY; // pole at +0
+        }
+        x.sqrt() / x
+    } else if ix >= 0x7ff << 52 {
+        // +NaN, +∞, and every sign-bit-set input.
+        return if ix == 1 << 63 {
+            f64::NEG_INFINITY // pole at −0, sign preserved like 1/−0
+        } else if x.is_nan() {
+            x + x // quiet NaN, payload preserved
+        } else if x == f64::INFINITY {
+            0.0
+        } else {
+            f64::NAN // x < 0
+        };
+    } else if ix > 0x7fd << 52 {
+        // x > 2¹⁰²²: `1/x` would spuriously underflow; fold the scaling exactly.
+        (4.0 / x) * (0.25 * x.sqrt())
+    } else {
+        (1.0 / x) * x.sqrt()
+    };
+
+    // One Newton step with the products kept exact: `h ≈ r²x − 1` from the
+    // FMA residuals, `rf + dr` is the refined double-double result, and after
+    // the exact `r − rf` swap `dr` is the residual beyond `rf`'s rounding.
+    let rx = r * x;
+    let drx = crate::fma(r, x, -rx);
+    let h = crate::fma(r, rx, -1.0) + r * drx;
+    let dr = (r * 0.5) * h;
+    let rf = r - dr;
+    let dr = dr - (r - rf);
+
+    // Ziv gate on bit patterns (CORE-MATH's shape, re-derived window): `aidr`
+    // is `|dr|` rebased to the top of `rf`'s binade, so 0x3c9… ≙ a residual of
+    // exactly half an ulp — the round-to-nearest tie.  A residual within ±64
+    // bit-units of that midpoint (`mid == 0`, a ≥2⁻¹⁰¹-of-the-binade window;
+    // CORE-MATH's ±16 is thinner than the leg's measured ≈2⁻¹⁰¹·⁷ slip, so the
+    // window is widened to restore the 2× margin certified by
+    // `ziv_soundness::rsqrt_fast_leg_is_sound` — refine rate stays ≈2⁻⁴⁵), an
+    // implausibly large one, or a vanishing one (an exact result rebased out
+    // of range) cannot be certified and takes the exact refinement.
+    let aidr = (dr.to_bits() & (u64::MAX >> 1))
+        .wrapping_sub(rf.to_bits() & (0x7ff << 52))
+        .wrapping_add(0x3fe << 52);
+    let mid = aidr.wrapping_sub(0x3c90_0000_0000_0000 - 64) >> 7;
+    if mid == 0 || !(0x39b << 52..=(0x3ca << 52) - 0x80).contains(&aidr) {
+        return rsqrt_refine(rf, x);
+    }
+    rf
+}
+
+/// Exact integer refinement of the [`rsqrt`] inputs whose fast-leg residual
+/// sits too close to a rounding boundary.
+///
+/// Port of CORE-MATH's `as_rsqrt_refine`, round-to-nearest arm only.  With the
+/// input's exponent parity folded into a shift, `r = 1/√x` rounds correctly
+/// iff `(rm ∓ n)²·am` brackets `2¹²⁷`; the walk is carried in wrapping 128-bit
+/// fixed point, and a final midpoint test `(rm + ½)²·am < 2¹²⁷` settles the
+/// nearest neighbour.  `rsqrt(4ᵏ)` is exact and returns immediately.
+#[cold]
+#[allow(clippy::cast_possible_truncation)]
+fn rsqrt_refine(rf: f64, x: f64) -> f64 {
+    let mut ia = x.to_bits();
+    if ia < 1 << 52 {
+        // Normalize a subnormal input onto a virtual biased exponent: only its
+        // *parity* matters below — the magnitude already lives in `rf`.
+        let nz = u64::from(ia.leading_zeros());
+        ia = (ia << (nz - 11)) & (u64::MAX >> 12) | (nz - 12) << 52;
+    }
+    if ia << 11 == 1 << 63 {
+        return rf; // x = 4ᵏ: mantissa 0, even exponent — `rf` is already exact
+    }
+
+    let mut ir = rf.to_bits();
+    let e = (ia >> 52) & 1;
+    let rm = (ir << 11 | 1 << 63) >> 11;
+    let am = ((ia & (u64::MAX >> 12)) | 1 << 52) << (5 - e);
+
+    // rrt = rm²·am − 2¹²⁷ in wrapping fixed point; its sign bit tells whether
+    // the candidate `rf` sits below or above 1/√x.
+    let rt = u128::from(rm) * u128::from(am);
+    let low = u128::from(rt as u64) * u128::from(rm);
+    let t1 = ((low >> 64) as u64).wrapping_add(((rt >> 64) as u64).wrapping_mul(rm));
+    let mut rrt = u128::from(t1) << 64 | u128::from(low as u64);
+
+    let s = (rrt >> 127) as u64;
+    let dd = 1u64.wrapping_sub(2 * s); // ±1-ulp step toward the root
+    let rts = ((rt << 1) ^ 0u128.wrapping_sub(u128::from(s))).wrapping_add(u128::from(s));
+    let am2 = am << 1;
+    let mut am20 = 0u64.wrapping_sub(am);
+    // Walk `ir` one ulp at a time, updating rm²·am incrementally by the exact
+    // difference `±2·rm·am − (2n − 1)·am`, until the residual changes sign.
+    let mut prrt;
+    loop {
+        ir = ir.wrapping_sub(dd);
+        prrt = rrt;
+        am20 = am20.wrapping_add(am2);
+        rrt = rrt.wrapping_sub(rts.wrapping_sub(u128::from(am20)));
+        if (prrt ^ rrt) >> 127 != 0 {
+            break;
+        }
+    }
+    // Keep the bracketing value below the root and its candidate `ir`.
+    let below = rrt >> 127 != 0;
+    ir = ir.wrapping_add(if below { 0 } else { dd });
+    let rrt = if below { rrt } else { prrt };
+
+    // Round to nearest: bump `ir` iff the midpoint `(rm + ½)²·am` is still
+    // below 2¹²⁷, i.e. `rrt + rm·am + am/4` keeps the sign bit set.
+    let rm = (ir << 11 | 1 << 63) >> 11;
+    let rt = u128::from(rm) * u128::from(am);
+    let rrt = rrt.wrapping_add(u128::from(am >> 2)).wrapping_add(rt);
+    f64::from_bits(ir.wrapping_add((rrt >> 127) as u64))
+}
+
 /// Multiply `x` by 2 raised to the power `n`
 #[must_use]
 #[inline]
@@ -627,6 +757,51 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "cbrt gate covers only {:.2}× the slip at x={worst_x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// Tight side of [`rsqrt`]'s bit-pattern tie window, relative to the *top*
+    /// of the result's binade: `mid == 0` spans ±64 bit-units around the 2⁻⁵⁴
+    /// midpoint, and just below the midpoint the unit is 2⁻¹⁰⁷, so the window
+    /// certifies only errors under 64·2⁻¹⁰⁷ = 2⁻¹⁰¹.
+    const RSQRT_GATE: f64 = crate::exp2i(-101);
+
+    /// Worst `|leg(x) − 1/√x| / (2⁻¹⁰¹·2^(exp(rf)+1))` over `[1, 4)` — one full
+    /// period of the exponent parity, the only input structure the relative
+    /// error depends on.  The gate may only certify a rounding when the fast
+    /// leg's error is smaller than the tie window it leaves unrefined (the leg
+    /// slip is dominated by the dropped quadratic Newton term ≈⅜·h²·r), so a
+    /// ratio `< 0.5` certifies the 2× soundness margin.
+    #[test]
+    fn rsqrt_fast_leg_is_sound() {
+        let (lb, hb) = (1.0f64.to_bits(), 4.0f64.to_bits());
+        let mut worst = 0.0f64;
+        let mut worst_x = 1.0;
+        for i in 0..30_000_000u64 {
+            let x = f64::from_bits(lb + mix(i) % (hb - lb));
+            // Replicate the fast leg: seed, exact-product Newton, residual swap.
+            let r = (1.0 / x) * x.sqrt();
+            let rx = r * x;
+            let drx = crate::fma(r, x, -rx);
+            let h = crate::fma(r, rx, -1.0) + r * drx;
+            let dr = (r * 0.5) * h;
+            let rf = r - dr;
+            let dr = dr - (r - rf);
+            let got = Float::with_val(250, rf) - Float::with_val(250, dr);
+            let truth = Float::with_val(250, x).recip_sqrt();
+            let abs = Float::with_val(250, &got - &truth).abs().to_f64();
+            let scale = crate::exp2i((rf.to_bits() >> EXP_SHIFT) as i64 - 1022);
+            let ratio = abs / (RSQRT_GATE * scale);
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("rsqrt fast leg: worst |err|/gate = {worst:.4} at x={worst_x:e}");
+        assert!(
+            worst < 0.5,
+            "rsqrt gate covers only {:.2}× the slip at x={worst_x:e}",
             1.0 / worst
         );
     }

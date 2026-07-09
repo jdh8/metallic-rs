@@ -119,6 +119,60 @@ pub fn hypotf(x: f32, y: f32) -> f32 {
     f64::from_bits(bits) as f32
 }
 
+/// The reciprocal square root
+///
+/// `1/√x` evaluated in f64: the promoted division and square root leave the
+/// double result accurate enough that its single rounding to f32 is correct
+/// for all but one specific input and two mantissa families, which CORE-MATH's
+/// `cr_rsqrtf` patches with a constructed `r − dr` in the result's own binade
+/// (ported verbatim, wrapping arithmetic included).  The exhaustive 2³² sweep
+/// in `tests/rsqrtf.rs` certifies every input.
+#[must_use]
+#[inline]
+pub fn rsqrtf(x: f32) -> f32 {
+    let ix = x.to_bits();
+
+    if ix >= 0xff << 23 || ix == 0 {
+        // ±0, +∞, +NaN, and every sign-bit-set input.
+        return if ix << 1 == 0 {
+            1.0 / x // pole at ±0, sign preserved
+        } else if ix >> 31 == 1 {
+            if ix & (u32::MAX >> 1) > 0xff << 23 {
+                x + x // −NaN stays NaN, payload preserved
+            } else {
+                f32::NAN // x < 0, −∞ included
+            }
+        } else if ix << 9 == 0 {
+            0.0 // +∞
+        } else {
+            x + x // +NaN
+        };
+    }
+
+    // The three double-rounding victims of the promoted expression: one
+    // subnormal input and two mantissa families across all exponents.
+    let m = ix << 8;
+    if (ix == 0x002f_7e2a || m == 0xbdf8_a800 || m == 0x55b7_bd00) && ix != 0x0055_b7bd {
+        let e = if ix == 0x002f_7e2a {
+            u32::MAX
+        } else {
+            ix >> 23
+        };
+        let e = (512u32.wrapping_sub(e) / 2).wrapping_sub(578);
+        let base = if m == 0x55b7_bd00 {
+            0x000c_1740
+        } else {
+            0x0052_22e0
+        };
+        let r = f32::from_bits(base | e.wrapping_shl(23));
+        let dr = f32::from_bits(e.wrapping_sub(25).wrapping_shl(23));
+        return r - dr;
+    }
+
+    let x = f64::from(x);
+    ((1.0 / x) * x.sqrt()) as f32
+}
+
 /// Higher part of ln(2) whose lowest 14 bits are zero
 pub const LN_2_HI: f64 = 0.693_147_180_560_117_7;
 

@@ -147,6 +147,10 @@ name = "roundf"
 harness = false
 
 [[bench]]
+name = "rsqrtf"
+harness = false
+
+[[bench]]
 name = "sincosf"
 harness = false
 
@@ -264,6 +268,10 @@ harness = false
 
 [[bench]]
 name = "round"
+harness = false
+
+[[bench]]
+name = "rsqrt"
 harness = false
 
 [[bench]]
