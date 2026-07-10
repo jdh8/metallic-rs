@@ -623,36 +623,54 @@ pub fn logf(x: f32) -> f32 {
 }
 
 /// Compute `ln(1 + x)` accurately especially for small `x`
+///
+/// Dispatch is a pair of integer compares: the series band (over half of a
+/// representation-uniform draw) exits on the first, and the hard-tie match
+/// runs only ahead of the lookup kernel that needs it.
 #[must_use]
 #[inline]
 pub fn log1pf(x: f32) -> f32 {
-    // The value arms are intrinsic hard ties (see `logf`); nine carried over
-    // from the previous atanh kernel plus `1.430_518_3e-5`.
-    match x {
-        f32::INFINITY => f32::INFINITY,
-        -1.0 => f32::NEG_INFINITY,
-        -2.178_714_6e-3 => -2.181_091_6e-3,
-        -8.583_044e-6 => -8.583_081e-6,
-        -7.152_555_7e-7 => -7.152_558e-7,
-        7.152_559e-7 => 7.152_557e-7,
-        8.583_093e-6 => 8.583_057e-6,
-        1.430_518_3e-5 => 1.430_508_1e-5,
-        0.495_129_97 => 0.402_213_13,
-        8.472_636 => 2.248_407_1,
-        1.278_378_4e23 => 53.20505,
-        5.498_306e28 => 66.17683,
-        x if x < -1.0 || x.is_nan() => f32::NAN,
-        _ => {
-            let xd = f64::from(x);
-            if x.abs() < 1.862_645_1e-9 {
-                // |x| < 2⁻²⁹: 1 + x would round (an f32 mantissa this low
-                // spans past bit −52), and the x³/3 series tail is below
-                // 2⁻⁵⁹ relative.
-                return crate::fast_mul_add(-0.5 * xd, xd, xd) as f32;
-            }
+    let bits = x.to_bits();
+    let ax = bits & 0x7FFF_FFFF;
 
-            log_lookup(1.0 + xd, &LNF_TABLES) as f32
-        }
+    if ax < 0x3100_0000 {
+        // |x| < 2⁻²⁹ (±0 included): 1 + x would round (an f32 mantissa this
+        // low spans past bit −52), and the x³/3 series tail is below 2⁻⁵⁹
+        // relative.
+        let xd = f64::from(x);
+        return crate::fast_mul_add(-0.5 * xd, xd, xd) as f32;
+    }
+    if bits >= 0xBF80_0000 || ax >= 0x7F80_0000 {
+        return log1pf_special(x);
+    }
+
+    // Intrinsic hard ties (see `logf`) as bit patterns; nine carried over
+    // from the previous atanh kernel plus `1.430_518_3e-5`.
+    match bits {
+        0xBB0E_C8C4 => -2.181_091_6e-3,
+        0xB70F_FFE5 => -8.583_081e-6,
+        0xB53F_FFFD => -7.152_558e-7,
+        0x3540_0003 => 7.152_557e-7,
+        0x3710_001B => 8.583_057e-6,
+        0x3770_004B => 1.430_508_1e-5,
+        0x3EFD_81AD => 0.402_213_13,
+        0x4107_8FEB => 2.248_407_1,
+        0x65D8_90D3 => 53.20505,
+        0x6F31_A8EC => 66.17683,
+        _ => log_lookup(1.0 + f64::from(x), &LNF_TABLES) as f32,
+    }
+}
+
+/// [`log1pf`]'s off-domain and non-finite returns: `x ≤ -1`, `+∞`, NaN
+#[cold]
+#[inline(never)]
+fn log1pf_special(x: f32) -> f32 {
+    if x == -1.0 {
+        f32::NEG_INFINITY
+    } else if x == f32::INFINITY {
+        x
+    } else {
+        f32::NAN
     }
 }
 
