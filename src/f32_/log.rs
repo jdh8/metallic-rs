@@ -720,44 +720,73 @@ pub fn log10f(x: f32) -> f32 {
     log_lookup(x.into(), &LOG10F_TABLES) as f32
 }
 
+/// `log₂e` rounded to 24 significant bits, so `x·LOG2P1_C24` is exact for any
+/// `f32` mantissa promoted to `f64` (24-bit × 24-bit ≤ 48 bits).
+const LOG2P1_C24: f64 = 1.442_695_021_629_333_5;
+
+/// `log₂(1+x)/x − LOG2P1_C24` at the constant term, then the rest of the
+/// Maclaurin-shaped minimax — the small-`|x|` leg of [`log2p1f`].  Closing with
+/// `fma(x, LOG2P1_C24, x·P(x))` keeps the dominant `x·log₂e` exact, so the
+/// division-free leg is correctly rounded without the table.  Relative error
+/// ≈ 2⁻⁵³, from
+/// `ratapprox --function="log2(1+x)/x" --dom="[-0.0234375,0.0234375]"
+///   --num="[1,x,x^2,x^3,x^4,x^5,x^6,x^7]" --den="[1]"` (constant split off).
+const LOG2P1_MID: [f64; 8] = [
+    1.925_962_989_091_09e-8,
+    -0.721_347_520_444_481_5,
+    0.480_898_346_968_274_8,
+    -0.360_673_760_230_469_43,
+    0.288_538_952_608_041_63,
+    -0.240_449_110_269_704_84,
+    0.206_270_385_606_554_72,
+    -0.180_504_925_948_204_6,
+];
+
 /// Binary logarithm of 1 plus `x`
 ///
-/// One `f64` pass: `1 + x` is exact (an f32 mantissa plus the unit bit spans
-/// at most 53 bits) and the division-free [`log_lookup`] kernel finishes.
-/// Below `2⁻²⁹` the two-term series avoids forming `1 + x` at all (its
-/// `x³/3` tail is under `2⁻⁶¹` relative).  The exhaustive 2³² sweep in
+/// For `|x| < 0.0234375` a table-free `f64` polynomial `x·P(x)` closed by the
+/// exact product `x·log₂e` serves the band directly; elsewhere `1 + x` is exact
+/// (an f32 mantissa plus the unit bit spans at most 53 bits) and the
+/// division-free [`log_lookup`] kernel finishes.  The exhaustive 2³² sweep in
 /// `tests/log2p1f.rs` certifies every input.
 #[must_use]
 #[inline]
 pub fn log2p1f(x: f32) -> f32 {
-    use core::f64::consts::LOG2_E;
+    let bits = x.to_bits();
+    let ax = bits & 0x7FFF_FFFF;
 
-    if x == 0.0 || x.is_nan() || x == f32::INFINITY {
-        return x;
+    if ax < 0x3CC0_0000 {
+        // |x| < 0.0234375 (±0 flows through as ±0).
+        let xd = f64::from(x);
+        let f = xd * crate::poly(xd, &LOG2P1_MID);
+        return crate::fast_mul_add(xd, LOG2P1_C24, f) as f32;
     }
-    if x < -1.0 {
-        return f32::NAN;
-    }
-    if x == -1.0 {
-        return f32::NEG_INFINITY;
+    if bits >= 0xBF80_0000 || ax >= 0x7F80_0000 {
+        return log2p1f_special(x);
     }
 
     // The two f32 ties the kernel's double rounding cannot steer.
-    if x.to_bits() == 0x4ebd_09e3 {
+    if bits == 0x4ebd_09e3 {
         return f32::from_bits(0x41f4_8013);
     }
-    if x.to_bits() == 0x5292_8e33 {
+    if bits == 0x5292_8e33 {
         return f32::from_bits(0x4218_c7fd);
     }
 
-    let xd = f64::from(x);
-    if x.abs() < 1.862_645_1e-9 {
-        // |x| < 2⁻²⁹: 1 + x would round (an f32 mantissa this low spans past
-        // bit −52), and the x³/3 series tail is below 2⁻⁵⁹ relative.
-        return (LOG2_E * crate::fast_mul_add(-0.5 * xd, xd, xd)) as f32;
-    }
+    log_lookup(1.0 + f64::from(x), &LOG2F_TABLES) as f32
+}
 
-    log_lookup(1.0 + xd, &LOG2F_TABLES) as f32
+/// [`log2p1f`]'s off-domain and non-finite returns: `x ≤ -1`, `+∞`, NaN
+#[cold]
+#[inline(never)]
+fn log2p1f_special(x: f32) -> f32 {
+    if x == -1.0 {
+        f32::NEG_INFINITY
+    } else if x < -1.0 {
+        f32::NAN
+    } else {
+        x
+    }
 }
 
 /// Common logarithm of 1 plus `x`
