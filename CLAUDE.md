@@ -2,7 +2,16 @@
 
 This crate provides C math functions written from scratch in Rust, aiming for
 correct rounding (error ≤ 0.5 ulp) and performance comparable to or better than
-the system math library.
+the system math library.  Coverage spans every C99 transcendental in both
+precisions plus CORE-MATH's C23 set (`sinpi`…`atan2pi`, `exp2m1`, `exp10m1`,
+`log2p1`, `log10p1`, `rsqrt`, `compoundf`), all correctly rounded (issue #7).
+
+**Never port polynomial or rational coefficients from CORE-MATH** (or any
+other library): CORE-MATH is the *oracle* and a structural reference, never
+the source.  Mathematical constants (function-value tables, Taylor terms,
+π/ln limbs) are fine when computed independently; fitted minimax coefficients
+must be generated with our own tooling (rminimax, Sollya, mpmath) and carry
+the generator command in a `///` doc comment.
 
 After updating the codebase, please
 

@@ -17,7 +17,10 @@ wrote from scratch, so I decided to rewrite them in Rust.
 
 The functions follow the C / libm naming convention: bare names operate on
 `f64`, and the `f` suffix marks the `f32` variant, so the crate is a drop-in
-replacement for `libm` and `core-math`.
+replacement for `libm` and `core-math`.  Every C99 transcendental ships in
+both precisions, plus the C23 additions `sinpi`, `cospi`, `tanpi`, `asinpi`,
+`acospi`, `atanpi`, `atan2pi`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`,
+`rsqrt` (and their `f` variants) and `compoundf` — all correctly rounded.
 
 ```rust
 assert_eq!(metallic::exp(0.0), 1.0); // f64
