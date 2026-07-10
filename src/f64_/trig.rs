@@ -1712,7 +1712,7 @@ pub fn sincosn(s: i64) -> (DoubleDouble, DoubleDouble) {
     // the sign bit (a 50/50 data-dependent branch would mispredict on random
     // input).
     let ssgn = (((s >> 11) & 1) as u64) << 63;
-    let csgn = ((((s + 1024) >> 11) & 1) as u64) << 63;
+    let csgn = (((s.wrapping_add(1024) >> 11) & 1) as u64) << 63;
 
     // SAFETY: `j ∈ [0, 1024]` by the reflection above, so `is ∈ [0, 32]` and
     // `jm ∈ [0, 31]`; the compiler cannot see the range, and the elided bounds
