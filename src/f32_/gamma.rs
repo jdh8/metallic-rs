@@ -273,18 +273,22 @@ fn finish(value: DoubleDouble, q: i64, negative: bool) -> f32 {
     if negative { -magnitude } else { magnitude }
 }
 
-/// `∏_{k=0}^{n-1}(base + k·step)` for `n ≥ 0`, on four parallel accumulators
+/// `∏_{k=0}^{n-1}(base + k·step)` for `0 ≤ n ≤ 32`, fixed-trip and branch-free
 ///
 /// The recurrence factors `(x−1)(x−2)…` form a product whose length `n = |i|`
-/// varies with the input, so a single dependency chain costs one multiply
-/// latency per factor.  Splitting it across four lanes cuts the dependency depth
-/// to `n/4`, while a single counted loop keeps the lone (CORE-MATH-matching)
-/// branch.  Every factor `base + k·step` (`step = ±1`, small integer `k`) is
-/// exact, so the only added error is reassociation — a few `2⁻⁵³` ulps, far
-/// inside the `2⁻³⁷` gate the [`tgamma`] fast path relies on.
+/// is uniformly random on random input, so a counted loop's exit, its unroll
+/// remainder, and any leftover-factor selects all mispredict — measured ~2+
+/// mispredicts per call, the entire gap to CORE-MATH.  Instead, four lanes
+/// each run a fixed eight rounds (covering `n ≤ 32`), multiplying by the
+/// factor while the lane's index is below `n` and by exact `1.0` after: the
+/// compare/blend/multiply packs into ymm ops with no data-dependent branch.
+/// Every live factor (`step = ±1`, small integer `k`) is exact, so the only
+/// added error is reassociation — a few `2⁻⁵³` ulps, far inside the `2⁻³⁷`
+/// gate the [`tgamma`] fast path relies on.
 #[inline]
 fn recurrence_product(base: f64, step: f64, n: i32) -> f64 {
     let stride = 4.0 * step;
+    let nf = f64::from(n);
     let mut p = [1.0_f64; 4];
     let mut f = [
         base,
@@ -292,26 +296,17 @@ fn recurrence_product(base: f64, step: f64, n: i32) -> f64 {
         crate::fast_mul_add(2.0, step, base),
         crate::fast_mul_add(3.0, step, base),
     ];
+    let mut idx = [0.0_f64, 1.0, 2.0, 3.0];
 
-    let mut k = n;
-    while k >= 4 {
-        p[0] *= f[0];
-        p[1] *= f[1];
-        p[2] *= f[2];
-        p[3] *= f[3];
-        f[0] += stride;
-        f[1] += stride;
-        f[2] += stride;
-        f[3] += stride;
-        k -= 4;
+    for _ in 0..8 {
+        for j in 0..4 {
+            p[j] *= if idx[j] < nf { f[j] } else { 1.0 };
+            f[j] += stride;
+            idx[j] += 4.0;
+        }
     }
 
-    // Combine the lanes and fold in the 0..3 leftover factors without a branch.
-    let main = (p[0] * p[2]) * (p[1] * p[3]);
-    let r0 = if k >= 1 { f[0] } else { 1.0 };
-    let r1 = if k >= 2 { f[1] } else { 1.0 };
-    let r2 = if k >= 3 { f[2] } else { 1.0 };
-    main * ((r0 * r1) * r2)
+    (p[0] * p[2]) * (p[1] * p[3])
 }
 
 /// Fast plain-`f64` `Γ(z)` over the recurrence range, with a relative error bound
@@ -319,22 +314,24 @@ fn recurrence_product(base: f64, step: f64, n: i32) -> f64 {
 /// Mirrors [`tgamma_dd`] in `f64`: reduce `z` into `[2.375, 3.375]`, evaluate the
 /// degree-11 minimax, and walk back by the recurrence.  The factor product (see
 /// [`recurrence_product`]) runs on its own dependency chains, overlapping the
-/// polynomial, and is folded in with a single multiply or divide.  The error is
+/// polynomial, and is folded in with a single multiply or divide — the one
+/// remaining data-dependent branch, matching CORE-MATH's.  The error is
 /// dominated by the polynomial's `2⁻⁴²`, which the gate in [`tgamma`] uses.
-#[inline]
+#[inline(always)]
 fn tgamma_f64(x: f64) -> (f64, f64) {
     let m = x - TGAMMA_CENTER;
     let i = m.round_ties_even();
-    let mut value = crate::poly(m - i, &TGAMMA_POLY_F64);
+    let value = crate::poly(m - i, &TGAMMA_POLY_F64);
     let steps = i.abs() as i32;
 
-    if i > 0.0 {
-        // Γ(x) = Γ(x−i)·∏_{j=1}^{i}(x−j)
-        value *= recurrence_product(x - 1.0, -1.0, steps);
-    } else if i < 0.0 {
-        // Γ(x) = Γ(x−i)/∏_{j=0}^{-i-1}(x+j)
-        value /= recurrence_product(x, 1.0, steps);
-    }
+    // Γ(x) = Γ(x−i)·∏_{j=1}^{i}(x−j) above the interval, Γ(x−i)/∏_{j=0}^{-i-1}(x+j)
+    // below: one parametrization covers both walks (`i = 0` runs an all-dead
+    // product, `w = 1`).  Both `x − 0.5` and the `±0.5` add are exact — `x`
+    // promotes from `f32` with `|x| > 2⁻¹³`, so the 53-bit span is ample.
+    let step = 1.0_f64.copysign(-i);
+    let base = crate::fast_mul_add(0.5, step, x - 0.5);
+    let w = recurrence_product(base, step, steps);
+    let value = if i <= -0.5 { value / w } else { value * w };
 
     (value, crate::exp2i(-37) * value.abs())
 }
@@ -429,6 +426,13 @@ pub fn tgammaf(z: f32) -> f32 {
         } else {
             -0.0
         };
+    }
+
+    // Below −29.625 the recurrence needs more than the 32 steps the fixed-trip
+    // product covers; the band is far off any hot path, so the accurate tier
+    // serves it directly.
+    if z < -29.625 {
+        return tgamma_dd(x);
     }
 
     // Ziv two-step over the recurrence range: the plain-f64 path is correctly
