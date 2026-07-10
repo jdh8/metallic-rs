@@ -30,6 +30,54 @@ fn asin_near_zero(t: f64, u: f64) -> f64 {
     crate::fast_mul_add(t * u, crate::poly(u, &ASIN_NEAR_ZERO), t)
 }
 
+/// Minimax coefficients of `P` in `asin(x) ≈ x·P(x²)` on `x² ∈ [0, 0.765625]`
+/// (`|x| ≤ 0.875`) — the shared wide fast leg of [`asinf`], [`acosf`],
+/// [`asinpif`], and [`acospif`].
+///
+/// One sqrt-free polynomial covers the whole band, so the reflection through
+/// `√((1−|x|)/2)` runs only when the rounding test fails.  Relative error
+/// ≤ 2.747e-10 ≈ 2⁻³¹·⁷ (mpmath dense-grid supremum agreeing with rminimax's
+/// certificate; f64 evaluation adds ≤ 2⁻⁴⁸), generated with
+/// `ratapprox --function="asin(sqrt(x))/sqrt(x)" --dom="[1e-30,0.765625]"
+///   --num=[1,x,x^2,...,x^15] --den=[1] --dispCoeff=hex --log`.
+const ASIN_WIDE: [f64; 16] = [
+    0.999_999_999_725_381_3,
+    0.166_666_841_142_576_24,
+    0.074_981_624_296_364_12,
+    0.045_406_199_671_509_356,
+    0.013_782_736_554_599_759,
+    0.239_703_546_153_406_17,
+    -1.839_902_466_475_237_5,
+    10.899_635_812_057_085,
+    -45.090_802_252_029_11,
+    134.274_603_229_656_58,
+    -288.400_686_201_980_76,
+    443.397_761_489_090_04,
+    -476.123_042_290_353_17,
+    339.528_678_702_658_17,
+    -144.675_081_916_656_67,
+    27.959_718_593_723_323,
+];
+
+/// `asin(x)` for `|x| ≤ 0.875` via the wide odd kernel `x·P(x²)`.
+#[inline]
+fn asin_wide(x: f64) -> f64 {
+    x * crate::poly(x * x, &ASIN_WIDE)
+}
+
+/// Relative half-width of the wide-leg rounding test: the certified
+/// [`ASIN_WIDE`] error (≈ 2⁻³¹·⁷ approximation + ≤ 2⁻⁴⁸ evaluation) with
+/// ≈ 1.6× headroom, rounded up to a power of two.  Expected fallback rate
+/// ≈ 2·2⁻³¹/2⁻²⁴ ≈ 1.6%; hard ties always land within the interval and thus
+/// in the fallback, where the fixups live.
+const ASIN_WIDE_EPS: f64 = crate::exp2i(-31);
+
+/// Absolute floor of the rounding test for the π/2- and ½-anchored variants
+/// ([`acosf`], [`acospif`]): covers the constant's representation error and
+/// the final subtraction's rounding, which do not scale with the kernel
+/// result.
+const ASIN_WIDE_EPS0: f64 = crate::exp2i(-50);
+
 /// `atan(k / 8)` as a double-double for `k` in `0..=8`
 const ATAN_TABLE: [(f64, f64); 9] = [
     (0.0, 0.0),
@@ -150,13 +198,42 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f32 {
 
 /// Arcsine in half-turns
 ///
-/// [`asinf`]'s structure scaled by `1/π`: the shared near-zero kernel below
-/// `|x| = ½` and the `√((1−|x|)/2)` reflection above, with the half-turn
-/// constants exact (`asinpi(±1) = ±½` falls out of the reflection).  The
-/// exhaustive 2³² sweep in `tests/asinpif.rs` certifies every input.
+/// Two-step structure like [`asinf`], scaled by `1/π`: the wide leg's result
+/// carries one extra rounding from the `·1/π` fold, absorbed by
+/// [`ASIN_WIDE_EPS`]'s headroom.  The hard tie lives in the fallback — the
+/// rounding test cannot certify it, so it always routes there.
 #[must_use]
 #[inline]
 pub fn asinpif(x: f32) -> f32 {
+    let ax = x.to_bits() & (u32::MAX >> 1);
+    if ax > 0x3F80_0000 {
+        return f32::NAN; // |x| > 1 or NaN
+    }
+    if ax < 0x3F60_0000 {
+        // |x| < 0.875 — the expected path.  The half-width constant bakes in
+        // the `1/π` scale so both bounds are single fused ops off `r`,
+        // parallel to the `y` fold.  Return the upper cast: at `x = −0` it
+        // preserves the sign.
+        const EPS_PI: f64 = ASIN_WIDE_EPS * core::f64::consts::FRAC_1_PI;
+        let r = asin_wide(x.into());
+        let y = r * core::f64::consts::FRAC_1_PI;
+        let ub = crate::fast_mul_add(r, EPS_PI, y) as f32;
+        if ub == (crate::fast_mul_add(r, -EPS_PI, y) as f32) {
+            return ub;
+        }
+    }
+    asinpif_fallback(x)
+}
+
+/// [`asinpif`]'s accurate tier — the previous flat implementation.
+///
+/// [`asinf_fallback`]'s structure scaled by `1/π`: the shared near-zero kernel
+/// below `|x| = ½` and the `√((1−|x|)/2)` reflection above, with the half-turn
+/// constants exact (`asinpi(±1) = ±½` falls out of the reflection).  The
+/// exhaustive 2³² sweep in `tests/asinpif.rs` certifies every input.
+#[cold]
+#[inline(never)]
+fn asinpif_fallback(x: f32) -> f32 {
     use core::f64::consts::FRAC_1_PI;
 
     // The one f32 tie the kernel's double rounding cannot steer (odd symmetry
@@ -301,13 +378,43 @@ pub fn atanpif(x: f32) -> f32 {
 
 /// Arccosine in half-turns
 ///
-/// [`acosf`]'s structure scaled by `1/π`: `½ − asin(x)/π` below `|x| = ½`
-/// and the reflection above, with `acospi(1) = +0`, `acospi(0) = ½` and
-/// `acospi(−1) = 1` exact.  The exhaustive 2³² sweep in `tests/acospif.rs`
-/// certifies every input.
+/// Two-step structure like [`acosf`], scaled by `1/π`: `½ − asin(x)/π` over
+/// the wide band, with the rounding test scaled by the kernel result (plus
+/// the [`ASIN_WIDE_EPS0`] floor for the `½ −` subtraction and the `·1/π`
+/// fold).
 #[must_use]
 #[inline]
 pub fn acospif(x: f32) -> f32 {
+    let ax = x.to_bits() & (u32::MAX >> 1);
+    if ax > 0x3F80_0000 {
+        return f32::NAN; // |x| > 1 or NaN
+    }
+    if ax < 0x3F60_0000 {
+        // |x| < 0.875 — the expected path.  The half-width comes off `r`
+        // directly (with the `1/π` scale baked into the constant) so it
+        // computes in parallel with the `y` fold.
+        const EPS_PI: f64 = ASIN_WIDE_EPS * core::f64::consts::FRAC_1_PI;
+        let r = asin_wide(x.into());
+        let rp = r * core::f64::consts::FRAC_1_PI;
+        let y = 0.5 - rp;
+        let e = crate::fast_mul_add(r.abs(), EPS_PI, ASIN_WIDE_EPS0);
+        let ub = (y + e) as f32;
+        if ub == ((y - e) as f32) {
+            return ub;
+        }
+    }
+    acospif_fallback(x)
+}
+
+/// [`acospif`]'s accurate tier — the previous flat implementation.
+///
+/// [`acosf_fallback`]'s structure scaled by `1/π`: `½ − asin(x)/π` below
+/// `|x| = ½` and the reflection above, with `acospi(1) = +0`, `acospi(0) = ½`
+/// and `acospi(−1) = 1` exact.  The exhaustive 2³² sweep in `tests/acospif.rs`
+/// certifies every input.
+#[cold]
+#[inline(never)]
+fn acospif_fallback(x: f32) -> f32 {
     use core::f64::consts::FRAC_1_PI;
 
     let xf: f64 = x.into();
@@ -332,14 +439,41 @@ pub fn acospif(x: f32) -> f32 {
 
 /// Arccosine
 ///
+/// Two-step structure like [`asinf`]: for `|x| < 0.875`,
+/// `acos(x) = π/2 − asin(x)` with the sqrt-free wide leg [`asin_wide`] and a
+/// rounding test whose half-width scales with the kernel result `|r|` (the
+/// error carrier) plus the absolute floor [`ASIN_WIDE_EPS0`] for the constant
+/// subtraction; failures and `|x| ∈ [0.875, 1]` take [`acosf_fallback`].
+#[must_use]
+#[inline]
+pub fn acosf(x: f32) -> f32 {
+    let ax = x.to_bits() & (u32::MAX >> 1);
+    if ax > 0x3F80_0000 {
+        return f32::NAN; // |x| > 1 or NaN
+    }
+    if ax < 0x3F60_0000 {
+        // |x| < 0.875 — the expected path
+        let r = asin_wide(x.into());
+        let y = core::f64::consts::FRAC_PI_2 - r;
+        let e = crate::fast_mul_add(r.abs(), ASIN_WIDE_EPS, ASIN_WIDE_EPS0);
+        let ub = (y + e) as f32;
+        if ub == ((y - e) as f32) {
+            return ub;
+        }
+    }
+    acosf_fallback(x)
+}
+
+/// [`acosf`]'s accurate tier — the previous flat implementation.
+///
 /// `acos(x) = π/2 − asin(x)`.  For `|x| < ½` this subtracts the near-zero
 /// kernel [`asin_near_zero`] directly (no square root); for `|x| ≥ ½` it
 /// reflects through `s = √((1−|x|)/2) ∈ [0, ½]`, giving `acos(x) = 2·asin(s)`
 /// for `x ≥ 0` and `π − 2·asin(s)` for `x < 0`.  Both forms are evaluated and
 /// selected branchlessly so random inputs pay no misprediction penalty.
-#[must_use]
-#[inline]
-pub fn acosf(x: f32) -> f32 {
+#[cold]
+#[inline(never)]
+fn acosf_fallback(x: f32) -> f32 {
     let xf: f64 = x.into();
     let a = xf.abs();
 
@@ -367,13 +501,40 @@ pub fn acosf(x: f32) -> f32 {
 
 /// Arcsine
 ///
+/// Two-step structure: `|x| < 0.875` takes the sqrt-free wide leg
+/// [`asin_wide`] and returns as soon as the `±ASIN_WIDE_EPS` rounding test
+/// certifies the `f32` rounding; the band edge `[0.875, 1]`, the rounding-test
+/// failures (≈ 1.6% of the band), and the hard-to-round cases fall back to
+/// [`asinf_fallback`].  NaN and `|x| > 1` exit before any arithmetic.
+#[must_use]
+#[inline]
+pub fn asinf(x: f32) -> f32 {
+    let ax = x.to_bits() & (u32::MAX >> 1);
+    if ax > 0x3F80_0000 {
+        return f32::NAN; // |x| > 1 or NaN
+    }
+    if ax < 0x3F60_0000 {
+        // |x| < 0.875 — the expected path.  `r·(1 ± EPS)` via one fused op
+        // per bound keeps the rounding test off the serial critical path.
+        // Return the upper cast: at `x = −0` it preserves the sign.
+        let r = asin_wide(x.into());
+        let ub = crate::fast_mul_add(r, ASIN_WIDE_EPS, r) as f32;
+        if ub == (crate::fast_mul_add(r, -ASIN_WIDE_EPS, r) as f32) {
+            return ub;
+        }
+    }
+    asinf_fallback(x)
+}
+
+/// [`asinf`]'s accurate tier — the previous flat implementation.
+///
 /// For `|x| < ½`, evaluate the near-zero kernel [`asin_near_zero`] directly.
 /// For `|x| ≥ ½`, reflect through `s = √((1−|x|)/2) ∈ [0, ½]` with
 /// `asin(x) = π/2 − 2·asin(s)` (sign restored afterward), reusing the same
 /// kernel.  Both forms are evaluated and selected branchlessly.
-#[must_use]
-#[inline]
-pub fn asinf(x: f32) -> f32 {
+#[cold]
+#[inline(never)]
+fn asinf_fallback(x: f32) -> f32 {
     let xf: f64 = x.into();
     let a = xf.abs();
 
