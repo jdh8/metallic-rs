@@ -101,21 +101,34 @@ fn sin_kernel(x: f64) -> f32 {
 #[inline]
 pub fn sinf(x: f32) -> f32 {
     let y = match x.abs() {
+        // `sin(x) = x − x³/6 + O(x⁵)`: the truncation is ≤ 2⁻⁵⁴·⁹ relative
+        // here, so the plain f64 evaluation rounds correctly (subnormals
+        // included — `z³` cannot underflow).  This skips the reduction and
+        // both kernels for the tiny half of all bit patterns.
+        x if x < crate::exp2i(-12) as f32 => {
+            let z = f64::from(x);
+            (crate::fast_mul_add(z * z * z, -1.0 / 6.0, z)) as f32
+        }
         9830.398 => -0.347_613_25,
         x if !x.is_finite() => f32::NAN,
 
-        #[rustfmt::skip]
         x => {
             let (q, x) = rem_pio2(x);
             let s = sin_kernel(x);
             let c = cos_kernel(x);
-            let y = if q & 1 == 0 { s } else { c };
-            if q & 2 == 0 { y } else { -y }
+            // The quadrant `q` is data-random, so a plain `if` (or even a
+            // float select, which LLVM splits back into a branch rather than
+            // speculate both kernels) mispredicts half the time.  Select in
+            // bit space to force both kernels + a branchless merge, and fold
+            // the quadrant-2/3 negation into the sign bit.
+            let mask = core::hint::black_box(((q & 1) as u32).wrapping_neg());
+            let y = (s.to_bits() & !mask) | (c.to_bits() & mask);
+            f32::from_bits(y ^ (u32::from(q & 2 != 0) << 31))
         }
     };
 
-    #[rustfmt::skip]
-    return if x.is_sign_negative() { -y } else { y };
+    // sin is odd: restore the argument's sign branchlessly.
+    f32::from_bits(y.to_bits() ^ (x.to_bits() & 0x8000_0000))
 }
 
 /// `sin(θ)/z` residual Taylor coefficients in the fixed-point `z` scale:
@@ -409,6 +422,9 @@ pub fn cosf(x: f32) -> f32 {
     let x = x.abs();
 
     match x {
+        // `1 − cos(x) < x²/2 ≤ 2⁻²⁵` here, half the ulp gap below 1, so
+        // round-to-nearest returns exactly 1 — no arithmetic needed.
+        x if x < crate::exp2i(-12) as f32 => return 1.0,
         2.861_650_8e15 => return 0.533_916_4,
         1.100_467_8e19 => return 0.996_410_1,
         1.726_998_3e20 => return 0.969_058,
@@ -419,9 +435,10 @@ pub fn cosf(x: f32) -> f32 {
     let (q, x) = rem_pio2(x);
     let s = sin_kernel(x);
     let c = cos_kernel(x);
-    let y = if q & 1 == 0 { c } else { s };
-
-    if (q.wrapping_add(1)) & 2 == 0 { y } else { -y }
+    // Branchless quadrant handling; see the twin comment in [`sinf`].
+    let mask = core::hint::black_box(((q & 1) as u32).wrapping_neg());
+    let y = (c.to_bits() & !mask) | (s.to_bits() & mask);
+    f32::from_bits(y ^ (u32::from(q.wrapping_add(1) & 2 != 0) << 31))
 }
 
 /// Compute sine and cosine simultaneously
@@ -429,6 +446,11 @@ pub fn cosf(x: f32) -> f32 {
 #[inline]
 pub fn sincosf(x: f32) -> (f32, f32) {
     let (s, c) = match x.abs() {
+        // Tiny band: see the twin comments in [`sinf`] and [`cosf`].
+        x if x < crate::exp2i(-12) as f32 => {
+            let z = f64::from(x);
+            ((crate::fast_mul_add(z * z * z, -1.0 / 6.0, z)) as f32, 1.0)
+        }
         9830.398 => (-0.347_613_25, -0.937_638),
         2.861_650_8e15 => (-0.845_537_3, 0.533_916_4),
         1.100_467_8e19 => (0.084_657_6, 0.996_410_1),
@@ -436,15 +458,19 @@ pub fn sincosf(x: f32) -> (f32, f32) {
         x if !x.is_finite() => (f32::NAN, f32::NAN),
         x => {
             let (q, x) = rem_pio2(x);
-            let s = sin_kernel(x);
-            let c = cos_kernel(x);
-            let (s, c) = if q & 1 == 0 { (s, c) } else { (c, s) };
-            let s = if q & 2 == 0 { s } else { -s };
-            let c = if q.wrapping_add(1) & 2 == 0 { c } else { -c };
+            let sk = sin_kernel(x);
+            let ck = cos_kernel(x);
+            // Branchless quadrant handling; see the twin comment in [`sinf`].
+            let mask = core::hint::black_box(((q & 1) as u32).wrapping_neg());
+            let s = (sk.to_bits() & !mask) | (ck.to_bits() & mask);
+            let c = (ck.to_bits() & !mask) | (sk.to_bits() & mask);
+            let s = f32::from_bits(s ^ (u32::from(q & 2 != 0) << 31));
+            let c = f32::from_bits(c ^ (u32::from(q.wrapping_add(1) & 2 != 0) << 31));
             (s, c)
         }
     };
-    let s = if x.is_sign_negative() { -s } else { s };
+    // sin is odd: restore the argument's sign branchlessly.
+    let s = f32::from_bits(s.to_bits() ^ (x.to_bits() & 0x8000_0000));
     (s, c)
 }
 
