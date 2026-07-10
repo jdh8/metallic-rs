@@ -65,6 +65,29 @@ fn asin_wide(x: f64) -> f64 {
     x * crate::poly(x * x, &ASIN_WIDE)
 }
 
+/// `(π/2 − asin(1−z))/√z = acos(1−z)/√z` on `z = 1−|x| ∈ [0, 0.125]`, the
+/// `[0.875, 1]` tail shared by [`asinf`] and [`acosf`].  `acos(1−z) = √z·P(z)`
+/// pulls the √z singularity out so a plain polynomial finishes; relative error
+/// ≈ 2⁻⁵³, from
+/// `ratapprox --function="(pi/2-asin(1-x))/sqrt(x)" --dom="[1e-9,0.125]"
+///   --num="[1,x,x^2,x^3,x^4,x^5,x^6,x^7]" --den="[1]"`.
+const ASIN_TAIL: [f64; 8] = [
+    1.414_213_562_373_095,
+    0.117_851_130_197_901_37,
+    0.026_516_504_270_013_99,
+    0.007_891_818_324_138_532,
+    0.002_685_360_746_462_261_3,
+    0.000_989_548_854_855_748,
+    0.000_375_752_174_199_298_9,
+    0.000_190_639_853_776_815_02,
+];
+
+/// Rounding-test half-widths for the `[0.875, 1]` tail: the correction
+/// `q = acos(|x|)` carries the ≈ 2⁻⁵⁰ evaluation error, and the absolute floor
+/// covers the `π/2`/`π` constants.  Fallback rate ≈ 2⁻²³.
+const ASIN_TAIL_EPS: f64 = crate::exp2i(-47);
+const ASIN_TAIL_EPS0: f64 = crate::exp2i(-50);
+
 /// Relative half-width of the wide-leg rounding test: the certified
 /// [`ASIN_WIDE`] error (≈ 2⁻³¹·⁷ approximation + ≤ 2⁻⁴⁸ evaluation) with
 /// ≈ 1.6× headroom, rounded up to a power of two.  Expected fallback rate
@@ -603,6 +626,20 @@ pub fn acosf(x: f32) -> f32 {
         if ub == ((y - e) as f32) {
             return ub;
         }
+    } else {
+        // |x| ∈ [0.875, 1]: acos(|x|) = √z·P(z), z = 1−|x| (exact).  Reflect
+        // branchlessly through acos(x) = π/2 − copysign(asin|x|, x), where
+        // asin|x| = π/2 − acos(|x|) (2·FRAC_PI_2 = π exactly).
+        let a = f64::from(f32::from_bits(ax));
+        let z = 1.0 - a;
+        let q = z.sqrt() * crate::poly(z, &ASIN_TAIL);
+        let asin = core::f64::consts::FRAC_PI_2 - q;
+        let y = core::f64::consts::FRAC_PI_2 - asin.copysign(x.into());
+        let e = crate::fast_mul_add(q, ASIN_TAIL_EPS, ASIN_TAIL_EPS0);
+        let ub = (y + e) as f32;
+        if ub == ((y - e) as f32) {
+            return ub;
+        }
     }
     acosf_fallback(x)
 }
@@ -664,6 +701,18 @@ pub fn asinf(x: f32) -> f32 {
         let ub = crate::fast_mul_add(r, ASIN_WIDE_EPS, r) as f32;
         if ub == (crate::fast_mul_add(r, -ASIN_WIDE_EPS, r) as f32) {
             return ub;
+        }
+    } else {
+        // |x| ∈ [0.875, 1]: asin(|x|) = π/2 − √z·P(z), z = 1−|x| (exact).  The
+        // √z overlaps the polynomial; asin's odd sign folds into the result.
+        let a = f64::from(f32::from_bits(ax));
+        let z = 1.0 - a;
+        let q = z.sqrt() * crate::poly(z, &ASIN_TAIL);
+        let r = core::f64::consts::FRAC_PI_2 - q;
+        let e = crate::fast_mul_add(q, ASIN_TAIL_EPS, ASIN_TAIL_EPS0);
+        let ub = (r + e) as f32;
+        if ub == ((r - e) as f32) {
+            return f32::from_bits(ub.to_bits() ^ (x.to_bits() & 0x8000_0000));
         }
     }
     asinf_fallback(x)
