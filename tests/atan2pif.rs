@@ -20,11 +20,8 @@ fn test_atan2pif() {
     common::test_bivariate_cases(metallic::atan2pif, core_math::atan2pif, grid.chain(wide));
 }
 
-/// Strict correct-rounding gate on CORE-MATH's hard-to-round corpus.  The
-/// promoted-f64 implementation double-rounds 189 of these near-midpoint ties;
-/// the dedicated binary32 port (issue #7) will activate this gate.
+/// Strict correct-rounding gate on CORE-MATH's hard-to-round corpus.
 #[test]
-#[ignore = "atan2pif is faithful-only until the dedicated binary32 port lands (issue #7)"]
 fn test_atan2pif_worst_cases() {
     common::test_bivariate_cases(
         metallic::atan2pif,
@@ -33,8 +30,7 @@ fn test_atan2pif_worst_cases() {
     );
 }
 
-/// Faithful-rounding floor (≤ 1 ulp) on that same corpus — the blocking gate
-/// while the strict one is `#[ignore]`d.
+/// Faithful-rounding floor (≤ 1 ulp) on that same corpus.
 #[test]
 fn test_atan2pif_worst_faithful() {
     common::truncate_errors(
