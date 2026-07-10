@@ -146,31 +146,120 @@ pub fn exp2f(x: f32) -> f32 {
     fast_ldexp(x, n as i64) as f32
 }
 
+/// `(2ˣ − 1)/x` Taylor slope `ln2^(k+1)/(k+1)!` for the `|x| < 1/64` band of
+/// [`exp2m1f`]; the degree-5 tail sits near `2⁻⁴⁹` relative.
+const EXP2M1F_SLOPE: [f64; 6] = [
+    0.693_147_180_559_945_3,
+    0.240_226_506_959_100_7,
+    0.055_504_108_664_821_58,
+    0.009_618_129_107_628_477,
+    0.001_333_355_814_642_844_3,
+    0.000_154_035_303_933_816_1,
+];
+
+/// `(10ˣ − 1)/x` Taylor slope `ln10^(k+1)/(k+1)!` for the small band of
+/// [`exp10m1f`].
+const EXP10M1F_SLOPE: [f64; 6] = [
+    2.302_585_092_994_046,
+    2.650_949_055_239_199,
+    2.034_678_592_293_476,
+    1.171_255_148_912_267,
+    0.539_382_929_195_581_4,
+    0.206_995_848_696_868_1,
+];
+
 /// 2 raised to the power `x`, minus 1
 ///
-/// Promotes to the correctly rounded f64 [`crate::f64_::exp2m1`] and rounds
-/// once more to f32; the exhaustive 2³² sweep in `tests/exp2m1f.rs` certifies
-/// the double rounding never lands on the wrong side of an f32 boundary.
+/// [`expm1f`]'s `1/32`-step reduction with an *exact* base-2 residual
+/// (`a = 32x` and `h = a − m` are exact), sharing its `2^(j/32)` table and
+/// `2^(h/32)` kernel; the small band is the own-Taylor [`EXP2M1F_SLOPE`].
+/// A straddle of the `±sv·2⁻⁴²` gate falls back to the correctly rounded f64
+/// [`crate::f64_::exp2m1`], whose promote-and-round the exhaustive 2³² sweep
+/// in `tests/exp2m1f.rs` certifies.
 #[must_use]
 #[inline]
 pub fn exp2m1f(x: f32) -> f32 {
-    crate::f64_::exp2m1(x.into()) as f32
+    if x <= -25.0 {
+        return -1.0; // 2ˣ ≤ 2⁻²⁵: within half an ulp of −1 (−∞ included)
+    }
+    if x >= 128.0 {
+        return f32::INFINITY; // overflow (+∞ included); NaN falls through below
+    }
+
+    /// `1.5 · 2⁵²`: see [`expm1f`].
+    const BIG: f64 = f64::from_bits(0x4338_0000_0000_0000);
+
+    let x: f64 = x.into();
+    let a = 32.0 * x;
+    let abig = a + BIG;
+    let m = abig - BIG;
+
+    if m == 0.0 {
+        return (x * crate::poly(x, &EXP2M1F_SLOPE)) as f32;
+    }
+
+    let u = abig.to_bits();
+    let q = (((u & 0x000F_FFFF_FFFF_FFFF) as i64) - 0x0008_0000_0000_0000) >> 5;
+    let h = a - m;
+    let sv = fast_ldexp(EXP2_32[(u & 31) as usize], q);
+    let r = crate::fast_mul_add(crate::poly(h, &EXP2_32_POLY), sv, -1.0);
+
+    let epsilon = sv * crate::exp2i(-42);
+    let lower = (r - epsilon) as f32;
+    if lower == (r + epsilon) as f32 {
+        return lower;
+    }
+
+    crate::f64_::exp2m1(x) as f32
 }
 
 /// 10 raised to the power `x`, minus 1
 ///
-/// Promotes to the correctly rounded f64 [`crate::f64_::exp10m1`] and rounds
-/// once more to f32; the exhaustive 2³² sweep in `tests/exp10m1f.rs` certifies
-/// the double rounding never lands on the wrong side of an f32 boundary.
+/// [`exp2m1f`]'s structure over the base-10 grid `a = 32·log₂10·x` (the
+/// residual's rounding stays below `2⁻⁴⁶` of the result), with the
+/// [`EXP10M1F_SLOPE`] small band and the same shared table and kernel.
 #[must_use]
 #[inline]
 pub fn exp10m1f(x: f32) -> f32 {
-    // The one f32 tie the double rounding cannot steer; the exhaustive sweep
-    // found exactly this input.
-    if x.to_bits() == 0x417d_7f60 {
+    if x <= -8.0 {
+        return -1.0; // 10ˣ ≤ 10⁻⁸ ≪ 2⁻²⁵ (−∞ included)
+    }
+    if x >= 39.0 {
+        return f32::INFINITY; // 10³⁹ > 2¹²⁸ (+∞ included); NaN falls through
+    }
+
+    /// `32·log₂10`, the base-10 grid scale.
+    const SCALE: f64 = 106.301_699_036_395_59;
+    /// `1.5 · 2⁵²`: see [`expm1f`].
+    const BIG: f64 = f64::from_bits(0x4338_0000_0000_0000);
+
+    let x: f64 = x.into();
+    let a = x * SCALE;
+    let abig = a + BIG;
+    let m = abig - BIG;
+
+    if m == 0.0 {
+        return (x * crate::poly(x, &EXP10M1F_SLOPE)) as f32;
+    }
+
+    let u = abig.to_bits();
+    let q = (((u & 0x000F_FFFF_FFFF_FFFF) as i64) - 0x0008_0000_0000_0000) >> 5;
+    let h = a - m;
+    let sv = fast_ldexp(EXP2_32[(u & 31) as usize], q);
+    let r = crate::fast_mul_add(crate::poly(h, &EXP2_32_POLY), sv, -1.0);
+
+    let epsilon = sv * crate::exp2i(-42);
+    let lower = (r - epsilon) as f32;
+    if lower == (r + epsilon) as f32 {
+        return lower;
+    }
+
+    // The one f32 tie the fallback's double rounding cannot steer; the
+    // exhaustive sweep found exactly this input.
+    if x.to_bits() == 0x402f_afec_0000_0000 {
         return f32::from_bits(0x59c6_4405);
     }
-    crate::f64_::exp10m1(x.into()) as f32
+    crate::f64_::exp10m1(x) as f32
 }
 
 /// Raise 10 to the power of `x`
