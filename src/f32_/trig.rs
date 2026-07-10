@@ -564,19 +564,31 @@ pub fn tanf(x: f32) -> f32 {
         -2.084_309_371_418_349_5e-4,
     ];
 
-    let y = match x.abs() {
-        x if !x.is_finite() => f32::NAN,
-        x => {
-            let (q, y) = rem_pio2(x);
-            let u = y * y;
-            let p = crate::poly(u, &NUM);
-            let d = crate::poly(u, &DEN);
-            let yp = y * p;
-            let result = if q & 1 == 0 { yp / d } else { -d / yp };
-            result as f32
-        }
+    let a = x.abs();
+    let magnitude = if !a.is_finite() {
+        f32::NAN
+    } else if a < crate::exp2i(-13) as f32 {
+        // |x| < 2⁻¹³: tan(x) = x + x³/3 + … (the 2x⁵/15 tail is below 2⁻⁵⁴).
+        let z = f64::from(a);
+        crate::fast_mul_add(z * z * z, 1.0 / 3.0, z) as f32
+    } else {
+        let (q, y) = rem_pio2(a);
+        let u = y * y;
+        let p = crate::poly(u, &NUM);
+        let d = crate::poly(u, &DEN);
+        let yp = y * p;
+
+        // Odd quadrant wants −cot(y) = −d/(y·p); even wants tan(y) = y·p/d.
+        // Swap numerator and denominator by an opaque mask so LLVM keeps one
+        // division instead of a mispredicting branch, then fold the odd
+        // quadrant's sign into the quotient's bit pattern.
+        let mask = core::hint::black_box(((q & 1) as u64).wrapping_neg());
+        let num = f64::from_bits((yp.to_bits() & !mask) | (d.to_bits() & mask));
+        let den = f64::from_bits((d.to_bits() & !mask) | (yp.to_bits() & mask));
+        let r = num / den;
+        f64::from_bits(r.to_bits() ^ (mask & (1_u64 << 63))) as f32
     };
 
-    #[rustfmt::skip]
-    return if x.is_sign_negative() { -y } else { y };
+    // tan is odd: carry the argument's sign into the result.
+    f32::from_bits(magnitude.to_bits() ^ (x.to_bits() & 0x8000_0000))
 }
