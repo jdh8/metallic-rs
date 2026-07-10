@@ -623,13 +623,15 @@ pub fn logf(x: f32) -> f32 {
 
     // Intrinsic hard ties: the exact ln lies within ~½ f64-ulp of an f32
     // midpoint, so any ≈2⁻⁵² single-pass kernel double-rounds them (the same
-    // five inputs tied under the previous atanh kernel).
-    match bits {
-        0x3c41_3d3a => return -4.440_131_7,
-        0x4117_8feb => return 2.248_407_1,
-        0x4c5d_65a5 => return 17.876_608,
-        0x65d8_90d3 => return 53.20505,
-        0x6f31_a8ec => return 66.17683,
+    // five inputs tied under the previous atanh kernel).  These compare `x`
+    // (not its bits): the FP unit runs them in parallel with `log_lookup`'s
+    // integer table work, where an integer compare would contend with it.
+    match x {
+        1.179_438_3e-2 => return -4.440_131_7,
+        9.472_636 => return 2.248_407_1,
+        5.803_790_8e7 => return 17.876_608,
+        1.278_378_4e23 => return 53.20505,
+        5.498_306e28 => return 66.17683,
         _ => (),
     }
 
