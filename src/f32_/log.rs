@@ -156,38 +156,101 @@ pub fn log10f(x: f32) -> f32 {
 
 /// Binary logarithm of 1 plus `x`
 ///
-/// Promotes to the correctly rounded f64 [`crate::f64_::log2p1`] and rounds
-/// once more to f32; the exhaustive 2³² sweep in `tests/log2p1f.rs` certifies
-/// the double rounding never lands on the wrong side of an f32 boundary.
+/// One `f64` pass: `1 + x` is exact (an f32 mantissa plus the unit bit spans
+/// at most 53 bits), the exponent splits off the [`log2f`] way — an integer
+/// subtract centred on √2/2 on the `f64` bit pattern — and the shared
+/// [`atanh`] kernel finishes.  `s − 1` is Sterbenz-exact in the unreduced
+/// binade, so the cancellation near `x → 0` is benign; below `2⁻³⁰` the
+/// two-term series avoids forming `1 + x` at all (its `x³/3` tail is under
+/// `2⁻⁶¹` relative).  The exhaustive 2³² sweep in `tests/log2p1f.rs`
+/// certifies every input.
 #[must_use]
 #[inline]
 pub fn log2p1f(x: f32) -> f32 {
-    // The two f32 ties the double rounding cannot steer; the exhaustive
-    // sweep found exactly these inputs.
+    use core::f64::consts::LOG2_E;
+
+    if x == 0.0 || x.is_nan() || x == f32::INFINITY {
+        return x;
+    }
+    if x < -1.0 {
+        return f32::NAN;
+    }
+    if x == -1.0 {
+        return f32::NEG_INFINITY;
+    }
+
+    // The two f32 ties the kernel's double rounding cannot steer.
     if x.to_bits() == 0x4ebd_09e3 {
         return f32::from_bits(0x41f4_8013);
     }
     if x.to_bits() == 0x5292_8e33 {
         return f32::from_bits(0x4218_c7fd);
     }
-    crate::f64_::log2p1(x.into()) as f32
+
+    let xd = f64::from(x);
+    if x.abs() < 1.862_645_149_230_957e-9 {
+        // |x| < 2⁻²⁹: 1 + x would round (an f32 mantissa this low spans past
+        // bit −52), and the x³/3 series tail is below 2⁻⁵⁹ relative.
+        return (LOG2_E * crate::fast_mul_add(-0.5 * xd, xd, xd)) as f32;
+    }
+
+    let s = 1.0 + xd;
+    let i = s.to_bits() as i64;
+    #[allow(clippy::cast_possible_truncation)] // |exponent| ≤ 128
+    let exponent =
+        ((i - core::f64::consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT) as i32;
+    #[allow(clippy::cast_sign_loss)] // the shifted-back pattern is a positive normal
+    let m = f64::from_bits((i - (i64::from(exponent) << F64_EXP_SHIFT)) as u64);
+
+    crate::fast_mul_add(2.0 * LOG2_E, atanh((m - 1.0) / (m + 1.0)), exponent.into()) as f32
 }
 
 /// Common logarithm of 1 plus `x`
 ///
-/// Promotes to the correctly rounded f64 [`crate::f64_::log10p1`] and rounds
-/// once more to f32; the exhaustive 2³² sweep in `tests/log10p1f.rs`
-/// certifies the double rounding.
+/// [`log2p1f`]'s reduction with [`log10f`]'s base-10 finish: the exponent
+/// term carries `log₁₀2` as a two-word constant so its rounding stays below
+/// the kernel's accuracy.  The exhaustive 2³² sweep in `tests/log10p1f.rs`
+/// certifies every input.
 #[must_use]
 #[inline]
 pub fn log10p1f(x: f32) -> f32 {
-    // The two f32 ties the double rounding cannot steer; the exhaustive
-    // sweep found exactly these inputs.
-    if x.to_bits() == 0x399a_7c00 {
-        return f32::from_bits(0x3906_29e5);
+    const LOG10_2_HI: f64 = 0.301_029_995_663_981_25;
+    const LOG10_2_LO: f64 = -5.831_487_935_904_3e-17;
+    use core::f64::consts::LOG10_E;
+
+    if x == 0.0 || x.is_nan() || x == f32::INFINITY {
+        return x;
     }
+    if x < -1.0 {
+        return f32::NAN;
+    }
+    if x == -1.0 {
+        return f32::NEG_INFINITY;
+    }
+
+    // The one f32 tie the series leg's double rounding cannot steer.
     if x.to_bits() == 0xb051_e173 {
         return f32::from_bits(0xafb6_4ccf);
     }
-    crate::f64_::log10p1(x.into()) as f32
+
+    let xd = f64::from(x);
+    if x.abs() < 1.862_645_149_230_957e-9 {
+        // |x| < 2⁻²⁹: see `log2p1f`
+        return (LOG10_E * crate::fast_mul_add(-0.5 * xd, xd, xd)) as f32;
+    }
+
+    let s = 1.0 + xd;
+    let i = s.to_bits() as i64;
+    #[allow(clippy::cast_possible_truncation)] // |exponent| ≤ 128
+    let exponent =
+        ((i - core::f64::consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT) as i32;
+    #[allow(clippy::cast_sign_loss)] // the shifted-back pattern is a positive normal
+    let m = f64::from_bits((i - (i64::from(exponent) << F64_EXP_SHIFT)) as u64);
+
+    let y = crate::fast_mul_add(
+        2.0 * LOG10_E,
+        atanh((m - 1.0) / (m + 1.0)),
+        LOG10_2_LO * f64::from(exponent),
+    );
+    crate::fast_mul_add(LOG10_2_HI, exponent.into(), y) as f32
 }
