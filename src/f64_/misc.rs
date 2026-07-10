@@ -34,7 +34,7 @@ pub fn cbrt(x: f64) -> f64 {
     let zz = f64::from_bits(z.to_bits() + ((it as u64) << EXP_SHIFT)); // z·2^it ∈ [1, 8)
 
     // Forward seed: a degree-3 minimax of `z^(1/3)` on `[1, 2)` then a cubic Newton
-    // step (CORE-MATH's `cr_cbrt` coefficients).  The reciprocal `1/z` is issued here
+    // step.  The reciprocal `1/z` is issued here
     // so its latency overlaps the polynomial — the instruction-level parallelism the
     // purely serial division-free inverse-seed chain could not expose.
     let r = 1.0 / z;
@@ -97,12 +97,14 @@ const CBRT_ZIV_EPS: f64 = crate::exp2i(-73);
 /// Low 52 mantissa bits of an `f64`.
 const MANTISSA_MASK: u64 = (1 << EXP_SHIFT) - 1;
 
-/// Degree-3 minimax of `z^(1/3)` on `[1, 2)` (CORE-MATH `cr_cbrt`), max error <9.2e-5.
+/// Degree-3 minimax of `z^(1/3)` on `[1, 2]`, max error <9.2e-5.  Generated
+/// with `ratapprox --function="x^(1/3)" --dom="[1,2]" --type=[3,0]
+/// --numF=[D]`.
 const CBRT_C: [f64; 4] = [
-    0.552_823_418_401_647_2,
-    0.587_114_291_826_698_2,
-    -0.162_969_671_949_879_05,
-    0.023_104_964_110_781_47,
+    0.552_823_329_771_969_7,
+    0.587_114_382_765_949_4,
+    -0.162_969_661_087_699_84,
+    0.023_104_946_291_676_684,
 ];
 /// Cubic-Newton coefficients `1/3` and `2/9` for the seed-refinement step.
 const CBRT_U0: f64 = 1.0 / 3.0;

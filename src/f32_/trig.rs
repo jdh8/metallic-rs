@@ -118,18 +118,22 @@ pub fn sinf(x: f32) -> f32 {
     return if x.is_sign_negative() { -y } else { y };
 }
 
-/// `sin(θ)/z` residual Taylor coefficients in CORE-MATH sinpif's fixed-point
-/// `z` scale — verbatim `sn`.
-const SINPIF_SN: [f64; 3] = [
-    1.142_904_749_427_467e-11,
-    -2.488_163_196_168_101e-34,
-    1.625_023_320_396_236e-57,
+/// `sin(θ)/z` residual Taylor coefficients in the fixed-point `z` scale:
+/// with `F = π·2⁻³⁸` (the 1/64-grid unit over the 2³² fixed point) these are
+/// `F, −F³/3!, F⁵/5!, −F⁷/7!` exactly.  The deg-7 term matters: without it
+/// the ≈2⁻⁴⁴ tail flips the f32 rounding at `|x| = 0x1.921fbp−6`; with it
+/// the tail sits at ≈2⁻⁵⁸ and the exhaustive sweep is clean.
+const SINPIF_SN: [f64; 4] = [
+    1.142_904_749_427_468_5e-11,
+    -2.488_163_196_772_712e-34,
+    1.625_058_281_595_782_2e-57,
+    -5.054_052_230_765_33e-81,
 ];
-/// `(cos(θ) − 1)/z²` residual coefficients — verbatim `cn`.
+/// `(cos(θ) − 1)/z²` residual Taylor coefficients: `−F²/2!, F⁴/4!, −F⁶/6!`.
 const SINPIF_CN: [f64; 3] = [
-    -6.531_156_331_319_305e-23,
-    7.109_333_835_435_933e-46,
-    -3.095_411_451_319_522_5e-69,
+    -6.531_156_331_319_322e-23,
+    7.109_333_837_355_413e-46,
+    -3.095_478_046_887_1e-69,
 ];
 /// `sin(πk/64)` for the full circle, `k = 0..=127` — CORE-MATH sinpif's `S`;
 /// signs are baked in, and `S[(k + 32) & 127]` reads the cosine.
@@ -266,8 +270,8 @@ const SINPIF_S: [f64; 128] = [
 
 /// Sine of π·x
 ///
-/// Verbatim port of CORE-MATH's `cr_sinpif`: an integer reduction of the
-/// signed mantissa yields the 1/64-half-turn grid index and the exact
+/// CORE-MATH `cr_sinpif`'s structure with own Taylor residuals: an integer
+/// reduction of the signed mantissa yields the 1/64-half-turn grid index and the exact
 /// fixed-point residual, one 128-entry signed table covers the full circle
 /// (cosine by `+32` offset), and plain-f64 residual polynomials finish with a
 /// single rounding — no gate needed at f32 precision.  The exhaustive 2³²
@@ -312,7 +316,11 @@ pub fn sinpif(x: f32) -> f32 {
     let z2 = z * z;
     let fs = crate::fast_mul_add(
         z2,
-        crate::fast_mul_add(z2, SINPIF_SN[2], SINPIF_SN[1]),
+        crate::fast_mul_add(
+            z2,
+            crate::fast_mul_add(z2, SINPIF_SN[3], SINPIF_SN[2]),
+            SINPIF_SN[1],
+        ),
         SINPIF_SN[0],
     );
     let fc = crate::fast_mul_add(
@@ -331,7 +339,7 @@ pub fn sinpif(x: f32) -> f32 {
 
 /// Cosine of π·x
 ///
-/// Verbatim port of CORE-MATH's `cr_cospif`, sharing [`sinpif`]'s tables: the
+/// CORE-MATH `cr_cospif`'s structure, sharing [`sinpif`]'s tables: the
 /// unsigned mantissa (cosine is even) reduces to the same 1/64-half-turn grid
 /// with a `+32` quarter-turn shift, grid-exact inputs read the table
 /// directly, and the tiny band closes with a single f32 FMA around 1.  The
@@ -373,7 +381,11 @@ pub fn cospif(x: f32) -> f32 {
     let z2 = z * z;
     let fs = crate::fast_mul_add(
         z2,
-        crate::fast_mul_add(z2, SINPIF_SN[2], SINPIF_SN[1]),
+        crate::fast_mul_add(
+            z2,
+            crate::fast_mul_add(z2, SINPIF_SN[3], SINPIF_SN[2]),
+            SINPIF_SN[1],
+        ),
         SINPIF_SN[0],
     );
     let fc = crate::fast_mul_add(
@@ -437,27 +449,28 @@ pub fn sincosf(x: f32) -> (f32, f32) {
 }
 
 /// Odd rational `tan(πz)·(¼ − z²)/(z − z³)` numerator/denominator
-/// coefficients over the reduced period — CORE-MATH tanpif's `cn`/`cd`; the
-/// `(¼ − z²)` factor bakes in the poles and `(z − z³)` the zeros.
+/// coefficients over the reduced period; the `(¼ − z²)` factor bakes in the
+/// poles and `(z − z³)` the zeros.  Generated with `ratapprox
+/// --function="tan(pi*sqrt(x))*(0.25-x)/(sqrt(x)*(1-x))"
+/// --dom="[1e-9,0.24999998]" --type=[3,3] --numF=[D] --denF=[D]`.
 const TANPIF_CN: [f64; 4] = [
     0.785_398_163_397_448_4,
-    -0.280_538_726_488_783_2,
-    0.022_011_589_086_914_73,
-    -0.000_231_039_590_123_269_23,
+    -0.280_537_341_549_820_2,
+    0.022_011_212_027_419_076,
+    -0.000_231_028_678_661_800_2,
 ];
 const TANPIF_CD: [f64; 4] = [
     1.0,
-    -0.647_061_134_091_576_7,
-    0.097_314_025_548_005_4,
-    -0.003_226_980_548_916_333_3,
+    -0.647_059_370_732_522_2,
+    0.097_313_034_319_365_83,
+    -0.003_226_887_891_049_241_7,
 ];
 
 /// Tangent of π·x
 ///
-/// Verbatim port of CORE-MATH's `cr_tanpif`: one odd rational in f64 over the
-/// reduced period `z = x − round(x)`, with the poles and zeros carried by
-/// exact factors, quarter-integers returned as ±1/±0/±∞ up front, and
-/// CORE-MATH's two directed-rounding patch points kept for bit fidelity.  The
+/// One odd rational in f64 over the reduced period `z = x − round(x)`
+/// (CORE-MATH `cr_tanpif`'s structure), with the poles and zeros carried by
+/// exact factors and quarter-integers returned as ±1/±0/±∞ up front.  The
 /// exhaustive 2³² sweep in `tests/tanpif.rs` certifies every input.
 #[must_use]
 #[inline]
@@ -487,15 +500,6 @@ pub fn tanpif(x: f32) -> f32 {
             _ => f32::NEG_INFINITY,      // x = −½ mod 2
         };
     }
-    // CORE-MATH's two patch points (directed-rounding shims kept verbatim).
-    let a = zf.to_bits() & (u32::MAX >> 1);
-    if a == 0x3e93_3802 {
-        return f32::copysign(1.268_794_7, zf) + f32::copysign(2.980_232_2e-08, zf);
-    }
-    if a == 0x38f2_6685 {
-        return f32::copysign(0.000_363_122_73, zf) + f32::copysign(7.275_958e-12, zf);
-    }
-
     let z = f64::from(zf);
     let z2 = z * z;
     let z4 = z2 * z2;

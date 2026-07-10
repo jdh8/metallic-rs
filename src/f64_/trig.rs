@@ -1663,23 +1663,27 @@ const SINCOSN_CM: [DoubleDouble; 32] = [
 ];
 
 /// `sin(θ)/z` and `(cos(θ) − 1)/z²` residual Taylor coefficients in the
-/// fixed-point scale `z = residual·2⁶³` of the grid unit (CORE-MATH sinpi's
-/// `sn`/`cn`, verbatim): the reduction below keeps the residual as the low
-/// bits of `x·2⁷⁵`, so the coefficients absorb the 2⁻⁶³ rescale.
+/// fixed-point scale `z = residual·2⁶³` of the grid unit: the reduction below
+/// keeps the residual as the low bits of `x·2⁷⁵`, so with `S = π·2⁻⁷⁵` these
+/// are `S, −S³/3!, S⁵/5!` and `−S²/2!, S⁴/4!` exactly (the deg-7 tails sit
+/// below 2⁻⁷³ of the leading term at the half-cell edge `θ = π/4096`).
 const SINPI_ZS: [f64; 3] = [
     8.315_726_513_883_19e-23,
-    -9.584_056_014_373_668e-68,
-    3.313_749_950_895_967_4e-113,
+    -9.584_056_014_373_672e-68,
+    3.313_750_020_517_176e-113,
 ];
-const SINPI_ZC: [f64; 2] = [-3.457_565_372_684_991_5e-45, 1.992_459_659_126_081_7e-90];
+const SINPI_ZC: [f64; 2] = [-3.457_565_372_684_993_3e-45, 1.992_459_717_731_72e-90];
 
 /// Taylor coefficients of `(sin(πx) − πx)/x³` for the small band
-/// `|x| ≤ 0x1.2p−5` (CORE-MATH sinpi's `c`, verbatim).
-const SINPI_SMALL_C: [f64; 4] = [
-    -5.167_712_780_049_968_5,
-    2.550_164_039_866_476,
-    -0.599_264_504_695_894_2,
-    0.082_123_115_663_778_14,
+/// `|x| ≤ 0x1.2p−5`: `(−1)^(k+1)·π^(2k+3)/(2k+3)!`.  Five terms — the deg-9
+/// truncation `π¹¹x¹¹/11!` reaches 7.5e−19 at the band edge, above the
+/// `x³·1.5·2⁻⁴⁷` gate, while the deg-11 tail sits near 2⁻⁷³ of the result.
+const SINPI_SMALL_C: [f64; 5] = [
+    -5.167_712_780_049_97,
+    2.550_164_039_877_345_5,
+    -0.599_264_529_320_792_1,
+    0.082_145_886_611_128_23,
+    -0.007_370_430_945_714_35,
 ];
 
 /// Relative Ziv gate for the middle [`sinpi_dd`] tier: the double-double π
@@ -1832,10 +1836,10 @@ pub fn sinpi(x: f64) -> f64 {
         let x3 = x2 * x;
         let x4 = x2 * x2;
         let eps = x * crate::fast_mul_add(x2, 1.5 * crate::exp2i(-47), crate::exp2i(-102));
-        #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
+        #[allow(clippy::suboptimal_flops)] // certified splitting
         let zl = zl
             + x3 * ((SINPI_SMALL_C[0] + x2 * SINPI_SMALL_C[1])
-                + x4 * (SINPI_SMALL_C[2] + x2 * SINPI_SMALL_C[3]));
+                + x4 * ((SINPI_SMALL_C[2] + x2 * SINPI_SMALL_C[3]) + x4 * SINPI_SMALL_C[4]));
         let lb = (zl - eps) + zh;
         let ub = (zl + eps) + zh;
         if lb == ub {
@@ -1918,12 +1922,13 @@ fn sinpi_accurate(x: f64) -> f64 {
 }
 
 /// Taylor coefficients of `(cos(πx) − 1)/x²` for the small band
-/// `|x| ≤ 2⁻¹²` (CORE-MATH cospi's `c`, verbatim).
+/// `|x| ≤ 2⁻¹²`: `(−1)^(k+1)·π^(2k+2)/(2k+2)!` (the deg-10 tail is below
+/// 2⁻⁸⁰ of the result there).
 const COSPI_SMALL_C: [f64; 4] = [
-    -4.934_802_200_544_677,
-    4.058_712_126_397_995,
-    -1.335_262_715_026_094_7,
-    0.235_267_632_957_854_3,
+    -4.934_802_200_544_679,
+    4.058_712_126_416_768_5,
+    -1.335_262_768_854_589_5,
+    0.235_330_630_358_893_2,
 ];
 
 /// Cosine of π·x
@@ -2187,18 +2192,25 @@ const TANPI_T: [DoubleDouble; 32] = [
         low: -2.379_288_158_189_244_4e-17,
     },
 ];
-/// `(tan(θ) − θ)/z³` residual coefficients in the 2⁻⁶³·2⁻⁷ fixed-point `z` scale — CORE-MATH tanpi's `c`.
-const TANPI_ZC: [f64; 4] = [
-    6.281_006_949_579_927e-63,
-    1.779_055_995_675_284e-104,
-    5.099_053_215_602_634e-146,
-    1.464_047_974_240_423_7e-187,
+/// `(tan(θ) − θ)/z³` residual Taylor coefficients in the 2⁻⁶³·2⁻⁷
+/// fixed-point `z` scale: with `T = π·2⁻⁷⁰` these are `T³/3, 2T⁵/15,
+/// 17T⁷/315, 62T⁹/2835, 1382T¹¹/155925` exactly.  The deg-11 term matters —
+/// a deg-9 cut leaves the tail 2.2× the gate at the half-cell edge, where
+/// near-pole cells amplify it; with it the leg re-certifies with margin
+/// (`ziv_soundness::tanpi_fast_leg_is_sound`).
+const TANPI_ZC: [f64; 5] = [
+    6.281_006_949_579_929e-63,
+    1.779_055_995_655_075e-104,
+    5.099_053_880_708_066e-146,
+    1.463_154_583_787_931_4e-187,
+    4.198_984_086_043_589e-229,
 ];
-/// `(tan(πx) − πx)/x³` coefficients for the small band — CORE-MATH tanpi's `c2`.
+/// `(tan(πx) − πx)/x³` Taylor coefficients for the small band:
+/// `π³/3, 2π⁵/15, 17π⁷/315` (the deg-9 tail is below 2⁻⁸⁸ at `|x| = 2⁻¹²`).
 const TANPI_SMALL_C: [f64; 3] = [
     10.335_425_560_099_94,
-    40.802_624_638_036_22,
-    163.000_010_260_546_4,
+    40.802_624_638_037_53,
+    162.999_951_975_255_44,
 ];
 
 /// `π·2⁻⁷⁰` as a double-double — the slope of the residual angle in
@@ -2420,7 +2432,9 @@ pub fn tanpi(x: f64) -> f64 {
     let z4 = z2 * z2;
     let z3 = z * z2;
     #[allow(clippy::suboptimal_flops)] // CORE-MATH's certified splitting
-    let f = z3 * ((TANPI_ZC[0] + z2 * TANPI_ZC[1]) + z4 * (TANPI_ZC[2] + z2 * TANPI_ZC[3]));
+    let f = z3
+        * ((TANPI_ZC[0] + z2 * TANPI_ZC[1])
+            + z4 * ((TANPI_ZC[2] + z2 * TANPI_ZC[3]) + z4 * TANPI_ZC[4]));
     #[allow(clippy::suboptimal_flops)]
     let eps = z3 * crate::exp2i(-256) + f64::copysign(crate::exp2i(-103), z);
     let p = TANPI_PH * z;
@@ -2771,7 +2785,7 @@ mod ziv_soundness {
             let eps = x * crate::fast_mul_add(x2, 1.5 * crate::exp2i(-47), crate::exp2i(-102));
             let zl = zl
                 + x3 * ((SINPI_SMALL_C[0] + x2 * SINPI_SMALL_C[1])
-                    + x4 * (SINPI_SMALL_C[2] + x2 * SINPI_SMALL_C[3]));
+                    + x4 * ((SINPI_SMALL_C[2] + x2 * SINPI_SMALL_C[3]) + x4 * SINPI_SMALL_C[4]));
             let got = Float::with_val(250, zh) + Float::with_val(250, zl);
             let truth = Float::with_val(250, x).sin_pi();
             let abs = Float::with_val(250, &got - &truth).abs().to_f64();
@@ -2935,7 +2949,9 @@ mod ziv_soundness {
             let z2 = z * z;
             let z4 = z2 * z2;
             let z3 = z * z2;
-            let f = z3 * ((TANPI_ZC[0] + z2 * TANPI_ZC[1]) + z4 * (TANPI_ZC[2] + z2 * TANPI_ZC[3]));
+            let f = z3
+                * ((TANPI_ZC[0] + z2 * TANPI_ZC[1])
+                    + z4 * ((TANPI_ZC[2] + z2 * TANPI_ZC[3]) + z4 * TANPI_ZC[4]));
             let eps = z3 * crate::exp2i(-256) + f64::copysign(crate::exp2i(-103), z);
             let p = TANPI_PH * z;
             let sum = fast_sum(p.high, f);
