@@ -17,7 +17,7 @@ pub use erf::{erfcf, erff};
 pub use exp::{exp2f, exp2m1f, exp10f, exp10m1f, expf, expm1f, frexpf, ldexpf};
 pub use gamma::{lgammaf, tgammaf};
 pub use hyp::{acoshf, asinhf, atanhf, coshf, sinhf, tanhf};
-pub use log::{log1pf, log2f, log10f, logf};
+pub use log::{log1pf, log2f, log2p1f, log10f, log10p1f, logf};
 pub use misc::{cbrtf, fmaf, hypotf, roundf, rsqrtf};
 pub use pow::powf;
 pub use trig::{cosf, cospif, sincosf, sinf, sinpif, tanf, tanpif};

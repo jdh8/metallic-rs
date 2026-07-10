@@ -151,6 +151,14 @@ name = "log1pf"
 harness = false
 
 [[bench]]
+name = "log2p1f"
+harness = false
+
+[[bench]]
+name = "log10p1f"
+harness = false
+
+[[bench]]
 name = "logf"
 harness = false
 
@@ -308,6 +316,14 @@ harness = false
 
 [[bench]]
 name = "log1p"
+harness = false
+
+[[bench]]
+name = "log2p1"
+harness = false
+
+[[bench]]
+name = "log10p1"
 harness = false
 
 [[bench]]

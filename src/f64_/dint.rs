@@ -275,7 +275,6 @@ impl Dint {
     /// 128-bit finisher kept available for future callers).
     #[inline]
     #[allow(clippy::wrong_self_convention)] // `Dint` is `Copy`; `&self` avoids a move
-    #[allow(dead_code)] // exercised by `to_f64_general_round_trips`
     pub fn to_f64_general(&self) -> f64 {
         let sign = if self.sgn { -1.0_f64 } else { 1.0 };
 
@@ -409,6 +408,194 @@ pub fn log1p_accurate(s: f64, c: f64) -> f64 {
         return 0.0;
     }
     log_2(&arg).to_f64()
+}
+
+/// `1/n` for `n = 1..=26` — the alternating-series coefficients of
+/// [`ln1p_series`].  Each is the mathematical constant `1/n` rounded to
+/// nearest: `m = round(2^(127−ex)/n)` with bit 127 set.
+static RECIP: [Dint; 26] = [
+    Dint {
+        sgn: false,
+        ex: 0,
+        m: 0x8000_0000_0000_0000_0000_0000_0000_0000,
+    },
+    Dint {
+        sgn: false,
+        ex: -1,
+        m: 0x8000_0000_0000_0000_0000_0000_0000_0000,
+    },
+    Dint {
+        sgn: false,
+        ex: -2,
+        m: 0xaaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
+    },
+    Dint {
+        sgn: false,
+        ex: -2,
+        m: 0x8000_0000_0000_0000_0000_0000_0000_0000,
+    },
+    Dint {
+        sgn: false,
+        ex: -3,
+        m: 0xcccc_cccc_cccc_cccc_cccc_cccc_cccc_cccd,
+    },
+    Dint {
+        sgn: false,
+        ex: -3,
+        m: 0xaaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
+    },
+    Dint {
+        sgn: false,
+        ex: -3,
+        m: 0x9249_2492_4924_9249_2492_4924_9249_2492,
+    },
+    Dint {
+        sgn: false,
+        ex: -3,
+        m: 0x8000_0000_0000_0000_0000_0000_0000_0000,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0xe38e_38e3_8e38_e38e_38e3_8e38_e38e_38e4,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0xcccc_cccc_cccc_cccc_cccc_cccc_cccc_cccd,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0xba2e_8ba2_e8ba_2e8b_a2e8_ba2e_8ba2_e8ba,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0xaaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0x9d89_d89d_89d8_9d89_d89d_89d8_9d89_d89e,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0x9249_2492_4924_9249_2492_4924_9249_2492,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0x8888_8888_8888_8888_8888_8888_8888_8889,
+    },
+    Dint {
+        sgn: false,
+        ex: -4,
+        m: 0x8000_0000_0000_0000_0000_0000_0000_0000,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xf0f0_f0f0_f0f0_f0f0_f0f0_f0f0_f0f0_f0f1,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xe38e_38e3_8e38_e38e_38e3_8e38_e38e_38e4,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xd794_35e5_0d79_435e_50d7_9435_e50d_7943,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xcccc_cccc_cccc_cccc_cccc_cccc_cccc_cccd,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xc30c_30c3_0c30_c30c_30c3_0c30_c30c_30c3,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xba2e_8ba2_e8ba_2e8b_a2e8_ba2e_8ba2_e8ba,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xb216_42c8_590b_2164_2c85_90b2_1642_c859,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xaaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0xa3d7_0a3d_70a3_d70a_3d70_a3d7_0a3d_70a4,
+    },
+    Dint {
+        sgn: false,
+        ex: -5,
+        m: 0x9d89_d89d_89d8_9d89_d89d_89d8_9d89_d89e,
+    },
+];
+
+/// `ln(1 + x)` for `0 < |x| < 2⁻⁴` as a 128-bit `Dint`: the alternating
+/// series `x · Σ_{j=0}^{25} (−x)^j / (j+1)` by Horner over [`RECIP`].
+///
+/// The truncated tail is below `2⁻¹³⁰` of the leading term at the band edge
+/// and the ~51 rounded 128-bit operations keep the total relative error near
+/// `2⁻¹²⁰` — deep enough that the base-2/base-10 lifts replace CORE-MATH's
+/// small-band accurate polynomial together with its 247-entry (`log2p1`) and
+/// 222-entry (`log10p1`) hard-to-round exception tables.  Working term-wise in
+/// `x` (never forming `1 + x`) sidesteps the 128-bit cancellation that makes
+/// [`log1p_accurate`] unusable below `|x| ≈ 2⁻⁶⁰`.
+#[cold]
+fn ln1p_series(x: f64) -> Dint {
+    let t = Dint::from_f64(x);
+    let u = Dint { sgn: !t.sgn, ..t };
+    let mut acc = RECIP[25];
+    for r in RECIP[..25].iter().rev() {
+        acc = acc.mul(&u).add(r);
+    }
+    t.mul(&acc)
+}
+
+/// Correctly-rounded `log₂(1 + x)` for `0 < |x| < 2⁻⁴`: the 128-bit series
+/// times `log₂e`, finished subnormal-safely (`x·log₂e` can leave `x`'s
+/// binade, and `x` itself may be subnormal).
+#[cold]
+pub fn log2p1_deep(x: f64) -> f64 {
+    ln1p_series(x).mul(&LOG2E).to_f64_general()
+}
+
+/// Correctly-rounded `log₁₀(1 + x)` for `0 < |x| < 2⁻⁴` — [`log2p1_deep`]
+/// with the base-10 constant.
+#[cold]
+pub fn log10p1_deep(x: f64) -> f64 {
+    ln1p_series(x).mul(&LOG10E).to_f64_general()
+}
+
+/// Correctly-rounded accurate-path `log₂(1 + x)` for `|x| ≥ 2⁻⁴`, from the
+/// caller's exact Fast2Sum split `1 + x = s + c` ([`log1p_accurate`]'s
+/// argument, base-2 finish).
+#[cold]
+pub fn log2p1_accurate(s: f64, c: f64) -> f64 {
+    let arg = Dint::from_f64(s).add(&Dint::from_f64(c));
+    log_2(&arg).mul(&LOG2E).to_f64()
+}
+
+/// Correctly-rounded accurate-path `log₁₀(1 + x)` for `|x| ≥ 2⁻⁴`.
+#[cold]
+pub fn log10p1_accurate(s: f64, c: f64) -> f64 {
+    let arg = Dint::from_f64(s).add(&Dint::from_f64(c));
+    log_2(&arg).mul(&LOG10E).to_f64()
 }
 
 /// Correctly-rounded `2ᵏ · ln(u)` for a positive double-double `u = high + low`.

@@ -2189,6 +2189,174 @@ pub fn log1p(x: f64) -> f64 {
     super::dint::log1p_accurate(s, c)
 }
 
+/// `log₂e` as a double-double, the base-2 lift of the `log2p1` legs.
+const LOG2_E_DD: DoubleDouble = DoubleDouble {
+    high: LOG2_E_HI,
+    low: LOG2_E_LO,
+};
+
+/// `log₁₀e` as a double-double, the base-10 lift of the `log10p1` legs.
+const LOG10_E_DD: DoubleDouble = DoubleDouble {
+    high: LOG10_E_HI,
+    low: LOG10_E_LO,
+};
+
+/// Absolute Ziv gates for the `log2p1`/`log10p1` table legs: [`LN_ZIV_EPS`]
+/// lifted by the base constant, widened 1.0625× for the double-double
+/// product's own roundings (the product's ≈2⁻¹⁰⁴ relative error stays far
+/// below this absolute width across the whole band; certified by
+/// `ziv_soundness::log2p1_table_leg_is_sound` / `log10p1_table_leg_is_sound`).
+const LOG2P1_TABLE_EPS: f64 = LN_ZIV_EPS * LOG2_E_HI * 1.0625;
+const LOG10P1_TABLE_EPS: f64 = LN_ZIV_EPS * LOG10_E_HI * 1.0625;
+
+/// Compute `log₂(1 + x)` accurately, especially for small `x`
+///
+/// C23's `log2p1`.  The band structure mirrors [`log1p`], every leg lifted by
+/// `log₂e`: the small/wide series legs and the exact-split table leg reuse
+/// [`log1p`]'s raw kernels, multiply by the double-double `log₂e`, and keep
+/// the same relative gates scaled by the constant plus a relative `2⁻¹⁰¹`
+/// floor for the product's roundings.  Straddles below `2⁻⁴` take the
+/// 128-bit series [`super::dint::log2p1_deep`] — which also absorbs
+/// everything below `2⁻⁹⁰⁰`, where the gate arithmetic itself would go
+/// subnormal — and the table band falls back to
+/// [`super::dint::log2p1_accurate`] on the exact `s + c` split.  The exact
+/// cases `log2p1(2ᵏ − 1) = k` (`−53 ≤ k ≤ 53`) pass through the table leg's
+/// gate naturally under round-to-nearest, so they need no lookup.
+#[must_use]
+#[inline]
+pub fn log2p1(x: f64) -> f64 {
+    if x.is_nan() || x == 0.0 {
+        return x; // NaN propagates; ±0 keeps its sign
+    }
+    if x < -1.0 {
+        return f64::NAN;
+    }
+    if x == -1.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == f64::INFINITY {
+        return x;
+    }
+
+    let ax = x.abs();
+    if ax < 0.0625 {
+        if ax < crate::exp2i(-900) {
+            return super::dint::log2p1_deep(x);
+        }
+        if ax < 1.0 / 256.0 {
+            let v = log1p_small_eval(x) * LOG2_E_DD;
+            let err = crate::fast_mul_add(
+                x * x,
+                LN1P_SMALL_ZIV_SCALE * LOG2_E_HI,
+                v.high.abs() * crate::exp2i(-101),
+            );
+            let lo = v.high + (v.low - err);
+            let hi = v.high + (v.low + err);
+            if lo == hi {
+                return lo;
+            }
+            return super::dint::log2p1_deep(x);
+        }
+        let v = log1p_wide_eval(x) * LOG2_E_DD;
+        let err = crate::fast_mul_add(
+            (x * x) * ax,
+            LN1P_WIDE_ZIV_SCALE * LOG2_E_HI,
+            v.high.abs() * crate::exp2i(-101),
+        );
+        let lo = v.high + (v.low - err);
+        let hi = v.high + (v.low + err);
+        if lo == hi {
+            return lo;
+        }
+        return super::dint::log2p1_deep(x);
+    }
+
+    let s = 1.0 + x;
+    let c = if ax <= 1.0 {
+        x - (s - 1.0)
+    } else {
+        1.0 - (s - x)
+    };
+    let v = log1p_table_raw(s, c) * LOG2_E_DD;
+    let lo = v.high + (v.low - LOG2P1_TABLE_EPS);
+    let hi = v.high + (v.low + LOG2P1_TABLE_EPS);
+    if lo == hi {
+        return lo;
+    }
+    super::dint::log2p1_accurate(s, c)
+}
+
+/// Compute `log₁₀(1 + x)` accurately, especially for small `x`
+///
+/// C23's `log10p1` — [`log2p1`]'s structure with the base-10 constant, the
+/// deep tier [`super::dint::log10p1_deep`], and the accurate tier
+/// [`super::dint::log10p1_accurate`].  The exact cases
+/// `log10p1(10ⁿ − 1) = n` (`1 ≤ n ≤ 15`) pass through the table leg's gate
+/// naturally under round-to-nearest.
+#[must_use]
+#[inline]
+pub fn log10p1(x: f64) -> f64 {
+    if x.is_nan() || x == 0.0 {
+        return x; // NaN propagates; ±0 keeps its sign
+    }
+    if x < -1.0 {
+        return f64::NAN;
+    }
+    if x == -1.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == f64::INFINITY {
+        return x;
+    }
+
+    let ax = x.abs();
+    if ax < 0.0625 {
+        if ax < crate::exp2i(-900) {
+            return super::dint::log10p1_deep(x);
+        }
+        if ax < 1.0 / 256.0 {
+            let v = log1p_small_eval(x) * LOG10_E_DD;
+            let err = crate::fast_mul_add(
+                x * x,
+                LN1P_SMALL_ZIV_SCALE * LOG10_E_HI,
+                v.high.abs() * crate::exp2i(-101),
+            );
+            let lo = v.high + (v.low - err);
+            let hi = v.high + (v.low + err);
+            if lo == hi {
+                return lo;
+            }
+            return super::dint::log10p1_deep(x);
+        }
+        let v = log1p_wide_eval(x) * LOG10_E_DD;
+        let err = crate::fast_mul_add(
+            (x * x) * ax,
+            LN1P_WIDE_ZIV_SCALE * LOG10_E_HI,
+            v.high.abs() * crate::exp2i(-101),
+        );
+        let lo = v.high + (v.low - err);
+        let hi = v.high + (v.low + err);
+        if lo == hi {
+            return lo;
+        }
+        return super::dint::log10p1_deep(x);
+    }
+
+    let s = 1.0 + x;
+    let c = if ax <= 1.0 {
+        x - (s - 1.0)
+    } else {
+        1.0 - (s - x)
+    };
+    let v = log1p_table_raw(s, c) * LOG10_E_DD;
+    let lo = v.high + (v.low - LOG10P1_TABLE_EPS);
+    let hi = v.high + (v.low + LOG10P1_TABLE_EPS);
+    if lo == hi {
+        return lo;
+    }
+    super::dint::log10p1_accurate(s, c)
+}
+
 /// MPFR-certified soundness of the log-family fast-leg Ziv gates.  A gate must
 /// exceed the leg's true error with margin (here ≥2×), or a confident
 /// `lo == hi` could certify a value on the wrong side of a rounding boundary.
@@ -2408,5 +2576,218 @@ mod ziv_soundness {
             "log1p table gate covers only {:.2}× the slip at x=-{xn:e}",
             1.0 / wn
         );
+    }
+
+    /// Both signs of a lifted `log2p1`/`log10p1` leg against its production
+    /// gate: the leg and gate closures receive the signed `x` exactly as the
+    /// public function forms them.
+    fn lifted_leg_cert(
+        name: &str,
+        (lo, hi): (f64, f64),
+        leg: &dyn Fn(f64) -> DoubleDouble,
+        gate: &dyn Fn(f64) -> f64,
+        fref: &dyn Fn(&Float) -> Float,
+    ) {
+        let (wp, xp) = worst_ratio(lo, hi, 3_000_000, leg, gate, fref);
+        let (wn, xn) = worst_ratio(
+            lo,
+            hi,
+            3_000_000,
+            |t| leg(-t),
+            |t| gate(-t),
+            |t| fref(&-t.clone()),
+        );
+        println!("{name}: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
+        assert!(
+            wp < 0.5,
+            "{name} gate covers only {:.2}× the slip at x={xp:e}",
+            1.0 / wp
+        );
+        assert!(
+            wn < 0.5,
+            "{name} gate covers only {:.2}× the slip at x=-{xn:e}",
+            1.0 / wn
+        );
+    }
+
+    /// The lifted small-leg gate (relative `x²` window plus the `2⁻¹⁰¹`
+    /// product floor) must cover `log1p_small_eval × log₂e` over the whole
+    /// band `[2⁻⁹⁰⁰, 2⁻⁸)` — including below `2⁻⁵⁴`, where `x²` underflows
+    /// under the floor.
+    #[test]
+    fn log2p1_small_leg_is_sound() {
+        lifted_leg_cert(
+            "log2p1 small leg",
+            (crate::exp2i(-900), 3.90625e-3),
+            &|x| log1p_small_eval(x) * LOG2_E_DD,
+            &|x| {
+                let v = log1p_small_eval(x) * LOG2_E_DD;
+                crate::fast_mul_add(
+                    x * x,
+                    LN1P_SMALL_ZIV_SCALE * LOG2_E_HI,
+                    v.high.abs() * crate::exp2i(-101),
+                )
+            },
+            &|x| x.clone().log2_1p(),
+        );
+    }
+
+    /// The lifted wide-leg gate over `[2⁻⁸, 2⁻⁴)`.
+    #[test]
+    fn log2p1_wide_leg_is_sound() {
+        lifted_leg_cert(
+            "log2p1 wide leg",
+            (3.90625e-3, 0.0625),
+            &|x| log1p_wide_eval(x) * LOG2_E_DD,
+            &|x| {
+                let v = log1p_wide_eval(x) * LOG2_E_DD;
+                crate::fast_mul_add(
+                    (x * x) * x.abs(),
+                    LN1P_WIDE_ZIV_SCALE * LOG2_E_HI,
+                    v.high.abs() * crate::exp2i(-101),
+                )
+            },
+            &|x| x.clone().log2_1p(),
+        );
+    }
+
+    /// The absolute [`LOG2P1_TABLE_EPS`] over `|x| ≥ 2⁻⁴`, both signs, up to
+    /// `f64::MAX` and down the deep-cancellation end `x → −1`.
+    #[test]
+    fn log2p1_table_leg_is_sound() {
+        let leg = |x: f64| {
+            let s = 1.0 + x;
+            let c = if x.abs() <= 1.0 {
+                x - (s - 1.0)
+            } else {
+                1.0 - (s - x)
+            };
+            log1p_table_raw(s, c) * LOG2_E_DD
+        };
+        let (wp, xp) = worst_ratio(
+            0.0625,
+            f64::MAX,
+            3_000_000,
+            leg,
+            |_| LOG2P1_TABLE_EPS,
+            |x| x.clone().log2_1p(),
+        );
+        let (wn, xn) = worst_ratio(
+            0.0625,
+            f64::from_bits(0x3FEF_FFFF_FFFF_FFFF),
+            3_000_000,
+            |t| leg(-t),
+            |_| LOG2P1_TABLE_EPS,
+            |t| (-t.clone()).log2_1p(),
+        );
+        println!("log2p1 table leg: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
+        assert!(wp < 0.5, "covers only {:.2}× at x={xp:e}", 1.0 / wp);
+        assert!(wn < 0.5, "covers only {:.2}× at x=-{xn:e}", 1.0 / wn);
+    }
+
+    /// [`log10p1`]'s small leg, as [`log2p1_small_leg_is_sound`].
+    #[test]
+    fn log10p1_small_leg_is_sound() {
+        lifted_leg_cert(
+            "log10p1 small leg",
+            (crate::exp2i(-900), 3.90625e-3),
+            &|x| log1p_small_eval(x) * LOG10_E_DD,
+            &|x| {
+                let v = log1p_small_eval(x) * LOG10_E_DD;
+                crate::fast_mul_add(
+                    x * x,
+                    LN1P_SMALL_ZIV_SCALE * LOG10_E_HI,
+                    v.high.abs() * crate::exp2i(-101),
+                )
+            },
+            &|x| x.clone().log10_1p(),
+        );
+    }
+
+    /// [`log10p1`]'s wide leg, as [`log2p1_wide_leg_is_sound`].
+    #[test]
+    fn log10p1_wide_leg_is_sound() {
+        lifted_leg_cert(
+            "log10p1 wide leg",
+            (3.90625e-3, 0.0625),
+            &|x| log1p_wide_eval(x) * LOG10_E_DD,
+            &|x| {
+                let v = log1p_wide_eval(x) * LOG10_E_DD;
+                crate::fast_mul_add(
+                    (x * x) * x.abs(),
+                    LN1P_WIDE_ZIV_SCALE * LOG10_E_HI,
+                    v.high.abs() * crate::exp2i(-101),
+                )
+            },
+            &|x| x.clone().log10_1p(),
+        );
+    }
+
+    /// [`log10p1`]'s table leg, as [`log2p1_table_leg_is_sound`].
+    #[test]
+    fn log10p1_table_leg_is_sound() {
+        let leg = |x: f64| {
+            let s = 1.0 + x;
+            let c = if x.abs() <= 1.0 {
+                x - (s - 1.0)
+            } else {
+                1.0 - (s - x)
+            };
+            log1p_table_raw(s, c) * LOG10_E_DD
+        };
+        let (wp, xp) = worst_ratio(
+            0.0625,
+            f64::MAX,
+            3_000_000,
+            leg,
+            |_| LOG10P1_TABLE_EPS,
+            |x| x.clone().log10_1p(),
+        );
+        let (wn, xn) = worst_ratio(
+            0.0625,
+            f64::from_bits(0x3FEF_FFFF_FFFF_FFFF),
+            3_000_000,
+            |t| leg(-t),
+            |_| LOG10P1_TABLE_EPS,
+            |t| (-t.clone()).log10_1p(),
+        );
+        println!("log10p1 table leg: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
+        assert!(wp < 0.5, "covers only {:.2}× at x={xp:e}", 1.0 / wp);
+        assert!(wn < 0.5, "covers only {:.2}× at x=-{xn:e}", 1.0 / wn);
+    }
+
+    /// The 128-bit series deep tier must round every draw bit-exactly — it is
+    /// the tier that replaces CORE-MATH's small-band exception tables, so it
+    /// gets a direct MPFR gate over the whole deep band `(0, 2⁻⁴)`, both
+    /// signs, subnormals included.
+    #[test]
+    fn log2p1_deep_is_correct() {
+        for i in 0..1_000_000_u64 {
+            let x = f64::from_bits(1 + mix(i) % (0x3fb0_0000_0000_0000 - 1));
+            for x in [x, -x] {
+                let got = super::super::dint::log2p1_deep(x);
+                let want = Float::with_val(150, x).log2_1p().to_f64();
+                assert!(
+                    got.to_bits() == want.to_bits(),
+                    "log2p1_deep({x:e}) = {got:e} ≠ {want:e}"
+                );
+            }
+        }
+    }
+
+    /// [`log10p1`]'s deep tier, as [`log2p1_deep_is_correct`].
+    #[test]
+    fn log10p1_deep_is_correct() {
+        for i in 0..1_000_000_u64 {
+            let x = f64::from_bits(1 + mix(i) % (0x3fb0_0000_0000_0000 - 1));
+            for x in [x, -x] {
+                let got = super::super::dint::log10p1_deep(x);
+                let want = Float::with_val(150, x).log10_1p().to_f64();
+                assert!(
+                    got.to_bits() == want.to_bits(),
+                    "log10p1_deep({x:e}) = {got:e} ≠ {want:e}"
+                );
+            }
+        }
     }
 }

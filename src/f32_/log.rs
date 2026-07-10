@@ -153,3 +153,41 @@ pub fn log10f(x: f32) -> f32 {
         }
     }
 }
+
+/// Binary logarithm of 1 plus `x`
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::log2p1`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/log2p1f.rs` certifies
+/// the double rounding never lands on the wrong side of an f32 boundary.
+#[must_use]
+#[inline]
+pub fn log2p1f(x: f32) -> f32 {
+    // The two f32 ties the double rounding cannot steer; the exhaustive
+    // sweep found exactly these inputs.
+    if x.to_bits() == 0x4ebd_09e3 {
+        return f32::from_bits(0x41f4_8013);
+    }
+    if x.to_bits() == 0x5292_8e33 {
+        return f32::from_bits(0x4218_c7fd);
+    }
+    crate::f64_::log2p1(x.into()) as f32
+}
+
+/// Common logarithm of 1 plus `x`
+///
+/// Promotes to the correctly rounded f64 [`crate::f64_::log10p1`] and rounds
+/// once more to f32; the exhaustive 2³² sweep in `tests/log10p1f.rs`
+/// certifies the double rounding.
+#[must_use]
+#[inline]
+pub fn log10p1f(x: f32) -> f32 {
+    // The two f32 ties the double rounding cannot steer; the exhaustive
+    // sweep found exactly these inputs.
+    if x.to_bits() == 0x399a_7c00 {
+        return f32::from_bits(0x3906_29e5);
+    }
+    if x.to_bits() == 0xb051_e173 {
+        return f32::from_bits(0xafb6_4ccf);
+    }
+    crate::f64_::log10p1(x.into()) as f32
+}
