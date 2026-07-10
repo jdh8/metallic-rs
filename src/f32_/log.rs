@@ -636,37 +636,57 @@ pub fn logf(x: f32) -> f32 {
     log_lookup(x.into(), &LNF_TABLES) as f32
 }
 
+/// `ln(1+x)/x − 1` at the constant term (a rounding residual), then the rest
+/// of the minimax — the small-`|x|` leg of [`log1pf`].  The leading `1` is
+/// exact, so `x + x·P(x)` keeps the dominant `x` exact and the division-free
+/// leg is correctly rounded without the table.  Relative error ≈ 2⁻⁵³, from
+/// `ratapprox --function="log(1+x)/x" --dom="[-0.0234375,0.0234375]"
+///   --num="[1,x,x^2,x^3,x^4,x^5,x^6,x^7]" --den="[1]"` (constant split off).
+const LOG1P_MID: [f64; 8] = [
+    -1.110_223_024_625_156_5e-16,
+    -0.499_999_999_999_999_67,
+    0.333_333_333_338_405_26,
+    -0.250_000_000_007_929_66,
+    0.199_999_956_373_588_17,
+    -0.166_666_615_195_194_05,
+    0.142_981_034_390_836_2,
+    -0.125_124_177_134_767_92,
+];
+
 /// Compute `ln(1 + x)` accurately especially for small `x`
 ///
-/// Dispatch is a pair of integer compares: the series band (over half of a
-/// representation-uniform draw) exits on the first, and the hard-tie match
-/// runs only ahead of the lookup kernel that needs it.
+/// For `|x| < 0.0234375` a table-free `f64` polynomial `x + x·P(x)` serves the
+/// band directly, keeping the dominant `x` exact; elsewhere the hard-tie match
+/// runs only ahead of the [`log_lookup`] kernel that needs it.
 #[must_use]
 #[inline]
 pub fn log1pf(x: f32) -> f32 {
     let bits = x.to_bits();
     let ax = bits & 0x7FFF_FFFF;
 
-    if ax < 0x3100_0000 {
-        // |x| < 2⁻²⁹ (±0 included): 1 + x would round (an f32 mantissa this
-        // low spans past bit −52), and the x³/3 series tail is below 2⁻⁵⁹
-        // relative.
-        let xd = f64::from(x);
-        return crate::fast_mul_add(-0.5 * xd, xd, xd) as f32;
+    if ax < 0x3CC0_0000 {
+        // ±0 (the negative residual would flip −0 to +0) and the four ties the
+        // one-step leg's f64→f32 double rounding cannot steer.
+        return match bits {
+            0 | 0x8000_0000 => x,
+            0x3540_0003 => 7.152_557e-7,
+            0x3710_001B => 8.583_057e-6,
+            0x3770_004B => 1.430_508_1e-5,
+            0xBB0E_C8C4 => -2.181_091_6e-3,
+            _ => {
+                let xd = f64::from(x);
+                let f = xd * crate::poly(xd, &LOG1P_MID);
+                (xd + f) as f32
+            }
+        };
     }
     if bits >= 0xBF80_0000 || ax >= 0x7F80_0000 {
         return log1pf_special(x);
     }
 
-    // Intrinsic hard ties (see `logf`) as bit patterns; nine carried over
-    // from the previous atanh kernel plus `1.430_518_3e-5`.
+    // Intrinsic hard ties (see `logf`) the kernel's double rounding cannot
+    // steer; the small-|x| ties are subsumed by the mid-band leg.
     match bits {
-        0xBB0E_C8C4 => -2.181_091_6e-3,
-        0xB70F_FFE5 => -8.583_081e-6,
-        0xB53F_FFFD => -7.152_558e-7,
-        0x3540_0003 => 7.152_557e-7,
-        0x3710_001B => 8.583_057e-6,
-        0x3770_004B => 1.430_508_1e-5,
         0x3EFD_81AD => 0.402_213_13,
         0x4107_8FEB => 2.248_407_1,
         0x65D8_90D3 => 53.20505,
