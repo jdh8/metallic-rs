@@ -27,9 +27,9 @@ pub use f64_::pow::pow;
 
 pub use f32_::{
     acosf, acoshf, acospif, asinf, asinhf, asinpif, atan2f, atan2pif, atanf, atanhf, atanpif,
-    cbrtf, cosf, coshf, cospif, erfcf, erff, exp2f, exp2m1f, exp10f, exp10m1f, expf, expm1f, fmaf,
-    frexpf, hypotf, ldexpf, lgammaf, log1pf, log2f, log2p1f, log10f, log10p1f, logf, powf, roundf,
-    rsqrtf, sincosf, sinf, sinhf, sinpif, tanf, tanhf, tanpif, tgammaf,
+    cbrtf, compoundf, cosf, coshf, cospif, erfcf, erff, exp2f, exp2m1f, exp10f, exp10m1f, expf,
+    expm1f, fmaf, frexpf, hypotf, ldexpf, lgammaf, log1pf, log2f, log2p1f, log10f, log10p1f, logf,
+    powf, roundf, rsqrtf, sincosf, sinf, sinhf, sinpif, tanf, tanhf, tanpif, tgammaf,
 };
 
 // Crate-internal `f64` primitives, reached as `crate::exp2i` / `crate::fast_mul_add`

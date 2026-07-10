@@ -95,6 +95,10 @@ name = "cbrtf"
 harness = false
 
 [[bench]]
+name = "compoundf"
+harness = false
+
+[[bench]]
 name = "cosf"
 harness = false
 

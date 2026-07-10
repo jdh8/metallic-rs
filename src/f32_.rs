@@ -19,7 +19,7 @@ pub use gamma::{lgammaf, tgammaf};
 pub use hyp::{acoshf, asinhf, atanhf, coshf, sinhf, tanhf};
 pub use log::{log1pf, log2f, log2p1f, log10f, log10p1f, logf};
 pub use misc::{cbrtf, fmaf, hypotf, roundf, rsqrtf};
-pub use pow::powf;
+pub use pow::{compoundf, powf};
 pub use trig::{cosf, cospif, sincosf, sinf, sinpif, tanf, tanpif};
 
 // Internal helpers shared across this module's submodules (reached as `super::…`).
