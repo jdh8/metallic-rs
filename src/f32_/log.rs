@@ -593,29 +593,43 @@ pub(super) fn atanh(x: f64) -> f64 {
     crate::fast_mul_add(y, x, x)
 }
 
+/// The `x ≤ 0`, `+∞`, and NaN returns shared by every base's logarithm
+///
+/// `logₐ 0 = −∞`, `logₐ(x<0) = logₐ(NaN) = NaN`, `logₐ(+∞) = +∞`.  A single
+/// integer test `x.to_bits().wrapping_sub(1) ≥ 0x7f7f_ffff` routes here: `+0`
+/// wraps to `u32::MAX`, negatives and `−0` have the sign bit set, and `+∞`/NaN
+/// exceed the largest finite pattern, while every subnormal falls through to
+/// the kernel.
+#[cold]
+#[inline(never)]
+fn log_special(x: f32) -> f32 {
+    if x == 0.0 {
+        f32::NEG_INFINITY
+    } else if x == f32::INFINITY {
+        x
+    } else {
+        f32::NAN
+    }
+}
+
 /// Natural logarithm
 #[must_use]
 #[inline]
 pub fn logf(x: f32) -> f32 {
-    if x == 0.0 {
-        return f32::NEG_INFINITY;
-    }
-    if x < 0.0 || x.is_nan() {
-        return f32::NAN;
-    }
-    if x == f32::INFINITY {
-        return x;
+    let bits = x.to_bits();
+    if bits.wrapping_sub(1) >= 0x7F7F_FFFF {
+        return log_special(x);
     }
 
     // Intrinsic hard ties: the exact ln lies within ~½ f64-ulp of an f32
     // midpoint, so any ≈2⁻⁵² single-pass kernel double-rounds them (the same
     // five inputs tied under the previous atanh kernel).
-    match x {
-        1.179_438_3e-2 => return -4.440_131_7,
-        9.472_636 => return 2.248_407_1,
-        5.803_790_8e7 => return 17.876_608,
-        1.278_378_4e23 => return 53.20505,
-        5.498_306e28 => return 66.17683,
+    match bits {
+        0x3c41_3d3a => return -4.440_131_7,
+        0x4117_8feb => return 2.248_407_1,
+        0x4c5d_65a5 => return 17.876_608,
+        0x65d8_90d3 => return 53.20505,
+        0x6f31_a8ec => return 66.17683,
         _ => (),
     }
 
@@ -678,14 +692,9 @@ fn log1pf_special(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn log2f(x: f32) -> f32 {
-    if x == 0.0 {
-        return f32::NEG_INFINITY;
-    }
-    if x < 0.0 || x.is_nan() {
-        return f32::NAN;
-    }
-    if x == f32::INFINITY {
-        return x;
+    let bits = x.to_bits();
+    if bits.wrapping_sub(1) >= 0x7F7F_FFFF {
+        return log_special(x);
     }
 
     // An `f32` subnormal promotes to a normal `f64`, so the lookup kernel
@@ -697,19 +706,14 @@ pub fn log2f(x: f32) -> f32 {
 #[must_use]
 #[inline]
 pub fn log10f(x: f32) -> f32 {
-    if x == 0.0 {
-        return f32::NEG_INFINITY;
-    }
-    if x < 0.0 || x.is_nan() {
-        return f32::NAN;
-    }
-    if x == f32::INFINITY {
-        return x;
+    let bits = x.to_bits();
+    if bits.wrapping_sub(1) >= 0x7F7F_FFFF {
+        return log_special(x);
     }
 
     // The one intrinsic hard tie (see `logf`), carried over from the
     // previous atanh kernel.
-    if x == 6.284_548e-30 {
+    if bits == 0x0efe_ee7a {
         return -29.201_727;
     }
 
