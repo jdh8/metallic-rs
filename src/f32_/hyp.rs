@@ -1,5 +1,6 @@
 use super::exp::finite_exp;
 use super::log::atanh as atanh_kernel;
+use super::log::{LNF_TABLES, log_lookup};
 use super::{LN_2_HI, LN_2_LO};
 use crate::f64_::EXP_SHIFT as F64_EXP_SHIFT;
 use crate::f64_::double::fast_ldexp;
@@ -160,36 +161,48 @@ pub fn atanhf(x: f32) -> f32 {
     }
 }
 
+/// Maclaurin coefficients of `asinh(x)/x` in `x²`, i.e.
+/// `1 − x²/6 + 3x⁴/40 − 5x⁶/112 + …` (relative error ≈ 2⁻⁶² over `|x| ≤ 2⁻⁴`).
+const ASINH_SMALL: [f64; 7] = [
+    1.0,
+    -0.166_666_666_666_666_66,
+    0.075,
+    -0.044_642_857_142_857_144,
+    0.030_381_944_444_444_444,
+    -0.022_372_159_090_909_092,
+    0.017_352_764_423_076_924,
+];
+
 /// Inverse hyperbolic sine
+///
+/// `asinh(x) = ln(|x| + √(x²+1))` through the division-free [`log_lookup`]
+/// kernel, with `√(fma(x, x, 1))` accurate to the last bit.  For `|x| < 2⁻⁴`
+/// the sum `|x| + √(x²+1)` sits just above 1 and its rounding costs the
+/// logarithm too many bits, so the Maclaurin series [`ASINH_SMALL`] serves the
+/// small band directly.
 #[must_use]
 #[inline]
 pub fn asinhf(x: f32) -> f32 {
-    use core::f64::consts;
     let s = x.abs();
+    let bits = s.to_bits();
 
-    let magnitude = match s {
-        f32::INFINITY => f32::INFINITY,
-        2.901_895_4e7 => 17.876_608,
-        6.391_892e22 => 53.20505,
-        2.749_153e28 => 66.17683,
-        s if s.is_nan() => f32::NAN,
-        _ => {
-            let s: f64 = s.into();
-            let c = crate::fast_mul_add(s, s, 1.0).sqrt();
-            let i = (c + s).to_bits() as i64;
-            let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
-            let (s, c) = if exponent == 0 {
-                (s, c)
-            } else {
-                let c = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
-                (c - 1.0, c)
-            };
-
-            crate::fast_mul_add(
-                consts::LN_2,
-                exponent as f64,
-                2.0 * atanh_kernel(s / (c + 1.0)),
-            ) as f32
+    let magnitude = if bits >= 0x7F80_0000 {
+        s // +∞ → +∞, NaN → NaN
+    } else if bits < 0x3D80_0000 {
+        // |x| < 2⁻⁴: asinh(x) = x·(1 − x²/6 + 3x⁴/40 − …)
+        let z = f64::from(s);
+        (z * crate::poly(z * z, &ASINH_SMALL)) as f32
+    } else {
+        // Intrinsic hard ties the kernel's double rounding cannot steer.
+        match bits {
+            0x4bdd_65a5 => 17.876_608,
+            0x6558_90d3 => 53.20505,
+            0x6eb1_a8ec => 66.17683,
+            _ => {
+                let z = f64::from(s);
+                let c = crate::fast_mul_add(z, z, 1.0).sqrt();
+                log_lookup(z + c, &LNF_TABLES) as f32
+            }
         }
     };
 
@@ -197,31 +210,28 @@ pub fn asinhf(x: f32) -> f32 {
 }
 
 /// Inverse hyperbolic cosine
+///
+/// `acosh(x) = ln(x + √(x²−1))` straight through the division-free
+/// [`log_lookup`] kernel: `√(fma(x, x, −1))` is accurate to the last bit and
+/// the sum never cancels, so no argument reduction is needed.  `x = 1` needs no
+/// special case — `fma(1, 1, −1) = 0`, `√0 = 0`, `log_lookup(1) = 0` exactly.
 #[must_use]
 #[inline]
 pub fn acoshf(x: f32) -> f32 {
-    match x {
-        f32::INFINITY => f32::INFINITY,
-        6.391_892e22 => 53.20505,
-        2.749_153e28 => 66.17683,
-
-        (1.0..) => {
-            use core::f64::consts;
-
-            let c: f64 = x.into();
-            let s = crate::fast_mul_add(c, c, -1.0).sqrt();
-            let i = (c + s).to_bits() as i64;
-            let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
-
-            let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
-
-            crate::fast_mul_add(
-                consts::LN_2,
-                exponent as f64,
-                2.0 * atanh_kernel((x - 1.0) / (x + 1.0)),
-            ) as f32
-        }
-
-        _ => f32::NAN,
+    let bits = x.to_bits();
+    if bits < 0x3F80_0000 || bits >= 0x7F80_0000 {
+        // x < 1 (NaN), or +∞ / NaN
+        return if x == f32::INFINITY { x } else { f32::NAN };
     }
+
+    // The two intrinsic hard ties the kernel's double rounding cannot steer.
+    match bits {
+        0x6558_90d3 => return 53.20505,
+        0x6eb1_a8ec => return 66.17683,
+        _ => (),
+    }
+
+    let c = f64::from(x);
+    let s = crate::fast_mul_add(c, c, -1.0).sqrt();
+    log_lookup(c + s, &LNF_TABLES) as f32
 }

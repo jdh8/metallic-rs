@@ -91,7 +91,7 @@ const LOG2F_R: [f64; 65] = [
 /// `ratapprox --function="<log2(1+x)/x | log(1+x)/x | log(1+x)/(x*log(10))>"
 ///   --dom="[-0.0078125,0.0078125]" --num="[1,x,...,x^6]" --den="[1]"
 ///   --numF="[D]"`.
-struct LogTables {
+pub(super) struct LogTables {
     exp_hi: f64,
     exp_lo: f64,
     hi: [f64; 65],
@@ -246,7 +246,7 @@ const LOG2F_TABLES: LogTables = LogTables {
         0.206_928_246_498_608_58,
     ],
 };
-const LNF_TABLES: LogTables = LogTables {
+pub(super) const LNF_TABLES: LogTables = LogTables {
     exp_hi: 0.693_147_180_559_947_2,
     exp_lo: -1.864_188_673_724_303_3e-15,
     hi: [
@@ -553,7 +553,7 @@ const LOG10F_TABLES: LogTables = LogTables {
 /// term is exact there.  Worst relative error ≈ 2⁻⁵² (the two closing
 /// roundings).
 #[inline]
-fn log_lookup(s: f64, t: &LogTables) -> f64 {
+pub(super) fn log_lookup(s: f64, t: &LogTables) -> f64 {
     #[allow(clippy::cast_possible_truncation)] // e ∈ [-1022, 1023]
     let e = ((s.to_bits() >> F64_EXP_SHIFT) as i64 - 1023) as i32;
     let m52 = s.to_bits() & ((1_u64 << F64_EXP_SHIFT) - 1);
