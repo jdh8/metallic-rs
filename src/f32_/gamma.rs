@@ -1,3 +1,4 @@
+use super::log::{LNF_TABLES, log_lookup};
 use crate::f64_::double::{DoubleDouble, fast_ldexp, round_general, round_signed};
 
 /// π as a double-double (needed for lgamma reflection)
@@ -501,9 +502,16 @@ fn lgamma_pos_f64(y: f64) -> f64 {
         return (y - 1.0) * (y - 2.0) * g;
     }
 
-    let u = 1.0 / (y * y);
-    let s = 1.0 / (12.0 * y) + crate::poly(u, &LGAMMA_TAIL) * (u / y);
-    crate::fast_mul_add(y - 0.5, y.ln(), -y) + 0.918_938_533_204_672_8 + s
+    // One division serves all three reciprocal factors: `1/(12y) + P(u)·u/y
+    // = v·(1/12 + P(u)·u)` with `v = 1/y`, `u = v²`.  The extra roundings
+    // land on `s` (≤ 1/96 of the result) — invisible next to the `2⁻³⁶` gate.
+    // `log_lookup` replaces the libm `ln` for the same reason lgamma's f64
+    // sibling owns its logs: shorter latency, same ≈2⁻⁵² accuracy class.
+    let v = 1.0 / y;
+    let u = v * v;
+    let s = v * crate::fast_mul_add(crate::poly(u, &LGAMMA_TAIL), u, 1.0 / 12.0);
+    let ln = log_lookup(y, &LNF_TABLES);
+    crate::fast_mul_add(y - 0.5, ln, -y) + 0.918_938_533_204_672_8 + s
 }
 
 /// Fast `f64` approximation of `ln|Γ(z)|` with an absolute error bound
@@ -520,8 +528,10 @@ fn lgamma_f64(z: f32) -> (f64, f64) {
 
     let x = f64::from(z);
     if z < 0.5 {
+        // `log_lookup` for the sine's logarithm: ≈2⁻⁵² relative on
+        // `|ln sin πz| ≤ ~15` stays under the 2⁻⁴⁴ absolute floor below.
         let reflected = lgamma_pos_f64(1.0 - x);
-        let value = LN_PI - abs_sinpi(z).ln() - reflected;
+        let value = LN_PI - log_lookup(abs_sinpi(z), &LNF_TABLES) - reflected;
         (
             value,
             crate::exp2i(-36) * reflected.abs() + crate::exp2i(-44),
