@@ -50,10 +50,13 @@ accurate_tier`. Every lever below moves one of those three terms; diagnosing
   valid under load; absolute ns and cross-run deltas do not.
 - **Noise floor: ±1–3% on identical binaries**, even at moderate load. An A/B
   needs a calm box or a > 3% effect; a 2% "win" from one run is noise.
-- **Concurrency is fine, within reason.** Each bench binary times its own
-  metallic + core_math pair sequentially in one process, so ~10 bench targets
-  can run concurrently and the within-pair ratios survive (contention hits both
-  arms equally).
+- **Run benches strictly serially.** "Contention hits both arms equally" is
+  false on the 8-physical-core box: an 8-way concurrent f32 sweep (2026-07-11)
+  inflated absolute times up to 2× and corrupted *within-pair* ratios — atanhf
+  read 1.75× against a true same-code 1.02×, while other pairs skewed fast
+  (expm1f 0.64 vs true 1.06).  Hyperthread-sibling port contention hits a
+  table-heavy arm and a poly-heavy arm very differently.  One bench at a time;
+  a full 42-target f32 sweep costs only ~12 minutes.
 - **Sampling gotchas.** The `..` input range is representation-uniform, so
   about half of all f64 bit patterns are tiny (|x| < 2⁻²⁶) and a tiny-arg fast
   return can swallow the bench (f64 atan: ~96% of `..` draws skipped the
