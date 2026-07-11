@@ -259,34 +259,44 @@ const ASINH_SMALL: [f64; 7] = [
 /// kernel, with `√(fma(x, x, 1))` accurate to the last bit.  For `|x| < 2⁻⁴`
 /// the sum `|x| + √(x²+1)` sits just above 1 and its rounding costs the
 /// logarithm too many bits, so the Maclaurin series [`ASINH_SMALL`] serves the
-/// small band directly.
+/// small band instead.  The `2⁻⁴` cut splits random representations almost
+/// 50/50, so a plain `if` (or a float select, which LLVM splits back into a
+/// branch) mispredicts nearly half the time: evaluate both legs — each is
+/// harmless outside its band, and the Maclaurin chain hides under the
+/// square root — and merge in bit space like `sinf`.
 #[must_use]
 #[inline]
 pub fn asinhf(x: f32) -> f32 {
     let s = x.abs();
     let bits = s.to_bits();
 
-    let magnitude = if bits >= 0x7F80_0000 {
-        s // +∞ → +∞, NaN → NaN
-    } else if bits < 0x3D80_0000 {
-        // |x| < 2⁻⁴: asinh(x) = x·(1 − x²/6 + 3x⁴/40 − …)
-        let z = f64::from(s);
-        (z * crate::poly(z * z, &ASINH_SMALL)) as f32
-    } else {
-        // Intrinsic hard ties the kernel's double rounding cannot steer.
-        match bits {
-            0x4bdd_65a5 => 17.876_608,
-            0x6558_90d3 => 53.20505,
-            0x6eb1_a8ec => 66.17683,
-            _ => {
-                let z = f64::from(s);
-                let c = crate::fast_mul_add(z, z, 1.0).sqrt();
-                log_lookup(z + c, &LNF_TABLES) as f32
-            }
-        }
-    };
+    if bits >= 0x7F80_0000 {
+        return x; // ±∞ → ±∞, NaN → NaN
+    }
 
-    magnitude.copysign(x)
+    // Intrinsic hard ties the kernel's double rounding cannot steer.
+    match bits {
+        0x4bdd_65a5 => return 17.876_608_f32.copysign(x),
+        0x6558_90d3 => return 53.20505_f32.copysign(x),
+        0x6eb1_a8ec => return 66.17683_f32.copysign(x),
+        _ => (),
+    }
+
+    let z = f64::from(s);
+    // |x| < 2⁻⁴: asinh(x) = x·(1 − x²/6 + 3x⁴/40 − …); overflows to ∞/NaN
+    // far above the band, where it is discarded.
+    let small = z * crate::poly(z * z, &ASINH_SMALL);
+    // |x| ≥ 2⁻⁴: the log-kernel leg; below the band it collapses to
+    // `log_lookup(1) = 0` and is discarded.
+    let c = crate::fast_mul_add(z, z, 1.0).sqrt();
+    let big = log_lookup(z + c, &LNF_TABLES);
+
+    let mask = core::hint::black_box(u64::from(bits < 0x3D80_0000).wrapping_neg());
+    let y = (big.to_bits() & !mask) | (small.to_bits() & mask);
+    let magnitude = f64::from_bits(y) as f32;
+
+    // asinh is odd: restore the argument's sign branchlessly.
+    f32::from_bits(magnitude.to_bits() ^ (x.to_bits() & 0x8000_0000))
 }
 
 /// Inverse hyperbolic cosine
