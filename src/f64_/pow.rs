@@ -14,7 +14,7 @@
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 use super::EXP_SHIFT;
-use super::double::{DoubleDouble, fast_ldexp};
+use super::double::{DoubleDouble, fast_ldexp, fast_sum};
 use core::cmp::Ordering;
 use core::f64::consts::FRAC_1_SQRT_2;
 use core::num::FpCategory;
@@ -460,6 +460,136 @@ pub fn pow(x: f64, y: f64) -> f64 {
     magnitude(x, y)
 }
 
+/// Fast path for [`compound_core`] — [`pow_fast`] with a `1+x` front end.
+///
+/// `2^(y·log₂(1+x))` through the lean chain, with `log₂(1+x)` formed as
+/// `ln(1+x)·log₂e`: the exact `1+x` double-double [`from_sum`](DoubleDouble::from_sum)
+/// (a 2Sum, exact for every finite `x`) feeds [`ln_dd_fast`](super::ln_dd_fast),
+/// whose reduction recovers the `−x²/2 …` terms that a raw `ln_fast(1+x)` would
+/// lose when `1+x` rounds.  Everything after `e = log₂(1+x)·y` is identical to
+/// [`pow_fast`]: the same `(1 + |y|)·2⁻⁶⁴` slack, gross over/underflow decision,
+/// boundary-band defer, and Ziv gate on the `[1, 2)` mantissa.  A subnormal
+/// `1 + x` (`x` within ~2⁻¹⁰²² of −1) defers to the accurate path.
+#[inline]
+fn compound_fast(x: f64, y: f64) -> Option<f64> {
+    let s = DoubleDouble::from_sum(1.0, x);
+    if !(s.high >= f64::MIN_POSITIVE) {
+        return None; // 1 + x subnormal / zero: let the accurate path round it
+    }
+
+    // Renormalize `ln_dd_fast`'s raw pair (it skips the closing Fast2Sum that
+    // `ln_fast` applies) so the `× LOG2_E × y` chain matches `pow_fast`'s accuracy.
+    let l = super::ln_dd_fast(s);
+    let e = fast_sum(l.high, l.low) * LOG2_E * y;
+    let slack = (1.0 + y.abs()) * POWF_ZIV_UNIT;
+
+    if e.high - slack > 1025.0 {
+        return Some(f64::INFINITY);
+    }
+    if e.high + slack < -1075.0 {
+        return Some(0.0);
+    }
+
+    if !(e.high + slack < 1023.0 && e.high - slack > -1022.0) {
+        return None;
+    }
+
+    let (j, q, r) = super::exp::exp2_reduce_dd(e);
+    let (m, q) = super::exp::exp_mantissa_fast(j, q, r);
+
+    let lo = m.high + (m.low - slack);
+    let hi = m.high + (m.low + slack);
+    (lo == hi && (-1021..=1022).contains(&q)).then(|| fast_ldexp(lo, q))
+}
+
+/// Test-only counterpart of [`powf_fast_leg`] for [`compound_fast`]: the pre-gate
+/// `[1, 2)` mantissa and its `slack`, for the [`ziv_soundness`] audit.
+#[cfg(all(test, feature = "mpfr"))]
+fn compound_fast_leg(x: f64, y: f64) -> Option<(DoubleDouble, i64, f64)> {
+    let s = DoubleDouble::from_sum(1.0, x);
+    if !(s.high >= f64::MIN_POSITIVE) {
+        return None;
+    }
+    let l = super::ln_dd_fast(s);
+    let e = fast_sum(l.high, l.low) * LOG2_E * y;
+    let slack = (1.0 + y.abs()) * POWF_ZIV_UNIT;
+    if e.high - slack > 1024.0 || e.high + slack < -1075.0 {
+        return None;
+    }
+    if !(e.high + slack < 1023.0 && e.high - slack > -1022.0) {
+        return None;
+    }
+    let (j, q, r) = super::exp::exp2_reduce_dd(e);
+    let (m, q) = super::exp::exp_mantissa_fast(j, q, r);
+    Some((m, q, slack))
+}
+
+/// `(1+x)ʸ` for finite `x > −1`, `x ≠ 0`, finite `y ∉ {0, 1}`, correctly rounded.
+///
+/// Fast path: [`compound_fast`], a lean `2^(y·log₂(1+x))` accepted by a Ziv gate.
+/// The rare straddles (and the over/underflow / subnormal edges) fall back to
+/// [`compound_accurate`](super::pow_accurate::compound_accurate) — the same
+/// `Dint`/`Qint` cascade and exact/midpoint detector as [`pow_core`], run on the
+/// exactly-formed base `1 + x`.  Infinite `y` is handled by [`compound`], so `y`
+/// is finite here.
+#[inline]
+fn compound_core(x: f64, y: f64) -> f64 {
+    compound_fast(x, y).unwrap_or_else(|| super::pow_accurate::compound_accurate(x, y))
+}
+
+/// Signaling NaN: an `f64` NaN with the quiet bit clear.
+#[inline]
+fn is_snan(x: f64) -> bool {
+    x.is_nan() && x.to_bits() & 0x0008_0000_0000_0000 == 0
+}
+
+/// Compound interest: `(1 + x)ʸ`, correctly rounded (C23's `compound`)
+///
+/// The special-value contract follows C23 F.10.4.1: `compound(±0, y) = 1` for
+/// every `y` (even ±∞ and quiet NaN) and `compound(x, ±0) = 1` for every
+/// `x ≥ −1` (and quiet-NaN `x`) — a signaling NaN still yields NaN; `x < −1`
+/// (including −∞) is a domain error; `compound(−1, y)` is `+0` for `y > 0` and
+/// `+∞` for `y < 0`.  The kernel is [`compound_core`]; `y = 1` returns the
+/// exactly-representable `1 + x` directly.  The f64 counterpart of the f32
+/// [`compoundf`](crate::compoundf).
+#[must_use]
+#[inline]
+pub fn compound(x: f64, y: f64) -> f64 {
+    if x == 0.0 {
+        return if is_snan(y) { x + y } else { 1.0 };
+    }
+    if y == 0.0 {
+        if is_snan(x) || x < -1.0 {
+            return x + f64::NAN;
+        }
+        return 1.0; // includes x = +∞ and quiet NaN
+    }
+    if x.is_nan() || y.is_nan() {
+        return x + y;
+    }
+    if x < -1.0 {
+        return f64::NAN; // domain: 1 + x < 0, includes −∞
+    }
+    if y.is_infinite() {
+        // (1+x) against 1 decides growth or decay; x = −1 decays too.
+        return if (x > 0.0) == (y > 0.0) {
+            f64::INFINITY
+        } else {
+            0.0
+        };
+    }
+    if x == f64::INFINITY {
+        return if y > 0.0 { f64::INFINITY } else { 0.0 };
+    }
+    if x == -1.0 {
+        return if y > 0.0 { 0.0 } else { f64::INFINITY };
+    }
+    if y == 1.0 {
+        return 1.0 + x; // exact whenever 1 + x is representable; rounds like the C
+    }
+    compound_core(x, y)
+}
+
 #[cfg(all(test, feature = "mpfr"))]
 mod ziv_soundness {
     use super::*;
@@ -528,6 +658,68 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "POWF_ZIV_UNIT unsound: fast-leg error reaches {worst:.4}× slack \
+             (need < 0.5 for a 2× margin) at x={:e}, y={:e}",
+            worst_xy.0,
+            worst_xy.1
+        );
+    }
+
+    /// The [`compound_fast`] Ziv gate reuses `pow`'s `slack = (1+|y|)·2⁻⁶⁴`, so
+    /// its `[1, 2)` mantissa must stay within that of `(1+x)ʸ`'s truth by ≥ 2×.
+    /// The hard regime is `1 + x` near 1 (`|x|` small, where `log₂(1+x)` is small
+    /// and the `×y` amplification is largest); we also sweep a wide regime.
+    #[test]
+    fn compound_fast_leg_is_sound() {
+        let mut worst = 0.0_f64;
+        let mut worst_xy = (0.0, 0.0);
+        let mut n_checked = 0u64;
+
+        for i in 0..6_000_000u64 {
+            let (x, y) = if i & 1 == 0 {
+                // Hard regime: base near 1 (|x| ∈ [2⁻⁵⁵, 1)), large |y|.
+                let u = (mix(i) >> 11) as f64 / (1u64 << 53) as f64;
+                let s = crate::fma(u, 2.0, -1.0); // [−1, 1)
+                let scale = crate::exp2i(-(1 + (mix(i ^ 0x5555) % 55) as i64));
+                let x = s * scale;
+                let yu = (mix(i ^ 0xABCD) >> 11) as f64 / (1u64 << 53) as f64;
+                (x, crate::fma(yu, 2200.0, -1100.0))
+            } else {
+                // Wide regime: x anywhere in (−1, 40], moderate y.
+                let xu = (mix(i) >> 11) as f64 / (1u64 << 53) as f64;
+                let x = crate::fma(xu, 41.0, -0.999);
+                let yu = (mix(i ^ 0x1234) >> 11) as f64 / (1u64 << 53) as f64;
+                (x, crate::fma(yu, 80.0, -40.0))
+            };
+            if !(x.is_finite() && x > -1.0 && x != 0.0) {
+                continue;
+            }
+            let Some((m, q, slack)) = compound_fast_leg(x, y) else {
+                continue;
+            };
+            // True [1, 2) mantissa = (1+x)^y / 2^q at 250 bits.
+            let base = Float::with_val(250, x) + 1_u32;
+            let truth = base.pow(Float::with_val(250, y)) / Float::with_val(250, 2).pow(q);
+            if truth == 0.0 || !truth.is_finite() {
+                continue;
+            }
+            let got = Float::with_val(250, m.high) + Float::with_val(250, m.low);
+            let abs_err = Float::with_val(250, &got - &truth).abs().to_f64();
+            let ratio = abs_err / slack;
+            if ratio > worst {
+                worst = ratio;
+                worst_xy = (x, y);
+            }
+            n_checked += 1;
+        }
+
+        println!(
+            "compound_fast_leg: worst |error|/slack = {worst:.4} over {n_checked} gated inputs \
+             (at x={:e}, y={:e}); sound iff < 0.5",
+            worst_xy.0, worst_xy.1
+        );
+        assert!(
+            worst < 0.5,
+            "compound fast-leg unsound: error reaches {worst:.4}× slack \
              (need < 0.5 for a 2× margin) at x={:e}, y={:e}",
             worst_xy.0,
             worst_xy.1

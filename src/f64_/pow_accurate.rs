@@ -33,6 +33,7 @@
 #![allow(clippy::missing_const_for_fn, clippy::branches_sharing_code)]
 
 use super::dint::Dint;
+use super::double::DoubleDouble;
 use super::pow_consts as c;
 use super::qint::Qint;
 
@@ -763,6 +764,167 @@ pub(super) fn pow_accurate(x: f64, y: f64, x0: f64, s: f64) -> f64 {
     }
 
     // Should be unreachable for valid worst cases; fall back to the dint result.
+    d_tod(&r)
+}
+
+// ===========================================================================
+// f64 `compound`: the `pow` cascade with a `log1p` front end.
+//
+// `log_2`/`log_3` (and `p_2`/`p_3`) reduce with `mul_dint_11`/`mul_dint_21`
+// muls that read only the high 64 bits, so they require an *f64-precision* base
+// (≤ 53 significant bits, low word zero).  The exact `1 + x` has up to ~66 bits,
+// so we cannot feed it directly.  Instead split `1 + x = s.high + s.low` exactly
+// (`s.high` an f64), take `ln(s.high)` through the shared `log`, and add a small
+// high-precision correction `ln(1 + s.low/s.high)`.  `|s.low/s.high| ≤ 2⁻⁵³`, so
+// a short series in `ρ = s.low/s.high` — with `ρ` from a Newton reciprocal —
+// reaches the phase's precision.
+// ===========================================================================
+
+/// `2⁻¹³` — the `p_2`/`p_3` series radius, below which `1 + x` need not be split.
+const SPLIT_CUTOFF: f64 = f64::from_bits(0x3F20_0000_0000_0000);
+
+/// Reciprocal of a normal `f64` `a` as a `Dint` (Newton `r ← r·(2 − a·r)` from
+/// the `f64` seed `1/a`; two steps reach well past the phase-2 need).
+#[inline]
+fn recip_dint(a: f64) -> Dint {
+    let qa = Dint::from_f64(a);
+    let two = Dint::from_f64(2.0);
+    let mut r = Dint::from_f64(1.0 / a);
+    for _ in 0..2 {
+        let mut ar = qa.mul(&r);
+        ar.sgn = !ar.sgn; // −a·r
+        r = r.mul(&d_add(&two, &ar)); // r·(2 − a·r)
+    }
+    r
+}
+
+/// Reciprocal of a normal `f64` `a` as a `Qint` — the 256-bit counterpart of
+/// [`recip_dint`] (three Newton steps saturate the `Qint` precision).
+#[inline]
+fn recip_qint(a: f64) -> Qint {
+    let qa = Qint::from_f64(a);
+    let two = Qint::from_f64(2.0);
+    let mut r = Qint::from_f64(1.0 / a);
+    for _ in 0..3 {
+        let mut ar = qa.mul(&r);
+        ar.sgn = !ar.sgn; // −a·r
+        r = r.mul(&two.add(&ar)); // r·(2 − a·r)
+    }
+    r
+}
+
+/// `ln(1 + x)` as a `Dint` (relative error ≈ 2⁻¹²²), the base of `compound`.
+///
+/// For `|x| ≤ 2⁻¹³` the value is `p_2(x)` with `x` lifted *exactly* — the series
+/// keeps full accuracy however tiny `x` is (including subnormals).  Otherwise
+/// `ln(s.high) + (ρ − ρ²/2)` with the exact split `1 + x = s.high + s.low` and
+/// `ρ = s.low/s.high` (`|ρ| ≤ 2⁻⁵³`, so `ρ³/3 ≈ 2⁻¹⁵⁹` is below the phase-2
+/// floor).
+#[inline]
+fn log1p_2(x: f64) -> Dint {
+    if x.abs() <= SPLIT_CUTOFF {
+        return p_2(&Dint::from_f64(x));
+    }
+    let s = DoubleDouble::from_sum(1.0, x); // exact 1 + x, s.high an f64
+    let base = log_2(&Dint::from_f64(s.high));
+    if s.low == 0.0 {
+        return base; // 1 + x is exactly representable
+    }
+    let rho = Dint::from_f64(s.low).mul(&recip_dint(s.high));
+    let mut t2 = rho.mul(&rho);
+    t2.ex -= 1; // ρ²/2
+    t2.sgn = !t2.sgn; // −ρ²/2
+    d_add(&base, &d_add(&rho, &t2))
+}
+
+/// `ln(1 + x)` as a `Qint` (relative error ≈ 2⁻²⁵⁰) — the 256-bit counterpart of
+/// [`log1p_2`].  The correction runs to `ρ⁴/4` (`ρ⁵/5 ≈ 2⁻²⁶⁶` is below the
+/// phase-3 floor); `÷2` and `÷4` are exact exponent shifts, only `÷3` needs a
+/// reciprocal.
+#[inline]
+fn log1p_3(x: f64) -> Qint {
+    if x.abs() <= SPLIT_CUTOFF {
+        return p_3(&Qint::from_f64(x));
+    }
+    let s = DoubleDouble::from_sum(1.0, x);
+    let base = log_3(&Qint::from_f64(s.high));
+    if s.low == 0.0 {
+        return base;
+    }
+    let rho = Qint::from_f64(s.low).mul(&recip_qint(s.high));
+    let rho2 = rho.mul(&rho);
+    let rho3 = rho2.mul(&rho);
+    let rho4 = rho2.mul(&rho2);
+
+    let mut t2 = rho2;
+    t2.ex -= 1; // ρ²/2
+    t2.sgn = !t2.sgn; // −ρ²/2
+    let t3 = rho3.mul(&recip_qint(3.0)); // +ρ³/3
+    let mut t4 = rho4;
+    t4.ex -= 2; // ρ⁴/4
+    t4.sgn = !t4.sgn; // −ρ⁴/4
+
+    base.add(&rho).add(&t2).add(&t3).add(&t4)
+}
+
+/// Accurate `(1 + x)ʸ` for finite `x > −1`, `x ≠ 0`, finite `y ∉ {0, 1}`.
+///
+/// The [`pow_accurate`] cascade with the base replaced by the `log1p` front end
+/// [`log1p_2`]/[`log1p_3`]; the result is always positive (`1 + x > 0`), so the
+/// sign fold is dropped.  The exact/midpoint detector fires only when `1 + x` is
+/// itself an `f64` — an inexact `1 + x` can never make `(1+x)ʸ` a short dyadic,
+/// the same reasoning as the f32 [`exact_compound`](crate::f32_::powf)'s `c == 0`
+/// guard.
+#[inline]
+pub(super) fn compound_accurate(x: f64, y: f64) -> f64 {
+    // --- Phase 2: dint ---
+    let big_y = Dint::from_f64(y);
+
+    let mut r = d_mul_21(&log1p_2(x), &big_y);
+    r = exp_2(&r);
+
+    let rd = rounding_test_2(&r);
+    r.sgn = false; // (1 + x)ʸ > 0
+
+    if rd {
+        return d_tod(&r);
+    }
+
+    // --- Exact / midpoint detection (only when 1 + x is representable) ---
+    let s = 1.0 + x;
+    let c = if x <= 1.0 {
+        x - (s - 1.0)
+    } else {
+        1.0 - (s - x)
+    };
+    if c == 0.0 {
+        if let Some(e) = exact_pow(s, y, &r) {
+            return e;
+        }
+    }
+
+    // --- Phase 3: qint ---
+    let qy = Qint::from_f64(y);
+
+    let mut qr = log1p_3(x);
+    qr = qr.mul_41(&qy);
+    let mut qz = exp_3(&qr);
+
+    if rounding_test_3(&qz) {
+        qz.sgn = false;
+        qz.lo &= !0u128 << 10;
+        return qz.to_f64();
+    }
+
+    // (1+x)ʸ very close to 1: |qR| < 2⁻⁵⁶.
+    if qr.ex < -56 {
+        return if !qr.sgn {
+            1.0 + f64::from_bits(0x3990_0000_0000_0000) // 1 + 2⁻¹⁰⁰
+        } else {
+            1.0 - f64::from_bits(0x3990_0000_0000_0000)
+        };
+    }
+
     d_tod(&r)
 }
 

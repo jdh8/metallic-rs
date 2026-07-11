@@ -20,7 +20,7 @@ The functions follow the C / libm naming convention: bare names operate on
 replacement for `libm` and `core-math`.  Every C99 transcendental ships in
 both precisions, plus the C23 additions `sinpi`, `cospi`, `tanpi`, `asinpi`,
 `acospi`, `atanpi`, `atan2pi`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`,
-`rsqrt` (and their `f` variants) and `compoundf` — all correctly rounded.
+`rsqrt`, and `compound` (and their `f` variants) — all correctly rounded.
 
 ```rust
 assert_eq!(metallic::exp(0.0), 1.0); // f64

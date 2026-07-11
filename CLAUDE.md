@@ -4,7 +4,9 @@ This crate provides C math functions written from scratch in Rust, aiming for
 correct rounding (error ≤ 0.5 ulp) and performance comparable to or better than
 the system math library.  Coverage spans every C99 transcendental in both
 precisions plus CORE-MATH's C23 set (`sinpi`…`atan2pi`, `exp2m1`, `exp10m1`,
-`log2p1`, `log10p1`, `rsqrt`, `compoundf`), all correctly rounded (issue #7).
+`log2p1`, `log10p1`, `rsqrt`, `compound`), all correctly rounded (issue #7).
+(`compound` is metallic's own: CORE-MATH ships only `compoundf`, so the f64
+version is MPFR-verified against a home-grown corpus, like `tgamma`/`lgamma`.)
 
 **Never port polynomial or rational coefficients from CORE-MATH** (or any
 other library): CORE-MATH is the *oracle* and a structural reference, never

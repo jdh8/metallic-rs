@@ -47,6 +47,10 @@ bench = false
 # Generators for the hard-to-round corpora; need the MPFR oracle, so gate them
 # behind `mpfr` to keep them out of the default build.
 [[example]]
+name = "gen_f64_compound_cases"
+required-features = ["mpfr"]
+
+[[example]]
 name = "gen_f64_tgamma_cases"
 required-features = ["mpfr"]
 

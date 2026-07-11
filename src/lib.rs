@@ -23,7 +23,7 @@ pub use f64_::{
 };
 
 /// To avoid name collisions with the module [`f64_::pow`].
-pub use f64_::pow::pow;
+pub use f64_::pow::{compound, pow};
 
 pub use f32_::{
     acosf, acoshf, acospif, asinf, asinhf, asinpif, atan2f, atan2pif, atanf, atanhf, atanpif,
