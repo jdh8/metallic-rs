@@ -31,15 +31,34 @@ const COSH_CORE: [f64; 6] = [
     2.763_130_793_803_956e-7,
 ];
 
+/// Maclaurin coefficients of `(cosh(x) − 1)/x²` in `x²` through the `x⁶`
+/// term: truncation stays below `2⁻⁵¹` over `|x| ≤ 0.125`.
+const COSH_SMALL: [f64; 4] = [1.0 / 2.0, 1.0 / 24.0, 1.0 / 720.0, 1.0 / 40_320.0];
+
 /// Hyperbolic cosine
 ///
-/// Uses the same addition formula as [`sinh`]:
-/// `cosh(n·ln2 + r) = cosh(n·ln2)·cosh(r) + sinh(n·ln2)·sinh(r)`,
-/// reusing [`COSH_CORE`] and [`SINH_CORE`] with no division.
+/// Representation mass concentrates at small `|x|`: below `2⁻¹²` the
+/// correction `x²/2` stays under `2⁻²⁵` and `cosh(x)` rounds to `1`, and
+/// `|x| < 0.125` takes the even Maclaurin leg [`COSH_SMALL`] whose dominant
+/// `1` is exact.  The rest uses the same addition formula as [`sinhf`]:
+/// `cosh(n·ln2 + r) = cosh(n·ln2)·cosh(r) + sinh(n·ln2)·sinh(r)`, reusing
+/// [`COSH_CORE`] and [`SINH_CORE`] with no division.
 #[must_use]
 #[inline]
 pub fn coshf(x: f32) -> f32 {
-    let x = x.abs();
+    let ax = x.to_bits() & 0x7FFF_FFFF;
+
+    if ax < 0x3980_0000 {
+        return 1.0;
+    }
+
+    if ax < 0x3E00_0000 {
+        let z = f64::from(x);
+        let z2 = z * z;
+        return crate::fast_mul_add(z2, crate::poly(z2, &COSH_SMALL), 1.0) as f32;
+    }
+
+    let x = f32::from_bits(ax);
 
     if x > (f32::MAX_EXP + 1) as f32 * core::f32::consts::LN_2 {
         return f32::INFINITY;
@@ -63,17 +82,36 @@ pub fn coshf(x: f32) -> f32 {
     crate::fast_mul_add(cosh_n, cosh_r, sinh_n * sinh_r) as f32
 }
 
+/// Maclaurin coefficients of `sinh(x)/x` in `x²` through the `x⁸` term:
+/// truncation stays below `2⁻⁵⁵` relative over `|x| ≤ 0.125`.
+const SINH_SMALL: [f64; 5] = [1.0, 1.0 / 6.0, 1.0 / 120.0, 1.0 / 5040.0, 1.0 / 362_880.0];
+
 /// Hyperbolic sine
 ///
-/// Uses the addition formula `sinh(n·ln2 + r) = cosh(n·ln2)·sinh(r) +
-/// sinh(n·ln2)·cosh(r)` with `sinh(n·ln2) = (2ⁿ − 2⁻ⁿ)/2` and
-/// `cosh(n·ln2) = (2ⁿ + 2⁻ⁿ)/2`.  Both half-power values come from
-/// `fast_ldexp`, so no division is needed anywhere on the main path.
+/// Representation mass concentrates at small `|x|`, so `|x| < 0.125` takes a
+/// single odd Maclaurin leg [`SINH_SMALL`] with no reduction or
+/// reconstruction; only the intrinsic hard tie at `±5.589_425e-4` (`sinh(x)`
+/// lands essentially on an f32 midpoint, beyond any one-step f64 evaluation)
+/// needs its answer pinned.  The rest uses the addition formula
+/// `sinh(n·ln2 + r) = cosh(n·ln2)·sinh(r) + sinh(n·ln2)·cosh(r)` with
+/// `sinh(n·ln2) = (2ⁿ − 2⁻ⁿ)/2` and `cosh(n·ln2) = (2ⁿ + 2⁻ⁿ)/2`.  Both
+/// half-power values come from `fast_ldexp`, so no division is needed
+/// anywhere on the main path.
 #[must_use]
 #[inline]
 pub fn sinhf(x: f32) -> f32 {
-    let magnitude = match x.abs() {
-        5.589_425e-4 => 5.589_425e-4,
+    let ax = x.to_bits() & 0x7FFF_FFFF;
+
+    if ax < 0x3E00_0000 {
+        if ax == 0x3A12_85FF {
+            return 5.589_425e-4_f32.copysign(x);
+        }
+
+        let z = f64::from(x);
+        return (z * crate::poly(z * z, &SINH_SMALL)) as f32;
+    }
+
+    let magnitude = match f32::from_bits(ax) {
         x if x > 89.415_985 => f32::INFINITY,
 
         x => {
