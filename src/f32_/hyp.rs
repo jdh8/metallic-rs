@@ -1,6 +1,6 @@
 use super::exp::finite_exp;
 use super::log::atanh as atanh_kernel;
-use super::log::{LNF_TABLES, log_lookup};
+use super::log::{LNF_TABLES, atanh_lean, log_lookup};
 use super::{LN_2_HI, LN_2_LO};
 use crate::f64_::EXP_SHIFT as F64_EXP_SHIFT;
 use crate::f64_::double::fast_ldexp;
@@ -171,32 +171,74 @@ pub fn tanhf(x: f32) -> f32 {
 }
 
 /// Inverse hyperbolic tangent
+///
+/// Three tiers ordered by cost.  Below `0x1.713744p-12` the correction
+/// `x³/3` stays under half an ulp and `atanh(x)` rounds to `x` itself: the
+/// bound is `m³·2²ᵉ⁺²⁴ < 3` for `|x| = m·2ᵉ`, certain for `e ≤ −13` and up
+/// to `m = ∛3` in the `2⁻¹²` binade, and the cut is exactly the first miss
+/// (verified by an MPFR scan and the exhaustive sweep).  Below `2⁻⁵` the odd
+/// [`atanh_kernel`](atanh_kernel) polynomial serves directly.  The remaining
+/// `|x| < 1` — most of the domain by value — runs the division-free
+/// [`atanh_lean`] two-log leg under a rounding test, falling back to the
+/// `(1+x)/(1−x)` ratio reduction only on the rare gate miss.
 #[must_use]
 #[inline]
 pub fn atanhf(x: f32) -> f32 {
-    match x.abs().partial_cmp(&1.0) {
-        Some(core::cmp::Ordering::Less) => {
-            use core::f64::consts;
+    let ax = x.to_bits() & 0x7FFF_FFFF;
 
-            let x: f64 = x.into();
-            let i = ((1.0 + x) / (1.0 - x)).to_bits() as i64;
-            let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
-
-            if exponent == 0 {
-                return atanh_kernel(x) as f32;
-            }
-
-            let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
-
-            crate::fast_mul_add(
-                0.5 * consts::LN_2,
-                exponent as f64,
-                atanh_kernel((x - 1.0) / (x + 1.0)),
-            ) as f32
-        }
-        Some(core::cmp::Ordering::Equal) => f32::INFINITY.copysign(x),
-        _ => f32::NAN,
+    if ax < 0x39B8_9BA2 {
+        return x;
     }
+
+    // |x| < 2⁻⁵: inside [`atanh_kernel`]'s certified `|x| ≤ (√2−1)/(√2+1)`
+    // range.  The cut sits well below that bound so the branch is rarely
+    // taken (and the lean leg's absolute gate still holds at results this
+    // small); the kernel itself remains certified on the full range.
+    if ax < 0x3D00_0000 {
+        return atanh_kernel(x.into()) as f32;
+    }
+
+    if ax >= 0x3F80_0000 {
+        return if ax == 0x3F80_0000 {
+            f32::INFINITY.copysign(x)
+        } else {
+            f32::NAN
+        };
+    }
+
+    // Certified error of [`atanh_lean`] is < 2⁻³⁷ absolute (measured supremum
+    // vs the accurate tier 2⁻³⁸·³); a symmetric ±2⁻³⁶ rounding test leaves
+    // ≥ 2× margin.  Fallback rate ≈ 2·2⁻³⁶/ulp(result) — worst ≈ 0.8% just
+    // above the 2⁻⁵ band edge, ≈ 0.07% over the whole band; hard ties always
+    // land inside the interval and thus in the fallback.
+    let r = atanh_lean(ax);
+    let ub = (r - crate::exp2i(-36)) as f32;
+
+    if ub == (r + crate::exp2i(-36)) as f32 {
+        return ub.copysign(x);
+    }
+
+    atanhf_fallback(x)
+}
+
+/// The pre-lean-leg `(1+x)/(1−x)` ratio reduction, kept verbatim as
+/// [`atanhf`]'s accurate tier: reduce the ratio's exponent, map the mantissa
+/// back through `(m−1)/(m+1)`, and finish with the odd [`atanh_kernel`].
+#[cold]
+#[inline(never)]
+fn atanhf_fallback(x: f32) -> f32 {
+    use core::f64::consts;
+
+    let x: f64 = x.into();
+    let i = ((1.0 + x) / (1.0 - x)).to_bits() as i64;
+    let exponent = (i - consts::FRAC_1_SQRT_2.to_bits() as i64) >> F64_EXP_SHIFT;
+    let x = f64::from_bits((i - (exponent << F64_EXP_SHIFT)) as u64);
+
+    crate::fast_mul_add(
+        0.5 * consts::LN_2,
+        exponent as f64,
+        atanh_kernel((x - 1.0) / (x + 1.0)),
+    ) as f32
 }
 
 /// Maclaurin coefficients of `asinh(x)/x` in `x²`, i.e.

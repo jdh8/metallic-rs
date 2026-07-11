@@ -568,6 +568,55 @@ pub(super) fn log_lookup(s: f64, t: &LogTables) -> f64 {
     crate::fast_mul_add(ef, t.exp_hi, t.hi[j]) + f
 }
 
+/// One side of [`atanh_lean`]: reduce a mantissa field (low 52 bits already
+/// in place, exponent zero) on [`log_lookup`]'s cell geometry, returning the
+/// residual `d = m·r − 1` and the cell's `hi` word.
+#[inline]
+fn lean_cell(m52: u64) -> (f64, f64) {
+    #[allow(clippy::cast_possible_truncation)] // j ≤ 64
+    let j = ((m52 + (1_u64 << 45)) >> 46) as usize;
+    let m = f64::from_bits(m52 | (1023_u64 << F64_EXP_SHIFT));
+    (crate::fma(m, LOG2F_R[j], -1.0), LNF_TABLES.hi[j])
+}
+
+/// Degree-3 Taylor tail `ln(1+d)/d ≈ 1 − d/2 + d²/3 − d³/4` shared by
+/// [`atanh_lean`]'s two sides: truncation ≤ `|d|⁴/(5(1−|d|)) < 2⁻³⁰` relative
+/// on `|d| ≤ 2⁻⁷` — exact mathematical constants, no fitted coefficients.
+const LEAN_TAIL: [f64; 4] = [1.0, -0.5, 1.0 / 3.0, -0.25];
+
+/// Lean wide leg of `atanhf`: `½·(ln(1+x) − ln(1−x))` over the magnitude bits
+/// of an `f32` in `[2⁻⁵, 1)`, division-free.
+///
+/// The whole reduction is `u32` arithmetic: `md = |x|` in Q0.32 fixed point
+/// (exact — the biased exponent `e ∈ [122, 126]` shifts out no mantissa
+/// bits), so `1 + |x|` is `md` parked straight into an `f64` mantissa field
+/// with **no** exponent term, while `mn = −md = 1 − |x|` (mod 2³²) normalizes
+/// with one `clz` whose count is exactly that side's negated exponent.  Both
+/// sides then share [`lean_cell`] and [`LEAN_TAIL`], and never cancel
+/// (opposite signs).
+///
+/// Absolute error: Taylor truncation `2·2⁻³⁰·2⁻⁷` plus the dropped `lo` words
+/// (≤ 2⁻⁴⁶), `nz·(ln2 − exp_hi) ≤ 24·2⁻⁴⁹`, and the closing roundings
+/// (≤ 2⁻⁴⁸ each at `|ln| ≤ 17`) — under `2⁻³⁷` after the exact halving
+/// (measured supremum vs the accurate tier: `2⁻³⁸·³`).  Callers gate with
+/// ≥ 2× that margin.
+#[inline]
+pub(super) fn atanh_lean(ax: u32) -> f64 {
+    let e = ax >> 23;
+    let md = ((ax << 8) | 0x8000_0000) >> (126 - e);
+    let mn = md.wrapping_neg();
+    let nz = mn.leading_zeros() + 1;
+
+    let (dp, hp) = lean_cell(u64::from(md) << 20);
+    let (dm, hm) = lean_cell(u64::from(mn << nz) << 20);
+    // 1 − |x| = (1 + mn·2⁻³²)·2⁻ⁿᶻ, and nz·exp_hi + hm is grid-exact
+    let bm = crate::fast_mul_add(f64::from(nz), -LNF_TABLES.exp_hi, hm);
+    let fp = crate::fast_mul_add(dp, crate::poly(dp, &LEAN_TAIL), hp);
+    let fm = crate::fast_mul_add(dm, crate::poly(dm, &LEAN_TAIL), bm);
+
+    0.5 * (fp - fm)
+}
+
 /// Polynomial approximation of inverse hyperbolic tangent restricted to
 /// `-c..=c`, where
 ///
