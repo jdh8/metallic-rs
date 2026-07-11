@@ -704,46 +704,66 @@ const LOG1P_MID: [f64; 8] = [
     -0.125_124_177_134_767_92,
 ];
 
+/// [`log1pf`]'s ±0 and eight hard-tie returns, resolved out of line
+#[cold]
+#[inline(never)]
+fn log1pf_tie(x: f32) -> f32 {
+    match x.to_bits() {
+        0 | 0x8000_0000 => x,
+        0x3540_0003 => 7.152_557e-7,
+        0x3710_001B => 8.583_057e-6,
+        0x3770_004B => 1.430_508_1e-5,
+        0xBB0E_C8C4 => -2.181_091_6e-3,
+        0x3EFD_81AD => 0.402_213_13,
+        0x4107_8FEB => 2.248_407_1,
+        0x65D8_90D3 => 53.20505,
+        _ => 66.17683,
+    }
+}
+
 /// Compute `ln(1 + x)` accurately especially for small `x`
 ///
 /// For `|x| < 0.0234375` a table-free `f64` polynomial `x + x·P(x)` serves the
-/// band directly, keeping the dominant `x` exact; elsewhere the hard-tie match
-/// runs only ahead of the [`log_lookup`] kernel that needs it.
+/// band, keeping the dominant `x` exact; elsewhere `1 + x` is exact and the
+/// [`log_lookup`] kernel finishes.  The band cut splits random representations
+/// ~64/36, so as in [`asinhf`](super::asinhf) both legs run unconditionally —
+/// each is harmless outside its band — and merge in bit space.  The ±0 guard
+/// (the mid leg's negative residual would flip −0 to +0) and the eight
+/// intrinsic hard ties fold into one never-taken branch (see [`logf`]).
 #[must_use]
 #[inline]
 pub fn log1pf(x: f32) -> f32 {
     let bits = x.to_bits();
     let ax = bits & 0x7FFF_FFFF;
 
-    if ax < 0x3CC0_0000 {
-        // ±0 (the negative residual would flip −0 to +0) and the four ties the
-        // one-step leg's f64→f32 double rounding cannot steer.
-        return match bits {
-            0 | 0x8000_0000 => x,
-            0x3540_0003 => 7.152_557e-7,
-            0x3710_001B => 8.583_057e-6,
-            0x3770_004B => 1.430_508_1e-5,
-            0xBB0E_C8C4 => -2.181_091_6e-3,
-            _ => {
-                let xd = f64::from(x);
-                let f = xd * crate::poly(xd, &LOG1P_MID);
-                (xd + f) as f32
-            }
-        };
-    }
     if bits >= 0xBF80_0000 || ax >= 0x7F80_0000 {
         return log1pf_special(x);
     }
 
-    // Intrinsic hard ties (see `logf`) the kernel's double rounding cannot
-    // steer; the small-|x| ties are subsumed by the mid-band leg.
-    match bits {
-        0x3EFD_81AD => 0.402_213_13,
-        0x4107_8FEB => 2.248_407_1,
-        0x65D8_90D3 => 53.20505,
-        0x6F31_A8EC => 66.17683,
-        _ => log_lookup(1.0 + f64::from(x), &LNF_TABLES) as f32,
+    let tie = (x == 0.0)
+        | (x == f32::from_bits(0x3540_0003))
+        | (x == f32::from_bits(0x3710_001B))
+        | (x == f32::from_bits(0x3770_004B))
+        | (x == f32::from_bits(0xBB0E_C8C4))
+        | (x == f32::from_bits(0x3EFD_81AD))
+        | (x == f32::from_bits(0x4107_8FEB))
+        | (x == f32::from_bits(0x65D8_90D3))
+        | (x == f32::from_bits(0x6F31_A8EC));
+    if tie {
+        return log1pf_tie(x);
     }
+
+    let xd = f64::from(x);
+    // |x| < 0.0234375: the table-free mid leg; overflows to ∞/NaN far above
+    // the band, where it is discarded.
+    let f = xd * crate::poly(xd, &LOG1P_MID);
+    let small = xd + f;
+    // Elsewhere `1 + x` is exact; below the band the kernel result is unused.
+    let big = log_lookup(1.0 + xd, &LNF_TABLES);
+
+    let mask = core::hint::black_box(u64::from(ax < 0x3CC0_0000).wrapping_neg());
+    let y = (big.to_bits() & !mask) | (small.to_bits() & mask);
+    f64::from_bits(y) as f32
 }
 
 /// [`log1pf`]'s off-domain and non-finite returns: `x ≤ -1`, `+∞`, NaN
