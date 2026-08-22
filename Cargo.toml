@@ -43,6 +43,7 @@ _no_fma = []
 
 [profile.dev]
 opt-level = 3
+debug = "line-tables-only"
 
 [lib]
 # Prevents cargo bench from running the lib test harness as a benchmark target.
