@@ -157,14 +157,31 @@ library is the default [rounding half to even][round-even].
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
-- [ ] Real `f128`/binary128 functions (`q` suffix; nightly)
-  - [ ] `atan2q`
-  - [x] `cbrtq`
-  - [ ] `expq`, `exp2q`, `exp10q`, `expm1q`
-  - [ ] `hypotq`
-  - [ ] `logq`
-  - [x] `rsqrtq`
-  - [x] `sqrtq`
+- [ ] Real `f128`/binary128 functions (`q` suffix; nightly) — see
+      [Binary128 status](#binary128-status)
+
+### Binary128 status
+
+Each function is done when both gates hold:
+
+- **CR** — correctly rounded, all strict gates green (bit-exact vs
+  `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
+- **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
+  or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
+  --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
+
+| Function | CR | Perf (ratio vs CORE-MATH) |
+|----------|:--:|:--|
+| `atan2q` |    |    |
+| `cbrtq`  | ✅ |    |
+| `exp10q` |    |    |
+| `exp2q`  |    |    |
+| `expm1q` |    |    |
+| `expq`   |    |    |
+| `hypotq` |    |    |
+| `logq`   |    |    |
+| `rsqrtq` | ✅ |    |
+| `sqrtq`  | ✅ |    |
 
 [math]: https://en.cppreference.com/w/c/numeric/math
 [complex]: https://en.cppreference.com/w/c/numeric/complex
