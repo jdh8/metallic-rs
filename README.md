@@ -27,6 +27,26 @@ assert_eq!(metallic::exp(0.0), 1.0); // f64
 assert_eq!(metallic::expf(0.0_f32), 1.0); // f32
 ```
 
+Binary128 functions use the libquadmath-compatible `q` suffix and are gated
+behind a nightly-only feature:
+
+```toml
+[dependencies]
+metallic = { version = "0.3.0", features = ["f128"] }
+```
+
+```rust,ignore
+#![feature(f128)]
+
+assert_eq!(metallic::sqrtq(4.0_f128), 2.0);
+assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
+assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
+```
+
+Run its tests with `cargo +nightly test --features f128`. `sqrtq` uses Rust's
+correctly rounded binary128 square root; `rsqrtq` and `cbrtq` use table-free
+seeds followed by exact integer midpoint correction for the final rounding.
+
 ## Enable [fused multiply-add][fma] for best performance
 
 This crate leans heavily on the fused multiply-add instruction.  Most modern
@@ -137,6 +157,14 @@ library is the default [rounding half to even][round-even].
   - [x] Miscellaneous elementary functions
   - [x] Non-elementary functions (optional)
 - [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
+- [ ] Real `f128`/binary128 functions (`q` suffix; nightly)
+  - [ ] `atan2q`
+  - [x] `cbrtq`
+  - [ ] `expq`, `exp2q`, `exp10q`, `expm1q`
+  - [ ] `hypotq`
+  - [ ] `logq`
+  - [x] `rsqrtq`
+  - [x] `sqrtq`
 
 [math]: https://en.cppreference.com/w/c/numeric/math
 [complex]: https://en.cppreference.com/w/c/numeric/complex

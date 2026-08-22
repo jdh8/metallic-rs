@@ -21,6 +21,7 @@ set -euo pipefail
 
 CORE_MATH_SYS="${CORE_MATH_SYS:-$HOME/src/core-math-sys}"
 SRC="$CORE_MATH_SYS/vendor/src/binary64"
+SRC128="$CORE_MATH_SYS/vendor/src/binary128"
 DEST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/tests/cases"
 
 if [ ! -d "$SRC" ]; then
@@ -51,6 +52,9 @@ FUNCS32=(
     "pow powf"
 )
 
+# binary128 pilots. Their q-suffixed corpus names match metallic's public API.
+FUNCS128=(sqrt rsqrt cbrt)
+
 mkdir -p "$DEST"
 missing=0
 for f in "${FUNCS[@]}"; do
@@ -76,6 +80,17 @@ for pair in "${FUNCS32[@]}"; do
     fi
 done
 
-total=$((${#FUNCS[@]} + ${#FUNCS32[@]}))
+for f in "${FUNCS128[@]}"; do
+    wc="$SRC128/$f/${f}q.wc"
+    if [ -f "$wc" ]; then
+        cp "$wc" "$DEST/${f}q.wc"
+        printf '  %-8s %8s KB\n' "${f}q" "$(du -k "$DEST/${f}q.wc" | cut -f1)"
+    else
+        echo "  ${f}q: MISSING ($wc)" >&2
+        missing=$((missing + 1))
+    fi
+done
+
+total=$((${#FUNCS[@]} + ${#FUNCS32[@]} + ${#FUNCS128[@]}))
 echo "synced $((total - missing))/$total corpora into $DEST"
 [ "$missing" -eq 0 ]

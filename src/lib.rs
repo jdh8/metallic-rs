@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![cfg_attr(feature = "f128", feature(f128))]
 #![warn(clippy::pedantic, clippy::nursery)]
 #![warn(missing_docs)]
 // FMA discipline: never call the builtin `mul_add` directly and never hand-write
@@ -10,6 +11,8 @@
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 use fast_polynomial::poly_array as poly;
 
+#[cfg(feature = "f128")]
+mod f128_;
 mod f32_;
 mod f64_;
 
@@ -32,9 +35,20 @@ pub use f32_::{
     powf, roundf, rsqrtf, sincosf, sinf, sinhf, sinpif, tanf, tanhf, tanpif, tgammaf,
 };
 
+#[cfg(feature = "f128")]
+pub use f128_::{cbrtq, rsqrtq, sqrtq};
+
+/// MPFR bridges for testing binary128 functions.
+#[cfg(all(feature = "f128", feature = "mpfr"))]
+#[doc(hidden)]
+pub use f128_::mpfr as f128_mpfr;
+
 // Crate-internal `f64` primitives, reached as `crate::exp2i` / `crate::fast_mul_add`
 // from both precision trees (private re-export, like `poly` above).
 use f64_::{exp2i, fast_mul_add};
+#[cfg(feature = "f128")]
+#[allow(unused_imports)]
+use f128_::fma128;
 
 /// Explicit sign rather than a `bool`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

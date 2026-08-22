@@ -23,7 +23,33 @@ After updating the codebase, please
 
 Note: do **not** run tests with `--all-features`.  The `_no_fma` feature
 disables FMA usage and would cause tests to exercise a different code path than
-the default build, producing misleading results.
+the default build, producing misleading results.  It also enables the
+nightly-only `f128` feature, so it is not a stable-toolchain command.
+
+## Binary128 (`f128`)
+
+Binary128 is opt-in and nightly-only: use `cargo +nightly test --features f128`.
+Public names follow libquadmath and CORE-MATH's `q` suffix (`sqrtq`, `rsqrtq`,
+`cbrtq`). `sqrtq` delegates to Rust's correctly rounded `f128::sqrt`; the other
+roots use table-free seeds and exact integer midpoint comparisons for their
+final rounding.
+
+There is no feasible exhaustive binary128 sweep. The correctness gates are
+bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic
+full-representation samples, and MPFR precision-113 operation + ternary-aware
+IEEE subnormalization under `--features "f128 mpfr"`. Keep each corpus count
+guard current so a missing or partially parsed file cannot pass vacuously.
+
+Refresh q corpora from `vendor/src/binary128/<fn>/<fn>q.wc` with
+`tools/sync-worst-cases.sh`. CORE-MATH remains an oracle and structural
+reference: never copy binary128 fitted seed or polynomial tables (`rsqrt9`,
+`coef_bind`, `c[][N]`). The current roots deliberately have no fitted tables.
+
+For f128 FMA, call the crate's `fma128` wrapper rather than `f128::mul_add` or a
+raw multiply-add. Benchmarks require the `f128` feature and nightly; the
+headline is the same-run `metallic::*q / core_math::*q` ratio. The std
+`f128::sqrt` lane has the same correct-rounding contract; other std lanes are
+faithful-only comparisons.
 
 ## Verification (reproducing CORE-MATH's checks)
 

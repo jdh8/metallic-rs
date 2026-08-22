@@ -12,6 +12,9 @@ keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "speci
 exclude = ["/tests/cases"]
 autobenches = false
 
+[package.metadata.docs.rs]
+features = ["f128"]
+
 [dependencies]
 # `std` enables `num-traits`' `MulAdd for f64`, which `PolyNum` (used by
 # `poly_array`/`rational_array`) requires; without it the library does not build
@@ -25,7 +28,7 @@ fast_polynomial = { version = "0.4", features = ["std"] }
 rug = { version = "1", optional = true }
 
 [dev-dependencies]
-core-math = "1"
+core-math = "1.2"
 criterion = "0.8"
 hexf-parse = "0.2"
 libm = "0.2"
@@ -34,6 +37,8 @@ regex = "1"
 
 [features]
 mpfr = ["dep:rug"]
+# Nightly-only: enabling this on stable intentionally fails with E0554.
+f128 = ["core-math/f128", "rug?/nightly-float"]
 _no_fma = []
 
 [profile.dev]
@@ -401,3 +406,18 @@ harness = false
 [[bench]]
 name = "lgamma"
 harness = false
+
+[[bench]]
+name = "sqrtq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "rsqrtq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "cbrtq"
+harness = false
+required-features = ["f128"]

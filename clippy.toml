@@ -1,4 +1,5 @@
 disallowed-methods = [
     { path = "f32::mul_add", reason = "use crate::fmaf for error-free transforms or crate::fma (via f64 promotion); use crate::fast_mul_add for polynomial hot paths" },
     { path = "f64::mul_add", reason = "use crate::fma for error-free transforms; use crate::fast_mul_add for polynomial hot paths" },
+    { path = "f128::mul_add", reason = "use crate::fma128 for error-free transforms" },
 ]

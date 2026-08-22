@@ -595,7 +595,10 @@ pub fn acospif(x: f32) -> f32 {
     let z: f64 = x.into();
     if ax < 0x3D80_0000 {
         // |x| < 1/16: fold the odd cell-0 kernel about ½
-        (0.5 - z * crate::poly(z * z, cell)) as f32
+        // Keep the exhaustively certified non-fused rounding.
+        #[allow(clippy::suboptimal_flops)]
+        let result = 0.5 - z * crate::poly(z * z, cell);
+        result as f32
     } else {
         let f = (1.0 - z.abs()).sqrt();
         let g = crate::poly(z.abs(), cell);

@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tests: ${{ steps.tests.outputs.list }}
+      tests_f128: ${{ steps.tests.outputs.f128 }}
     steps:
     - uses: actions/checkout@v6
     - name: Discover test targets
@@ -25,7 +26,9 @@ jobs:
       shell: bash
       run: |
         list=$(basename -a -s .rs tests/*.rs | jq -R -s -c 'split("\n")[:-1]')
+        f128=$(basename -a -s .rs tests/*q.rs | jq -R -s -c 'split("\n")[:-1]')
         echo "list=$list" >> "$GITHUB_OUTPUT"
+        echo "f128=$f128" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -50,6 +53,23 @@ jobs:
         shared-key: test-nofma-${{ hashFiles('**/Cargo.lock') }}
     - name: Build test binaries forcing no-FMA fallback
       run: cargo test --no-run --features _no_fma --verbose
+
+  build-f128:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      TARGET_CPU: x86-64-v3
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install nightly Rust
+      uses: dtolnay/rust-toolchain@nightly
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build binary128 test binaries
+      run: cargo +nightly test --no-run --features f128 --verbose
 
   msrv:
     runs-on: ubuntu-latest
@@ -102,6 +122,48 @@ jobs:
         save-if: false
     - name: Run lib tests
       run: cargo test --lib --verbose
+
+  test-f128:
+    needs:
+    - prepare
+    - build-f128
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      TARGET_CPU: x86-64-v3
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJson(needs.prepare.outputs.tests_f128) }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install nightly Rust
+      uses: dtolnay/rust-toolchain@nightly
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+    - name: Run binary128 tests
+      run: cargo +nightly test --test ${{ matrix.test }} --features f128 --verbose
+
+  test-f128-lib:
+    needs: build-f128
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      TARGET_CPU: x86-64-v3
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install nightly Rust
+      uses: dtolnay/rust-toolchain@nightly
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
+        save-if: false
+    - name: Run binary128 lib tests
+      run: cargo +nightly test --lib --features f128 --verbose
 
   test-nofma:
     needs:

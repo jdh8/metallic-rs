@@ -113,7 +113,7 @@ pub fn test_univariate_faithful<Case: Copy + LowerExp>(
 /// Check if `f` returns the same result as `g` for the provided cases
 ///
 /// By "same result", I mean semantic identity as defined by [`is`].
-pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
+pub fn test_univariate_cases<Case: Copy + Debug, Output: Identity + Debug>(
     f: impl Fn(Case) -> Output,
     g: impl Fn(Case) -> Output,
     cases: impl Iterator<Item = Case>,
@@ -121,7 +121,7 @@ pub fn test_univariate_cases<Case: Copy + LowerExp, Output: Identity + Debug>(
     truncate_errors(cases.filter_map(|x| {
         let f = f(x);
         let g = g(x);
-        (!f.is(&g)).then(|| println!("{x:e}: {f:?} != {g:?}"))
+        (!f.is(&g)).then(|| println!("{x:?}: {f:?} != {g:?}"))
     }));
 }
 

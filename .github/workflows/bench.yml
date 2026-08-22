@@ -33,16 +33,10 @@ jobs:
     - name: Discover bench targets
       id: benches
       run: |
-        list=$(awk '
-          /^\[\[bench\]\]/ { in_bench = 1; next }
-          in_bench && /^name[[:space:]]*=/ {
-            line = $0
-            sub(/^name[[:space:]]*=[[:space:]]*"/, "", line)
-            sub(/".*/, "", line)
-            print line
-            in_bench = 0
-          }
-        ' Cargo.toml | jq -R -s -c 'split("\n")[:-1]')
+        list=$(cargo metadata --no-deps --format-version 1 | jq -c '
+          [.packages[0].targets[]
+           | select(.kind == ["bench"] and (((.["required-features"] // []) | length) == 0))
+           | .name]')
         echo "list=$list" >> "$GITHUB_OUTPUT"
 
   bench:
