@@ -1,3 +1,6 @@
+# the following should not raise "Missing underflow exception"
+# since sqrt(x^2+y^2) > 2^-1022-2^-1075
+0x0.e779e1bd4ad3fp-1022,0x0.6d568c1f6fbabp-1022
 # exact cases
 0x1.000001cc784cbp+52,0x1.fdd67bceb35fp+52
 # worst cases
