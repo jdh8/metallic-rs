@@ -2,6 +2,7 @@
 #![allow(clippy::pedantic, clippy::approx_constant)]
 #![warn(clippy::unreadable_literal)]
 
+mod hypot;
 #[allow(dead_code)]
 mod misc;
 #[cfg(feature = "mpfr")]
@@ -11,10 +12,12 @@ mod roots;
 #[allow(dead_code)]
 mod uint;
 
+pub use hypot::hypotq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 
 // Internal binary128 primitives shared by the function implementations.
 #[allow(unused_imports)]
-pub use misc::{EXP_SHIFT, Magnitude, exp2i, fma128, frexp, ldexp, normalize};
-#[allow(unused_imports)]
-pub use uint::{mhi, wmul};
+pub use misc::{
+    BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, MANTISSA_MASK, Magnitude, QUIET_BIT, SIGN_MASK, exp2i,
+    fma128, frexp, ldexp, normalize, split,
+};

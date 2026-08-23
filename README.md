@@ -178,7 +178,7 @@ Each function is done when both gates hold:
 | `exp2q`  |    |    |
 | `expm1q` |    |    |
 | `expq`   |    |    |
-| `hypotq` |    |    |
+| `hypotq` | ✅ |    |
 | `logq`   |    |    |
 | `rsqrtq` | ✅ |    |
 | `sqrtq`  | ✅ |    |

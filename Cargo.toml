@@ -422,3 +422,8 @@ required-features = ["f128"]
 name = "cbrtq"
 harness = false
 required-features = ["f128"]
+
+[[bench]]
+name = "hypotq"
+harness = false
+required-features = ["f128"]

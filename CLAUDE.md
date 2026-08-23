@@ -29,10 +29,17 @@ nightly-only `f128` feature, so it is not a stable-toolchain command.
 ## Binary128 (`f128`)
 
 Binary128 is opt-in and nightly-only: use `cargo +nightly test --features f128`.
+Building the `core-math` oracle for binary128 needs **`CC=clang`** — CORE-MATH's
+`hypotq.c` calls `__builtin_addcl`, which GCC does not provide, so a `cc`-built
+`core-math-sys` fails to link.  The CI f128 jobs set it; set it locally too.
+
 Public names follow libquadmath and CORE-MATH's `q` suffix (`sqrtq`, `rsqrtq`,
-`cbrtq`). `sqrtq` delegates to Rust's correctly rounded `f128::sqrt`; the other
-roots use table-free seeds and exact integer midpoint comparisons for their
-final rounding.
+`cbrtq`, `hypotq`). `sqrtq` delegates to Rust's correctly rounded `f128::sqrt`;
+the other roots use table-free seeds and exact integer midpoint comparisons for
+their final rounding.  `hypotq` needs no Ziv fallback at all: capping the
+exponent gap at 56 makes `a² + b²` an exact 384-bit integer, so two exact
+comparisons decide the last bit.  The shared 384-bit primitives live in
+`src/f128_/uint.rs`.
 
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic

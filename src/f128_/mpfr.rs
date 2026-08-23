@@ -27,3 +27,14 @@ pub fn cr_unop(x: f128, op: impl FnOnce(&mut Float) -> Ordering) -> f128 {
     y.subnormalize_ieee_round(rounding, Round::Nearest);
     from_mpfr(&y)
 }
+
+/// Evaluate a binary MPFR operation with the exact binary128 rounding recipe.
+///
+/// The callback must mutate its 113-bit left operand in place and return MPFR's
+/// ternary rounding result.
+pub fn cr_binop(x: f128, y: f128, op: impl FnOnce(&mut Float, &Float) -> Ordering) -> f128 {
+    let mut z = to_mpfr(x);
+    let rounding = op(&mut z, &to_mpfr(y));
+    z.subnormalize_ieee_round(rounding, Round::Nearest);
+    from_mpfr(&z)
+}

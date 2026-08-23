@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::common;
+use common::Identity as _;
 
 impl common::Identity for f128 {
     #[inline]
@@ -44,6 +45,31 @@ pub fn test_worst_univariate_f128(
     );
 }
 
+/// [`common::test_bivariate_cases`] for `f128`, which has no `LowerExp`.
+pub fn test_bivariate_cases_f128(
+    f: impl Fn(f128, f128) -> f128,
+    g: impl Fn(f128, f128) -> f128,
+    cases: impl Iterator<Item = [f128; 2]>,
+) {
+    common::truncate_errors(cases.filter_map(|[x, y]| {
+        let (f, g) = (f(x, y), g(x, y));
+        (!f.is(&g)).then(|| println!("{x:?}, {y:?}: {f:?} != {g:?}"))
+    }));
+}
+
+/// Bivariate [`test_worst_univariate_f128`].
+pub fn test_worst_bivariate_f128(
+    name: &str,
+    f: impl Fn(f128, f128) -> f128,
+    oracle: impl Fn(f128, f128) -> f128,
+) {
+    test_bivariate_cases_f128(
+        f,
+        oracle,
+        common::parse_case_file(format!("{name}q.wc"), parse_f128_pair),
+    );
+}
+
 /// MPFR sweep for a binary128 univariate function.
 #[cfg(feature = "mpfr")]
 pub fn mpfr_sweep_univariate_f128(
@@ -55,8 +81,28 @@ pub fn mpfr_sweep_univariate_f128(
     common::test_univariate_cases(f, cr, (0..n).map(sampler));
 }
 
+/// Bivariate [`mpfr_sweep_univariate_f128`].
+#[cfg(feature = "mpfr")]
+pub fn mpfr_sweep_bivariate_f128(
+    f: impl Fn(f128, f128) -> f128,
+    cr: impl Fn(f128, f128) -> f128,
+    sampler: impl Fn(u64) -> [f128; 2],
+    n: u64,
+) {
+    test_bivariate_cases_f128(f, cr, (0..n).map(sampler));
+}
+
 #[derive(Debug)]
 pub struct ParseF128Error;
+
+/// Parse a whitespace-separated `f128` pair: CORE-MATH's binary128 corpora put
+/// a space where the binary64 ones put a comma.
+pub fn parse_f128_pair(s: &str) -> Result<[f128; 2], ParseF128Error> {
+    let mut fields = s.split_ascii_whitespace();
+    let x = parse_f128(fields.next().ok_or(ParseF128Error)?)?;
+    let y = parse_f128(fields.next().ok_or(ParseF128Error)?)?;
+    Ok([x, y])
+}
 
 /// Parse the decimal integers, specials, and hexadecimal floats used by
 /// CORE-MATH's binary128 corpora, with round-to-nearest-even conversion.
@@ -78,7 +124,7 @@ pub fn parse_f128(s: &str) -> Result<f128, ParseF128Error> {
 
     let special = match body {
         "inf" => Some(f128::INFINITY.to_bits()),
-        "nan" => Some(f128::NAN.to_bits()),
+        "nan" | "qnan" => Some(f128::NAN.to_bits()),
         "snan" => Some(f128::NAN.to_bits() | 1),
         _ => None,
     };

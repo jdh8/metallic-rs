@@ -59,6 +59,42 @@ pub const fn frexp(x: f128) -> (f128, i32) {
 /// Explicitly stored significand bits in [`f128`].
 pub const EXP_SHIFT: u32 = f128::MANTISSA_DIGITS - 1;
 
+/// The sign bit of an [`f128`].
+pub const SIGN_MASK: u128 = 1 << 127;
+
+/// The exponent field of an [`f128`], which is also the bit pattern of `+∞`.
+pub const EXP_MASK: u128 = 0x7fff << EXP_SHIFT;
+
+/// The explicitly stored significand bits of an [`f128`].
+pub const MANTISSA_MASK: u128 = (1 << EXP_SHIFT) - 1;
+
+/// The implicit leading bit of a normal [`f128`] significand.
+pub const IMPLICIT_BIT: u128 = 1 << EXP_SHIFT;
+
+/// The bit that distinguishes a quiet NaN from a signaling one.
+pub const QUIET_BIT: u128 = 1 << (EXP_SHIFT - 1);
+
+/// The exponent bias of [`f128`].
+pub const BIAS: i32 = 0x3fff;
+
+/// Integer significand and unbiased exponent of a finite nonzero magnitude,
+/// given as a bit pattern with the sign already stripped.
+///
+/// The value is `mantissa * 2^(exponent - 112)` with `mantissa` in
+/// `[2^112, 2^113)`, so subnormals come back with a virtual exponent below
+/// the minimum normal exponent.
+#[must_use]
+#[inline]
+pub const fn split(bits: u128) -> (u128, i32) {
+    let biased = (bits >> EXP_SHIFT) as i32;
+
+    if biased != 0 {
+        return (bits & MANTISSA_MASK | IMPLICIT_BIT, biased - BIAS);
+    }
+    let shift = bits.leading_zeros() - (127 - EXP_SHIFT);
+    (bits << shift, 1 - BIAS - shift as i32)
+}
+
 /// Magnitude of an `f128`.
 ///
 /// Nonzero subnormal numbers are normalized to have an implicit leading bit.
@@ -135,6 +171,14 @@ const _: () = {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn split_magnitudes() {
+        assert_eq!(split(1.0_f128.to_bits()), (IMPLICIT_BIT, 0));
+        assert_eq!(split(f128::MIN_POSITIVE.to_bits()), (IMPLICIT_BIT, -16382));
+        assert_eq!(split(1), (IMPLICIT_BIT, -16494));
+        assert_eq!(split(MANTISSA_MASK), (MANTISSA_MASK << 1, -16383));
+    }
 
     #[test]
     fn frexp_round_trip() {

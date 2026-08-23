@@ -1,12 +1,9 @@
-use super::{EXP_SHIFT, Magnitude, fma128, ldexp, normalize, wmul};
+use super::uint::{cmp_384, shl_384, wmul};
+use super::{
+    BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, MANTISSA_MASK, Magnitude, QUIET_BIT, SIGN_MASK,
+    fma128, ldexp, normalize,
+};
 use core::cmp::Ordering;
-
-const SIGN_MASK: u128 = 1 << 127;
-const EXP_MASK: u128 = 0x7fff << EXP_SHIFT;
-const MANTISSA_MASK: u128 = (1 << EXP_SHIFT) - 1;
-const IMPLICIT_BIT: u128 = 1 << EXP_SHIFT;
-const QUIET_BIT: u128 = 1 << (EXP_SHIFT - 1);
-const BIAS: i32 = 0x3fff;
 
 /// The square root.
 #[must_use]
@@ -120,39 +117,13 @@ fn mul3(a: u128, b: u128, c: u128) -> [u128; 3] {
     [low, middle, high]
 }
 
-#[inline]
-fn shl_384(x: u128, shift: u32) -> [u128; 3] {
-    debug_assert!(shift < 384);
-    let mut result = [0; 3];
-    let word = (shift / 128) as usize;
-    let bits = shift % 128;
-    result[word] = x << bits;
-    if bits != 0 && word + 1 < result.len() {
-        result[word + 1] = x >> (128 - bits);
-    }
-    result
-}
-
-#[inline]
-fn bit_384(bit: u32) -> [u128; 3] {
-    debug_assert!(bit < 384);
-    let mut result = [0; 3];
-    result[(bit / 128) as usize] = 1 << (bit % 128);
-    result
-}
-
-#[inline]
-fn cmp_384(a: [u128; 3], b: [u128; 3]) -> Ordering {
-    a[2].cmp(&b[2]).then(a[1].cmp(&b[1])).then(a[0].cmp(&b[0]))
-}
-
 /// Round an approximate reciprocal square root by exact midpoint tests.
 fn correct_rsqrt(mantissa: u128, exponent: i32, mut candidate: f128) -> f128 {
     loop {
         let bits = candidate.to_bits();
         let (m, e) = parts(bits as i128);
         let (lower, upper) = midpoints(m);
-        let one = bit_384((340 - exponent - 2 * e) as u32);
+        let one = shl_384([1, 0, 0], (340 - exponent - 2 * e) as u32);
         let odd = bits & 1 != 0;
 
         // 1/sqrt(x) is below L iff x*L^2 > 1.
@@ -179,7 +150,7 @@ fn correct_cbrt(mantissa: u128, remainder: i32, mut candidate: f128) -> f128 {
         let bits = candidate.to_bits();
         let (m, e) = parts(bits as i128);
         let (lower, upper) = midpoints(m);
-        let input = shl_384(mantissa, (remainder - 3 * e + 230) as u32);
+        let input = shl_384([mantissa, 0, 0], (remainder - 3 * e + 230) as u32);
         let odd = bits & 1 != 0;
 
         let side = cmp_384(mul3(lower, lower, lower), input);
