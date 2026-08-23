@@ -179,15 +179,15 @@ Each function is done when both gates hold:
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
 | `atan2q` |    |    |
-| `cbrtq`  | ✅ |    |
+| `cbrtq`  | ✅ | 9.97× |
 | `exp10q` | ✅ | 0.93× |
 | `exp2q`  | ✅ | 0.94× |
 | `expm1q` | ✅ | 1.42× |
 | `expq`   | ✅ | 0.96× |
-| `hypotq` | ✅ |    |
+| `hypotq` | ✅ | 1.89× |
 | `logq`   |    |    |
-| `rsqrtq` | ✅ |    |
-| `sqrtq`  | ✅ |    |
+| `rsqrtq` | ✅ | 8.49× |
+| `sqrtq`  | ✅ | 1.92× |
 
 [math]: https://en.cppreference.com/w/c/numeric/math
 [complex]: https://en.cppreference.com/w/c/numeric/complex
