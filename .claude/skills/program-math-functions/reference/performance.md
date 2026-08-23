@@ -185,6 +185,17 @@ in the shadow of a division is already free, and removing it buys nothing
 - **Fuse reflections to save divisions**: rewrite `u = (1/a − c)/(1 + c/a)` as
   `u = (1 − a·c)/(a + c)` — never form `1/a` as a dd. atan 3→2 divisions
   (`7e942e7`), atan2 4→2 (`622010a`).
+- **In `u128` fixed point, the shifts cost more than the multiplies.** LLVM
+  has no 128-bit funnel shift: `(a >> k) | (b << 1 << (127 - k))` with a
+  variable `k` becomes a `shrd`/`shrx` pair plus a `cmovne` per limb.  Cut the
+  window out of 64-bit limbs instead — a `cmov` chain to pick the limbs, then
+  one `shrd` each (binary128 `frame`, `b611a8f`: 1.18x -> 1.13x).  The same
+  applies to the *rounding* tail: if the discarded width is constant for all
+  normal results, split the variable-shift cases into a `#[cold]` function and
+  the masks become literals (`964583a`: 1.13x -> 0.96x, the single biggest win
+  of that campaign).  Ablate before redesigning a kernel — for binary128 exp,
+  deleting a whole 128x128 multiply moved **nothing**, while deleting the
+  rounding masks moved 5 ns.
 - **The real round-to-nearest dividends** (vs CORE-MATH's 4-mode burden):
   un-normalized dd returns consumed directly by the Ziv gate, and free FMA
   contraction in `crate::poly` (CORE-MATH's `FENV_ACCESS ON` inhibits it).
@@ -204,6 +215,7 @@ evidence wastes a session.
 | unsafe SIMD `fast_ldexp` | Within noise; hidden by out-of-order execution. |
 | Bit-trick edge checks (replace FP compares) | No gain — a predicted-not-taken `comisd` is ~free. |
 | Estrin on `poly_dint` | ~2% on the forced path — `Dint::mul` is port-bound; fewer terms is the only lever. |
+| Cutting multiplies in the binary128 exp kernel | Removing one of the three `mul127`s in the table product moved 0.0 ns. The kernel is latency- and *shift*-bound, not multiplier-bound; CORE-MATH's cheaper `u64 x u128` Horner has the same chain depth, so porting its shape is unlikely to pay. |
 | Series fast legs for **wide** bands | atanh +34% (75% fallback at band edge). A plain-f64 series leg floors at ~2⁻⁵³ relative on the correction, so it only pays when the band is narrow (asinh: win) or the general path is heavier than a polynomial. |
 
 ## Current standings
