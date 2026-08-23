@@ -4,6 +4,7 @@
 
 mod atan2;
 mod atan2_tables;
+mod cbrt_tables;
 mod exp;
 mod exp_tables;
 mod hypot;

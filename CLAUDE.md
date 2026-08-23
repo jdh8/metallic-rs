@@ -35,9 +35,13 @@ Building the `core-math` oracle for binary128 needs **`CC=clang`** — CORE-MATH
 
 Public names follow libquadmath and CORE-MATH's `q` suffix (`sqrtq`, `rsqrtq`,
 `cbrtq`, `hypotq`, `expq`, `exp2q`, `exp10q`).  `sqrtq` delegates to Rust's
-correctly rounded `f128::sqrt`;
-the other roots use table-free seeds and exact integer midpoint comparisons for
-their final rounding.  `hypotq` needs no Ziv fallback at all: capping the
+correctly rounded `f128::sqrt`; `rsqrtq` uses a table-free seed and exact
+integer midpoint comparisons for its final rounding.  `cbrtq` is pure fixed
+point: a degree-2 Taylor table of `m^(-1/3)` values (`tools/gen_cbrt_f128.py` —
+mathematical constants, not fitted) plus one folded integer Newton step seeds
+`r ≈ z^(-1/3)` to 2^-46, one `(1+h)^(-2/3)` correction of `r²z` reaches 2^-119,
+and 11 guard bits round directly, keeping the exact midpoint walk only for the
+`CBRT_GATE` tie window (~3%).  `hypotq` needs no Ziv fallback at all: capping the
 exponent gap at 56 makes `a² + b²` an exact 384-bit integer, so two exact
 comparisons decide the last bit.  The shared wide-integer primitives live in
 `src/f128_/uint.rs`.
@@ -95,7 +99,9 @@ guard current so a missing or partially parsed file cannot pass vacuously.
 Refresh q corpora from `vendor/src/binary128/<fn>/<fn>q.wc` with
 `tools/sync-worst-cases.sh`. CORE-MATH remains an oracle and structural
 reference: never copy binary128 fitted seed or polynomial tables (`rsqrt9`,
-`coef_bind`, `c[][N]`). The current roots deliberately have no fitted tables.
+`coef_bind`, `c[][N]`). The current roots deliberately have no fitted tables:
+`cbrtq`'s seed table is truncated-Taylor data (values and derivatives), not a
+minimax fit.
 
 For f128 FMA, call the crate's `fma128` wrapper rather than `f128::mul_add` or a
 raw multiply-add. Benchmarks require the `f128` feature and nightly; the
