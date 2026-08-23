@@ -84,6 +84,17 @@ pub fn add_256(a: [u128; 2], b: [u128; 2]) -> [u128; 2] {
     [low, a[1].wrapping_add(b[1]).wrapping_add(u128::from(carry))]
 }
 
+/// `a - b`, discarding the borrow out of the 256-bit window.
+#[must_use]
+#[inline]
+pub fn sub_256(a: [u128; 2], b: [u128; 2]) -> [u128; 2] {
+    let (low, borrow) = a[0].overflowing_sub(b[0]);
+    [
+        low,
+        a[1].wrapping_sub(b[1]).wrapping_sub(u128::from(borrow)),
+    ]
+}
+
 /// High 256 bits of an unsigned 256×256-bit product, little-endian.
 ///
 /// The dropped tail makes the result up to two units of 2^-256 short of the

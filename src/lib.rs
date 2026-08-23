@@ -36,7 +36,7 @@ pub use f32_::{
 };
 
 #[cfg(feature = "f128")]
-pub use f128_::{cbrtq, exp2q, exp10q, expq, hypotq, rsqrtq, sqrtq};
+pub use f128_::{cbrtq, exp2q, exp10q, expm1q, expq, hypotq, rsqrtq, sqrtq};
 
 /// MPFR bridges for testing binary128 functions.
 #[cfg(all(feature = "f128", feature = "mpfr"))]

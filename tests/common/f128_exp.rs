@@ -12,15 +12,20 @@ pub fn dense(lo: f128, hi: f128) -> impl Iterator<Item = f128> {
     (0..=SAMPLE_COUNT).map(move |i| lo + i as f128 * step)
 }
 
-/// Random significands across every exponent the argument reduction sees,
-/// `[2^-121, 2^15)`, plus raw bit patterns for the saturating ends.
+/// A random significand and sign at an exponent uniform over every binade the
+/// argument reduction sees, `[2^-121, 2^15)`.
+pub fn exponents() -> impl Fn(u64) -> f128 {
+    |i| {
+        let bits = common128::mix128(i);
+        let exponent = 16_383 - 121 + (bits >> 120) % 137;
+        f128::from_bits((bits & 1 << 127) | exponent << 112 | (bits & (1 << 112) - 1))
+    }
+}
+
+/// [`exponents`] as a sweep, plus raw bit patterns for the saturating ends.
 pub fn significands() -> impl Iterator<Item = f128> {
     (0..SAMPLE_COUNT)
-        .map(|i| {
-            let bits = common128::mix128(i);
-            let exponent = 16_383 - 121 + (bits >> 120) % 137;
-            f128::from_bits((bits & 1 << 127) | exponent << 112 | (bits & (1 << 112) - 1))
-        })
+        .map(exponents())
         .chain((0..SAMPLE_COUNT).map(|i| f128::from_bits(common128::mix128(i ^ 0x5555_5555))))
 }
 

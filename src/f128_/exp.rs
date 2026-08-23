@@ -24,7 +24,9 @@
 //! the accurate leg redoes the same steps at 256 bits.
 
 use super::exp_tables::{COEF, LOG2_10, LOG2E, ONE, Reduction, T0, T1, T2};
-use super::uint::{add_256, add_384, mhi, mul_hi_256, neg_384, wmul};
+use super::uint::{
+    add_256, add_384, leading_zeros_384, mhi, mul_hi_256, neg_384, shl_384, sub_256, wmul,
+};
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 
 /// Half-width of the rounding-tie window the fast leg refuses to decide.
@@ -85,7 +87,7 @@ fn exp_generic(x: f128, l: &Reduction) -> f128 {
     let y = signed(reduce(m, e, l.head), negative);
     let (n, r) = fast(y[2] as i32, y[1]);
 
-    if undecided(n, r) {
+    if undecided(n, r, ZIV_GATE) {
         return accurate(m, e, negative, l);
     }
     round(n, r, 0)
@@ -184,6 +186,14 @@ fn fast(n: i32, f: u128) -> (i32, u128) {
 #[cold]
 #[inline(never)]
 fn accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {
+    let (n, r) = wide(m, e, negative, l);
+
+    round(n, r[1], r[0])
+}
+
+/// 2<sup>x·L</sup> to 256 bits, as `(exponent bump, significand scaled by
+/// 2^255)`.
+fn wide(m: u128, e: i32, negative: bool, l: &Reduction) -> (i32, [u128; 2]) {
     let y = reduce(m, e, l.head);
     let y = signed(add_384(y, [correction(m, e, l.tail), 0, 0]), negative);
     let (i0, i1, i2, t) = index(y[1]);
@@ -204,7 +214,7 @@ fn accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {
         r
     };
 
-    round(y[2] as i32 + carry as i32, r[1], r[0])
+    (y[2] as i32 + carry as i32, r)
 }
 
 /// The `k`-th Taylor coefficient truncated to 64 bits, scaled by 2^-64.
@@ -255,15 +265,18 @@ fn discarded(n: i32) -> u32 {
 
 /// Whether the fast leg's significand sits too close to a rounding tie to
 /// decide the last bit.
+///
+/// `gate` is the half-width of the refused window, widened by callers whose
+/// frame magnified the fast leg's error.
 #[inline]
-fn undecided(n: i32, r: u128) -> bool {
+fn undecided(n: i32, r: u128, gate: u128) -> bool {
     let shift = discarded(n);
 
     // Saturating results carry no significand bits to decide.
     if n > f128::MAX_EXP - 1 || shift > 128 {
         return false;
     }
-    (r & (u128::MAX >> (128 - shift))).abs_diff(1 << (shift - 1)) <= ZIV_GATE
+    (r & (u128::MAX >> (128 - shift))).abs_diff(1 << (shift - 1)) <= gate
 }
 
 /// Round `(high + low·2^-128)·2^(n − 127)` to binary128, ties to even.
@@ -291,6 +304,244 @@ fn round(n: i32, high: u128, low: u128) -> f128 {
     // Adding the round bit to the packed form carries the significand into the
     // exponent, and `MAX` into `+∞`.
     f128::from_bits(packed + u128::from(up))
+}
+
+/// `x ≤ −80` rounds to −1: `e^-80 < 2^-115` sits inside the half ulp 2^-114
+/// below 1.  The bound doubles as the guard that keeps `⌊x·log2(e)⌋ ≥ −128`,
+/// so the frame of 1 never shifts the significand away entirely.
+const MINUS_ONE: u128 = ((BIAS + 6) as u128) << EXP_SHIFT | 1 << (EXP_SHIFT - 2);
+
+/// Below 2^-114 the quadratic term `x²/2 < 2^(2e+1)` stays under the half ulp
+/// `2^(e−114)` of `x`, so `e^x − 1` rounds to `x` itself.
+const TINY_EXPM1: u128 = ((BIAS - 114) as u128) << EXP_SHIFT;
+
+/// `|y| < 2^-18` leaves all three table indices zero, so the reduced fraction is
+/// itself the Taylor argument and `2^y − 1` comes out of [`near_zero`] with no
+/// cancellation at all.
+const POLY_LIMIT: u128 = 1 << 110;
+
+/// `|y| ≥ 2^-5` holds `|2^y − 1| ≥ 2^-5.6`, which [`subtract_one`] can normalize
+/// within the six leading zeros the fast leg's fifteen guard bits absorb.
+const FRAME_LIMIT: u128 = 1 << 123;
+
+/// Leading zeros of the subtracted frame the widened gate still covers.
+const MAX_SHIFT: u32 = 6;
+
+const _: () = assert!(MINUS_ONE == 80.0_f128.to_bits());
+
+/// e<sup>x</sup> − 1, correctly rounded where [`expq`] would cancel.
+///
+/// Near zero `e^x − 1 ≈ x`, so the engine's `2^f ∈ [1, 2)` is the wrong frame:
+/// subtracting 1 from it is exact but leaves only `128 − |log2 x|` significant
+/// bits.  Three legs cover the range instead:
+///
+/// - `|y| < 2^-18` — [`near_zero`] multiplies the whole 256-bit reduced
+///   fraction by the Taylor slope `(2^y − 1)/y`, so no bit is ever subtracted
+///   away.
+/// - `|y| ≥ 2^-5` — [`subtract_one`] takes the engine's fast leg and normalizes
+///   the difference, widening the Ziv gate by the shift it needed.
+/// - In between, and behind either gate, a 256-bit leg decides on its own:
+///   [`expm1_small`] near zero, [`expm1_accurate`] elsewhere.
+///
+/// The middle band has no fast leg because neither shape reaches it: the series
+/// would need seventeen terms where [`COEF`] carries thirteen, and the
+/// subtracted frame loses more bits than any gate covers.  It is the one slow
+/// spot, and the whole of this function's gap to CORE-MATH.
+#[must_use]
+pub fn expm1q(x: f128) -> f128 {
+    let bits = x.to_bits();
+    let magnitude = bits & !SIGN_MASK;
+    let negative = bits & SIGN_MASK != 0;
+
+    if magnitude >= SATURATE {
+        if magnitude > EXP_MASK {
+            return f128::from_bits(bits | QUIET_BIT);
+        }
+        return if negative { -1.0 } else { f128::INFINITY };
+    }
+    if negative && magnitude >= MINUS_ONE {
+        return -1.0;
+    }
+    if magnitude < TINY_EXPM1 {
+        return x;
+    }
+
+    let (m, e) = split(magnitude);
+    let y = reduce(m, e, LOG2E.head);
+    let small = y[2] == 0 && y[1] < POLY_LIMIT;
+    let decided = if y[2] != 0 || y[1] >= FRAME_LIMIT {
+        let y = signed(y, negative);
+        subtract_one(fast(y[2] as i32, y[1]))
+            .filter(|&(n, r, gate)| !undecided(n, r, gate))
+            .map(|(n, r, _)| round(n, r, 0))
+    } else if small {
+        let (n, r, low) = near_zero(y, negative);
+        (!undecided(n, r, ZIV_GATE)).then(|| round(n, r, low))
+    } else {
+        None
+    };
+    let value = decided.unwrap_or_else(|| {
+        if small {
+            expm1_small(m, e, y, negative)
+        } else {
+            expm1_accurate(m, e, negative)
+        }
+    });
+
+    with_sign(value, negative)
+}
+
+/// `|2^y − 1|` for `0 < |y| < 2^-18`, as `(exponent, significand scaled by
+/// 2^127, the bits below it)`.
+///
+/// Every table index is zero there, so the fraction is itself the Taylor
+/// argument.  Normalizing it *before* the product is what keeps the accuracy
+/// relative rather than absolute: [`slope`] holds `(2^y − 1)/y` to 2^-126
+/// whatever `y` is, and both halves of the product survive into [`round`].
+#[inline]
+fn near_zero(y: [u128; 3], negative: bool) -> (i32, u128, u128) {
+    let q = slope(y[1], negative);
+
+    // `|y| ≥ 2^-114` keeps the leading limb nonzero, so one funnel shift
+    // normalizes the fraction.
+    let shift = y[1].leading_zeros();
+    let u = (y[1] << shift) | (y[0] >> 1 >> (127 - shift));
+    let (high, low) = wmul(u, q);
+
+    // `q < 1` leaves the product one bit short of the frame at most.
+    let (high, low, shift) = if high >> 127 == 0 {
+        ((high << 1) | (low >> 127), low << 1, shift + 1)
+    } else {
+        (high, low, shift)
+    };
+    (-1 - shift as i32, high, low)
+}
+
+/// `(2^t − 1)/t` at scale 2^-128, from `|t| < 2^-18` and the sign of `t`.
+///
+/// Every Horner step keeps `|t·h|` far below the next coefficient, so the
+/// alternating series stays positive and the sign folds into a mask instead of
+/// a signed frame.
+#[inline]
+fn slope(t: u128, negative: bool) -> u128 {
+    let mask = if negative { u128::MAX } else { 0 };
+    let narrow = mask as u64;
+    let short = (t >> 64) as u64;
+    let mut tail = coefficient(6);
+
+    // Terms 4..=6 ride on `t^4 < 2^-72`, so 64-bit limbs hold them to 2^-136.
+    for k in (4..6).rev() {
+        let term = mul_hi_64(short, tail) ^ narrow;
+        tail = coefficient(k).wrapping_add(term.wrapping_sub(narrow));
+    }
+    let term = mhi(t, u128::from(tail) << 64) ^ mask;
+    let mut q = COEF[3][1].wrapping_add(term.wrapping_sub(mask));
+
+    for c in COEF[..3].iter().rev() {
+        let term = mhi(t, q) ^ mask;
+        q = c[1].wrapping_add(term.wrapping_sub(mask));
+    }
+    q
+}
+
+/// `|2^n·r/2^127 − 1|` from the fast leg, as `(exponent, significand, gate)`.
+///
+/// Above 1 the tighter frame is that of `2^n`, below it that of the subtracted
+/// one.  The leading zeros of the difference say how far the fast leg's error
+/// was magnified, and the gate widens by exactly that shift — past
+/// [`MAX_SHIFT`] no gate is left to widen.
+#[inline]
+const fn subtract_one((n, r): (i32, u128)) -> Option<(i32, u128, u128)> {
+    let (v, frame) = if n >= 0 {
+        // `n ≥ 128` puts the 1 below the frame.  The deficit is then under one
+        // unit — far inside the gate — so any tie it could cross falls back.
+        (r - if n < 128 { 1 << (127 - n) } else { 0 }, n)
+    } else {
+        ((r >> (-1 - n) as u32).wrapping_neg(), -1)
+    };
+    let shift = v.leading_zeros();
+
+    if shift > MAX_SHIFT {
+        return None;
+    }
+    Some((frame - shift as i32, v << shift, ZIV_GATE << shift))
+}
+
+/// [`expm1q`] at 256 bits for `|y| < 2^-18`, keeping relative rather than
+/// absolute accuracy.
+///
+/// `e^x − 1 = x·G(x)` with `G(x) = log2(e)·Q(y)`, and the significand `m` is
+/// exact, so the 384-bit product carries every bit of `G` plus a true sticky
+/// below it.  That is what settles `x = 2^-112`, where `x²/2` lands *on* a
+/// rounding tie and only the cubic term breaks it — 227 bits below the result,
+/// where the subtracted frame of [`expm1_accurate`] has nothing left.
+#[cold]
+#[inline(never)]
+fn expm1_small(m: u128, e: i32, y: [u128; 3], negative: bool) -> f128 {
+    let t = [y[0], y[1]];
+    let mut q = COEF[12];
+
+    // `y < 0` alternates the series; every step still keeps `|t·q|` below the
+    // next coefficient, so the unsigned frame holds.
+    for c in COEF[..12].iter().rev() {
+        let term = mul_hi_256(t, q);
+        q = if negative {
+            sub_256(*c, term)
+        } else {
+            add_256(*c, term)
+        };
+    }
+    let g = mul_hi_256(q, LOG2E.head);
+    let (high, low) = wmul(m, g[0]);
+    let (top, middle) = wmul(m, g[1]);
+    let (middle, carry) = high.overflowing_add(middle);
+
+    // `|x| = m·2^(e−112)` and `G = g·2^-252`, so the product lands at 2^(e−364).
+    let product = [low, middle, top + u128::from(carry)];
+    let shift = leading_zeros_384(product);
+    let p = shl_384(product, shift);
+
+    round(e + 19 - shift as i32, p[2], p[1] | u128::from(p[0] != 0))
+}
+
+/// [`expm1q`] at 256 bits, from the reduction up.
+///
+/// Away from zero the subtracted frame still leaves 238 bits or more, so this
+/// leg decides its half of the range on its own and needs no gate.
+#[cold]
+#[inline(never)]
+fn expm1_accurate(m: u128, e: i32, negative: bool) -> f128 {
+    let (n, r) = wide(m, e, negative, &LOG2E);
+    let (v, frame) = if n >= 0 {
+        let one = match n {
+            // Past 255 the 1 sits below the frame; one unit is the closest
+            // representable deficit and stays inside this leg's own error.
+            256.. => [1, 0],
+            128.. => [1 << (255 - n), 0],
+            _ => [0, 1 << (127 - n)],
+        };
+        let (low, borrow) = r[0].overflowing_sub(one[0]);
+        let high = r[1].wrapping_sub(one[1]).wrapping_sub(u128::from(borrow));
+        ([low, high], n)
+    } else {
+        let k = (-1 - n) as u32;
+        let shifted = [(r[0] >> k) | (r[1] << 1 << (127 - k)), r[1] >> k];
+        let (low, borrow) = 0_u128.overflowing_sub(shifted[0]);
+        let high = shifted[1].wrapping_neg().wrapping_sub(u128::from(borrow));
+        ([low, high], -1)
+    };
+
+    // `|2^y − 1| ≥ 2^-114` keeps the leading limb of the difference nonzero.
+    let shift = v[1].leading_zeros();
+    let high = (v[1] << shift) | (v[0] >> 1 >> (127 - shift));
+
+    round(frame - shift as i32, high, v[0] << shift)
+}
+
+/// Attach a sign to the magnitude [`round`] produced.
+#[inline]
+fn with_sign(magnitude: f128, negative: bool) -> f128 {
+    f128::from_bits(magnitude.to_bits() | if negative { SIGN_MASK } else { 0 })
 }
 
 #[cfg(test)]
@@ -391,6 +642,70 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "{name} gate covers only {:.2}× the slip at x={x:?}",
+            1.0 / worst
+        );
+    }
+
+    /// A random significand and sign at an exponent uniform over `[-114, 13]`,
+    /// the whole span [`expm1q`]'s fast legs see.
+    fn sample_expm1(i: u64) -> f128 {
+        let bits = u128::from(mix(i)) | u128::from(mix(i ^ 0x9E37_79B9)) << 64;
+        let exponent = (BIAS - 114) as u128 + (bits >> 120) % 128;
+
+        f128::from_bits(bits & SIGN_MASK | exponent << EXP_SHIFT | bits & MANTISSA_MASK)
+    }
+
+    /// The raw `(exponent, significand, gate)` of whichever [`expm1q`] fast leg
+    /// applies, or `None` where the accurate leg decides alone.
+    fn expm1_leg(x: f128) -> Option<(i32, u128, u128)> {
+        let (m, e) = split(x.to_bits() & !SIGN_MASK);
+        let negative = x.is_sign_negative();
+        let y = reduce(m, e, LOG2E.head);
+
+        if y[2] != 0 || y[1] >= FRAME_LIMIT {
+            let y = signed(y, negative);
+            subtract_one(fast(y[2] as i32, y[1]))
+        } else if y[1] < POLY_LIMIT {
+            let (n, r, _) = near_zero(y, negative);
+            Some((n, r, ZIV_GATE))
+        } else {
+            None
+        }
+    }
+
+    /// Both [`expm1q`] fast legs at once: the gate travels with the leg, so one
+    /// worst ratio certifies the widened frame gate and the near-zero one alike.
+    #[test]
+    fn expm1q_fast_legs_are_sound() {
+        let mut worst = 0.0;
+        let mut worst_x = 0.0;
+
+        for i in 0..SAMPLES {
+            let x = sample_expm1(i);
+
+            // `x ≤ −80` returns −1 outright, before any leg runs.
+            if x.to_bits() >= MINUS_ONE | SIGN_MASK {
+                continue;
+            }
+            let Some((n, r, gate)) = expm1_leg(x) else {
+                continue;
+            };
+            let unit = Float::with_val(PRECISION, 2).pow(n - 127);
+            let truth = Float::with_val(PRECISION, x).exp_m1().abs() / unit;
+            let ratio = Float::with_val(PRECISION, truth - Float::with_val(PRECISION, r))
+                .abs()
+                .to_f64()
+                / gate as f64;
+
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        println!("expm1q fast legs: worst |err|/gate = {worst:.4} at x={worst_x:?}");
+        assert!(
+            worst < 0.5,
+            "expm1q gate covers only {:.2}× the slip at x={worst_x:?}",
             1.0 / worst
         );
     }

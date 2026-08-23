@@ -14,7 +14,7 @@ mod roots;
 #[allow(dead_code)]
 mod uint;
 
-pub use exp::{exp2q, exp10q, expq};
+pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 

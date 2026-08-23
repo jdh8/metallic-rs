@@ -49,6 +49,9 @@ correctly rounded binary128 square root; `rsqrtq` and `cbrtq` use table-free
 seeds followed by exact integer midpoint correction for the final rounding.
 `expq`, `exp2q` and `exp10q` share one fixed-point engine for 2<sup>x·L</sup>,
 with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
+`expm1q` reuses that engine, plus a near-zero leg of its own for the range where
+subtracting 1 from 2<sup>f</sup> &isin; [1, 2) would cancel every bit that
+matters.
 
 ## Enable [fused multiply-add][fma] for best performance
 
@@ -179,7 +182,7 @@ Each function is done when both gates hold:
 | `cbrtq`  | ✅ |    |
 | `exp10q` | ✅ | 1.18× |
 | `exp2q`  | ✅ | 1.14× |
-| `expm1q` |    |    |
+| `expm1q` | ✅ | 1.42× |
 | `expq`   | ✅ | 1.19× |
 | `hypotq` | ✅ |    |
 | `logq`   |    |    |
