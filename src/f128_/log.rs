@@ -35,8 +35,8 @@
 
 use super::log_tables::{COEF, CRUDE, LN2, LOG0, LOG1, LOG2, RECIP0, RECIP1, RECIP2};
 use super::uint::{
-    add_256, add_384, extract_u128, leading_zeros_256, leading_zeros_384, mhi, mul_hi_64,
-    mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
+    add_256, add_384, any_below, extract_u128, leading_zeros_256, leading_zeros_384, mhi,
+    mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 
@@ -313,7 +313,7 @@ fn round(s: [u128; 3]) -> f128 {
     let shift = 271 - leading;
     let mantissa = extract_u128(magnitude, shift);
     let round_bit = magnitude[(shift as usize - 1) / 128] >> ((shift - 1) % 128) & 1;
-    let up = round_bit != 0 && (below(magnitude, shift - 1) || mantissa & 1 != 0);
+    let up = round_bit != 0 && (any_below(magnitude, shift - 1) || mantissa & 1 != 0);
 
     f128::from_bits(
         (u128::from(negative) << 127)
@@ -321,15 +321,6 @@ fn round(s: [u128; 3]) -> f128 {
                 + (mantissa - IMPLICIT_BIT)
                 + u128::from(up)),
     )
-}
-
-/// Whether any of the low `n` bits of a 384-bit value is set.
-fn below(x: [u128; 3], n: u32) -> bool {
-    let word = (n / 128) as usize;
-    let bits = n % 128;
-
-    x[..word].iter().any(|&limb| limb != 0)
-        || (bits != 0 && x[word] & (u128::MAX >> (128 - bits)) != 0)
 }
 
 #[cfg(test)]

@@ -53,7 +53,7 @@ FUNCS32=(
 )
 
 # binary128 pilots. Their q-suffixed corpus names match metallic's public API.
-FUNCS128=(sqrt rsqrt cbrt hypot exp exp2 exp10 expm1 log)
+FUNCS128=(sqrt rsqrt cbrt hypot exp exp2 exp10 expm1 log atan2)
 
 mkdir -p "$DEST"
 missing=0

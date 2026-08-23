@@ -71,6 +71,21 @@ former being the top limbs of the latter's tables. Its constants come from
 is left with `log(1+z)` alone and an exact `z`, and it takes that whole
 neighbourhood (`|log x| < 2^-16`) on its own.
 
+`atan2q` reduces on *dyadic breakpoints*: one float divide picks
+`i ≈ round(64·min/max)`, and because `i/64` is a 6-bit dyadic both sides of
+`tan(θ − atan(i/64))` are exact 128-bit integers (`dn ≤ 7` whenever `i ≥ 1`,
+so nothing overflows).  A float-seeded Newton reciprocal — no integer division
+anywhere — turns them into a 128-bit (fast) or 384-bit (accurate) quotient,
+always from below so every Newton residual stays nonnegative; `atan(i/64)`
+tables and the quadrant offsets 0, π/2, π add back in the same top-limbs-shared
+256/384 frame split as `logq`.  The first-quadrant `i = 0` band has no table
+term at all: `atan(t)` keeps its floating form the whole way, through subnormal
+results down to underflow-to-zero, which only the accurate leg's rounder
+handles — the fast leg rounds on a fixed 15-bit guard and bails below
+`f128::MIN_EXP`.  Constants come from `tools/gen_atan2_f128.py`, which also
+audits that every exact-ratio table sum (`|y/x| = i/64` collapses the result
+into pure constants) clears its nearest rounding boundary by 2^-122 or more.
+
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic
 full-representation samples, and MPFR precision-113 operation + ternary-aware

@@ -195,7 +195,17 @@ in the shadow of a division is already free, and removing it buys nothing
   the masks become literals (`964583a`: 1.13x -> 0.96x, the single biggest win
   of that campaign).  Ablate before redesigning a kernel — for binary128 exp,
   deleting a whole 128x128 multiply moved **nothing**, while deleting the
-  rounding masks moved 5 ns.
+  rounding masks moved 5 ns.  But read an ablation as bounding count *plus*
+  latency, not latency alone: stubbing binary128 atan2q's polynomial priced it
+  at 20 ns, yet halving its serial depth returned only 2.4 — back-to-back
+  bench iterations already overlapped the chain.
+- **Binary128 bivariate cost centers** (atan2q campaign, 1.58x -> 1.24x):
+  narrowing the whole fast pipeline from two `u128` limbs to one — reciprocal
+  top limb, quotient, polynomial, final product — bought the bulk; 3-mul
+  approximate high products (`mhi_approx`, ≤ 2 units short) and mask-select
+  add-or-sub over 50/50 quadrant branches the rest.  The open lead for the
+  remaining gap: CORE-MATH seeds its reciprocal with a 63-bit hardware divide
+  and needs one Newton step where an `f64` seed (51 bits) forces two.
 - **The real round-to-nearest dividends** (vs CORE-MATH's 4-mode burden):
   un-normalized dd returns consumed directly by the Ziv gate, and free FMA
   contraction in `crate::poly` (CORE-MATH's `FENV_ACCESS ON` inhibits it).

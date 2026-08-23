@@ -452,3 +452,8 @@ required-features = ["f128"]
 name = "logq"
 harness = false
 required-features = ["f128"]
+
+[[bench]]
+name = "atan2q"
+harness = false
+required-features = ["f128"]

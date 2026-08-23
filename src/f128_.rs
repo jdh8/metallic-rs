@@ -2,6 +2,8 @@
 #![allow(clippy::pedantic, clippy::approx_constant)]
 #![warn(clippy::unreadable_literal)]
 
+mod atan2;
+mod atan2_tables;
 mod exp;
 mod exp_tables;
 mod hypot;
@@ -16,6 +18,7 @@ mod roots;
 #[allow(dead_code)]
 mod uint;
 
+pub use atan2::atan2q;
 pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
 pub use log::logq;
