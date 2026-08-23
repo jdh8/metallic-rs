@@ -20,6 +20,7 @@ generator — regenerate with the script, never edit the table by hand.
 | `gen_lgamma_td.py` | triple-double `lgamma` accurate-path tables (`--inline` for consts) | `src/f64_/gamma_td_tables.rs` |
 | `gen_ln_exact_f64.py` | exact-`z` reduction cells for the `ln` fast leg | `src/f64_/log.rs` |
 | `gen_log2_exact_f64.py` | exact-`z` cells for the native base-2 `log2` fast leg | `src/f64_/log.rs` |
+| `gen_log_f128.py` | binary128 `log`: reciprocal + logarithm tables, `ln(2)` limbs, `1/(k+1)`, crude-log2 fit | `src/f128_/log_tables.rs` |
 | `gen_log_f64.py` | accurate-tier constants for the log family | `src/f64_/log.rs` |
 | `gen_pow_tables.py` | verbatim `Dint`/`Qint` literals from CORE-MATH `dint.h`/`qint.h` | `src/f64_/pow_consts.rs` |
 | `gen_trig_f64.py` | sin/cos/tan kernels, Cody–Waite π/2 words, Payne–Hanek 2/π | `src/f64_/trig.rs` |

@@ -27,7 +27,8 @@
 
 use super::exp_tables::{COEF, LOG2_10, LOG2E, ONE, Reduction, T0, T1, T2};
 use super::uint::{
-    add_256, add_384, leading_zeros_384, mhi, mul_hi_256, neg_384, shl_384, sub_256, wmul,
+    add_256, add_384, leading_zeros_384, mhi, mul_hi_64, mul_hi_256, neg_384, shl_384, sub_256,
+    wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 
@@ -312,12 +313,6 @@ fn wide(m: u128, e: i32, negative: bool, l: &Reduction) -> (i32, [u128; 2]) {
 #[inline]
 const fn coefficient(k: usize) -> u64 {
     (COEF[k][1] >> 64) as u64
-}
-
-/// High half of an unsigned 64×64-bit product.
-#[inline]
-const fn mul_hi_64(x: u64, y: u64) -> u64 {
-    ((x as u128 * y as u128) >> 64) as u64
 }
 
 /// Split the leading 18 bits of a fraction into the three table indices, and

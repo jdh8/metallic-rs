@@ -59,6 +59,18 @@ accurate leg there forms `e^x − 1 = x·G(x)` as an exact product with the *inp
 significand — the only structure that settles `x = 2^-112`, where `x²/2` lands
 on a rounding tie 227 bits down and only the cubic term breaks it.
 
+`logq` reduces in *log space*, which is why it needs no reciprocal-indexed log
+table: a per-bucket linear fit (`CRUDE`) estimates `j ≈ 2^18·log2(m)` to within
+0.9 of a unit, the three 6-bit slices of `j` index 31-bit reciprocals whose
+93-bit product with the 113-bit significand is a *single exact* `wmul`, and
+`log(x) = e·ln2 + ΣLOG_k[j_k] + log(1+z)` is summed in one fixed-point frame —
+256 bits at 2^-214 on the fast leg, 384 at 2^-342 on the accurate one, the
+former being the top limbs of the latter's tables. Its constants come from
+`tools/gen_log_f128.py`; regenerate rather than edit. Near 1 the sum cancels
+*exactly*: `LOG0[64]` is the same rounded constant as `LN2`, so the accurate leg
+is left with `log(1+z)` alone and an exact `z`, and it takes that whole
+neighbourhood (`|log x| < 2^-16`) on its own.
+
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic
 full-representation samples, and MPFR precision-113 operation + ternary-aware

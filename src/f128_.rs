@@ -5,6 +5,8 @@
 mod exp;
 mod exp_tables;
 mod hypot;
+mod log;
+mod log_tables;
 #[allow(dead_code)]
 mod misc;
 #[cfg(feature = "mpfr")]
@@ -16,6 +18,7 @@ mod uint;
 
 pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
+pub use log::logq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 
 // Internal binary128 primitives shared by the function implementations.

@@ -18,6 +18,13 @@ pub fn mhi(x: u128, y: u128) -> u128 {
     x.carrying_mul(y, 0).1
 }
 
+/// High half of an unsigned 64×64-bit product.
+#[must_use]
+#[inline]
+pub const fn mul_hi_64(x: u64, y: u64) -> u64 {
+    ((x as u128 * y as u128) >> 64) as u64
+}
+
 /// Exact `x²` as little-endian 128-bit limbs.
 #[must_use]
 #[inline]
@@ -122,11 +129,38 @@ pub fn mul_hi_256(a: [u128; 2], b: [u128; 2]) -> [u128; 2] {
     ]
 }
 
+/// `x << shift`, discarding whatever leaves the 256-bit window.
+#[must_use]
+#[inline]
+pub fn shl_256(x: [u128; 2], shift: u32) -> [u128; 2] {
+    debug_assert!(shift < 256);
+
+    if shift >= 128 {
+        return [0, x[0] << (shift - 128)];
+    }
+    // `>> 1 >> (127 - shift)` is `>> (128 - shift)` with the no-op case in range.
+    [
+        x[0] << shift,
+        (x[1] << shift) | (x[0] >> 1 >> (127 - shift)),
+    ]
+}
+
 /// Compare two 384-bit little-endian values.
 #[must_use]
 #[inline]
 pub fn cmp_384(a: [u128; 3], b: [u128; 3]) -> Ordering {
     a[2].cmp(&b[2]).then(a[1].cmp(&b[1])).then(a[0].cmp(&b[0]))
+}
+
+/// Leading zeros of a 256-bit little-endian value; 256 when it is zero.
+#[must_use]
+#[inline]
+pub const fn leading_zeros_256(x: [u128; 2]) -> u32 {
+    if x[1] != 0 {
+        x[1].leading_zeros()
+    } else {
+        128 + x[0].leading_zeros()
+    }
 }
 
 /// Leading zeros of a 384-bit little-endian value; 384 when it is zero.
@@ -178,6 +212,11 @@ mod tests {
         );
         assert_eq!(shl_384([1, 0, 0], 383), [0, 0, 1 << 127]);
         assert_eq!(add_384([u128::MAX, u128::MAX, 0], [1, 0, 0]), [0, 0, 1]);
+        assert_eq!(shl_256([1, 0], 0), [1, 0]);
+        assert_eq!(shl_256([1, 0], 129), [0, 2]);
+        assert_eq!(shl_256([u128::MAX, 0], 1), [u128::MAX - 1, 1]);
+        assert_eq!(leading_zeros_256([0, 0]), 256);
+        assert_eq!(leading_zeros_256([u128::MAX, 0]), 128);
         assert_eq!(leading_zeros_384([0, 0, 0]), 384);
         assert_eq!(leading_zeros_384([u128::MAX, 0, 0]), 256);
         assert_eq!(leading_zeros_384([0, 0, 1]), 127);

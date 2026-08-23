@@ -42,6 +42,7 @@ assert_eq!(metallic::sqrtq(4.0_f128), 2.0);
 assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
 assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
 assert_eq!(metallic::exp2q(10.0_f128), 1024.0);
+assert_eq!(metallic::logq(1.0_f128), 0.0);
 ```
 
 Run its tests with `cargo +nightly test --features f128`. `sqrtq` uses Rust's
@@ -51,7 +52,10 @@ seeds followed by exact integer midpoint correction for the final rounding.
 with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
 `expm1q` reuses that engine, plus a near-zero leg of its own for the range where
 subtracting 1 from 2<sup>f</sup> &isin; [1, 2) would cancel every bit that
-matters.
+matters.  `logq` reduces in log space instead: an 18-bit estimate of
+log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
+significand is exact, so the logarithms to add back are the only table the sum
+needs.
 
 ## Enable [fused multiply-add][fma] for best performance
 
@@ -185,7 +189,7 @@ Each function is done when both gates hold:
 | `expm1q` | ✅ | 1.42× |
 | `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ | 1.89× |
-| `logq`   |    |    |
+| `logq`   | ✅ | 1.07× |
 | `rsqrtq` | ✅ | 8.49× |
 | `sqrtq`  | ✅ | 1.92× |
 
