@@ -61,6 +61,56 @@ pub fn add_384(a: [u128; 3], b: [u128; 3]) -> [u128; 3] {
     [low, middle, high]
 }
 
+/// `-x` on a 384-bit little-endian two's complement value.
+#[must_use]
+#[inline]
+pub fn neg_384(x: [u128; 3]) -> [u128; 3] {
+    let (low, borrow) = 0_u128.overflowing_sub(x[0]);
+    let (middle, middle_borrow) = 0_u128.overflowing_sub(x[1]);
+    let (middle, propagated) = middle.overflowing_sub(u128::from(borrow));
+    let high = 0_u128
+        .wrapping_sub(x[2])
+        .wrapping_sub(u128::from(middle_borrow))
+        .wrapping_sub(u128::from(propagated));
+
+    [low, middle, high]
+}
+
+/// `a + b`, discarding the carry out of the 256-bit window.
+#[must_use]
+#[inline]
+pub fn add_256(a: [u128; 2], b: [u128; 2]) -> [u128; 2] {
+    let (low, carry) = a[0].overflowing_add(b[0]);
+    [low, a[1].wrapping_add(b[1]).wrapping_add(u128::from(carry))]
+}
+
+/// High 256 bits of an unsigned 256×256-bit product, little-endian.
+///
+/// The dropped tail makes the result up to two units of 2^-256 short of the
+/// exact quotient `⌊a·b / 2^256⌋`.
+#[must_use]
+#[inline]
+pub fn mul_hi_256(a: [u128; 2], b: [u128; 2]) -> [u128; 2] {
+    let (high, low) = wmul(a[1], b[1]);
+    let (cross_high, cross_low) = wmul(a[1], b[0]);
+    let (other_high, other_low) = wmul(a[0], b[1]);
+
+    // The two cross terms and the top of a[0]·b[0] all land one limb below the
+    // window, so only their carry into it survives.
+    let (_, carry) = cross_low.overflowing_add(other_low);
+    let (_, tail_carry) = cross_low
+        .wrapping_add(other_low)
+        .overflowing_add(mhi(a[0], b[0]));
+    let (middle, overflow) = cross_high.overflowing_add(other_high);
+    let (middle, spill) = middle.overflowing_add(u128::from(carry) + u128::from(tail_carry));
+    let (low, final_carry) = low.overflowing_add(middle);
+
+    [
+        low,
+        high + u128::from(overflow) + u128::from(spill) + u128::from(final_carry),
+    ]
+}
+
 /// Compare two 384-bit little-endian values.
 #[must_use]
 #[inline]

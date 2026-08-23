@@ -427,3 +427,18 @@ required-features = ["f128"]
 name = "hypotq"
 harness = false
 required-features = ["f128"]
+
+[[bench]]
+name = "expq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "exp2q"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "exp10q"
+harness = false
+required-features = ["f128"]

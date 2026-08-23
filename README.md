@@ -41,11 +41,14 @@ metallic = { version = "0.3.0", features = ["f128"] }
 assert_eq!(metallic::sqrtq(4.0_f128), 2.0);
 assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
 assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
+assert_eq!(metallic::exp2q(10.0_f128), 1024.0);
 ```
 
 Run its tests with `cargo +nightly test --features f128`. `sqrtq` uses Rust's
 correctly rounded binary128 square root; `rsqrtq` and `cbrtq` use table-free
 seeds followed by exact integer midpoint correction for the final rounding.
+`expq`, `exp2q` and `exp10q` share one fixed-point engine for 2<sup>x·L</sup>,
+with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
 
 ## Enable [fused multiply-add][fma] for best performance
 
@@ -174,10 +177,10 @@ Each function is done when both gates hold:
 |----------|:--:|:--|
 | `atan2q` |    |    |
 | `cbrtq`  | ✅ |    |
-| `exp10q` |    |    |
-| `exp2q`  |    |    |
+| `exp10q` | ✅ | 1.18× |
+| `exp2q`  | ✅ | 1.14× |
 | `expm1q` |    |    |
-| `expq`   |    |    |
+| `expq`   | ✅ | 1.19× |
 | `hypotq` | ✅ |    |
 | `logq`   |    |    |
 | `rsqrtq` | ✅ |    |

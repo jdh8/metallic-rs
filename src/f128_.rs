@@ -2,6 +2,8 @@
 #![allow(clippy::pedantic, clippy::approx_constant)]
 #![warn(clippy::unreadable_literal)]
 
+mod exp;
+mod exp_tables;
 mod hypot;
 #[allow(dead_code)]
 mod misc;
@@ -12,6 +14,7 @@ mod roots;
 #[allow(dead_code)]
 mod uint;
 
+pub use exp::{exp2q, exp10q, expq};
 pub use hypot::hypotq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 

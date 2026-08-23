@@ -13,6 +13,7 @@ generator — regenerate with the script, never edit the table by hand.
 | `gen_dint_trig.py` | `Dint` accurate-path trig constants (minimax sin/cos) | `src/f64_/trig.rs` |
 | `gen_erf_f64.py` | `erf`/`erfc` minimax + domain-split segments + `ERF_TABLE` cells | `src/f64_/erf.rs` |
 | `gen_erf_hard.py` | `ERFC_HARD` hard-to-round exception database | `src/f64_/erf.rs` |
+| `gen_exp_f128.py` | binary128 exp family: 2^(j/2^k) tables, `ln(2)^k/k!`, log2(e)/log2(10) limbs | `src/f128_/exp_tables.rs` |
 | `gen_exp_f64.py` | f64 `exp` table + reduction + double-double poly | `src/f64_/exp.rs` |
 | `gen_gamma_f64.py` | `tgamma` central minimax + recurrence + triple-double tail | `src/f64_/gamma.rs` |
 | `gen_inv_f64.py` | `ASIN_CELLS` (64-byte cells, per-cell Chebyshev, Ziv gate constants) | `src/f64_/atan.rs` |
