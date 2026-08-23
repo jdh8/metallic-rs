@@ -5,9 +5,9 @@
 //!
 //! 1. **Reduce.** `y = x·L` is formed as an exact 384-bit integer product of the
 //!    113-bit significand with a 256-bit `L`, then shifted into a fixed frame:
-//!    an integer part `n` and a 256-bit fraction `f ∈ [0, 1)`.  Two's
-//!    complement handles `x < 0`, so `n = ⌊y⌋` and `f = y − n` come out of the
-//!    same code path for both signs.
+//!    an integer part `n` and a fraction `f ∈ [0, 1)`, 128 bits wide on the fast
+//!    leg and 256 on the accurate one.  Two's complement handles `x < 0`, so
+//!    `n = ⌊y⌋` and `f = y − n` come out of the same code path for both signs.
 //! 2. **Look up.** The leading 18 bits of `f` index three 64-entry tables of
 //!    2<sup>j/64</sup>, 2<sup>j/4096</sup> and 2<sup>j/262144</sup>, leaving
 //!    `t < 2^-18` for the polynomial.
@@ -84,8 +84,8 @@ fn exp_generic(x: f128, l: &Reduction) -> f128 {
 
     let (m, e) = split(magnitude);
     let negative = bits & SIGN_MASK != 0;
-    let y = signed(reduce(m, e, l.head), negative);
-    let (n, r) = fast(y[2] as i32, y[1]);
+    let (n, f) = frame(m, e, l, negative);
+    let (n, r) = fast(n, f);
 
     if undecided(n, r, ZIV_GATE) {
         return accurate(m, e, negative, l);
@@ -125,13 +125,71 @@ fn reduce(m: u128, e: i32, head: [u128; 2]) -> [u128; 3] {
     ]
 }
 
-/// Apply the sign of `x` to a reduced `[fraction, integer]` triple.
+/// Bits `[shift, shift + 64)` of the 128-bit value `high:low`, for `shift < 64`.
+///
+/// `<< 1 << (63 - shift)` is `<< (64 - shift)` with the no-op case in range.
+#[inline]
+const fn funnel(low: u64, high: u64, shift: u32) -> u64 {
+    (low >> shift) | (high << 1 << (63 - shift))
+}
+
+/// Trailing zeros of a reduction constant's 256-bit head.
+#[inline]
+const fn trailing_zeros(head: [u128; 2]) -> u32 {
+    if head[0] == 0 {
+        128 + head[1].trailing_zeros()
+    } else {
+        head[0].trailing_zeros()
+    }
+}
+
+/// The fast leg's `(⌊y⌋, fraction scaled by 2^-128)` for `y = ±|x|·L`.
+///
+/// Only 143 bits of `m · head` survive the shift into the frame, so the window
+/// is cut from 64-bit limbs: a variable 128-bit shift costs a pair of
+/// conditional moves per limb, a 64-bit one is a single funnel.  The fraction
+/// starts at bit `shift + 128` of the 384-bit product and the integer part at
+/// `shift + 256`, which is limb `l + 2` and limb `l + 4` for `l = shift / 64`;
+/// limb 6 and up are zero because the product is at most 369 bits wide.
 ///
 /// Negating in two's complement is exactly the `⌊y⌋` / `y − ⌊y⌋` split for
-/// negative `y`, with the borrow moving the integer part down by one.  The
-/// complement is folded into a mask rather than a branch: the sign of a random
-/// argument is unpredictable, and a mispredict here costs more than the whole
-/// negation.
+/// negative `y`.  The borrow into the fraction is the *exact* test of whether
+/// the product has any bit below the window: `m · head` is `head`'s trailing
+/// zeros plus `m`'s, so it costs one count and one comparison — and folds away
+/// entirely for `expq` and `exp10q`, whose heads end too close to odd for any
+/// `m` to reach the window.  The complement itself is a mask rather than a branch: the
+/// sign of a random argument is unpredictable, and a mispredict here costs more
+/// than the whole negation.
+#[inline]
+fn frame(m: u128, e: i32, l: &Reduction, negative: bool) -> (i32, u128) {
+    let (top, middle) = wmul(m, l.head[1]);
+    let (middle, carry) = mhi(m, l.head[0]).overflowing_add(middle);
+    let top = top + u128::from(carry);
+    let shift = (108 - e) as u32;
+    let bits = shift & 63;
+
+    // `94 ≤ shift ≤ 228`, so the window starts at limb 3, 4 or 5.
+    let [mut low, mut high, mut integer] = [(middle >> 64) as u64, top as u64, (top >> 64) as u64];
+
+    if shift >= 128 {
+        [low, high, integer] = [high, integer, 0];
+    }
+    if shift >= 192 {
+        [low, high, integer] = [high, integer, 0];
+    }
+    let fraction =
+        u128::from(funnel(low, high, bits)) | u128::from(funnel(high, integer, bits)) << 64;
+    let mask = if negative { u128::MAX } else { 0 };
+    let borrow = negative && m.trailing_zeros() + trailing_zeros(l.head) >= shift + 128;
+    let (fraction, carry) = (fraction ^ mask).overflowing_add(u128::from(borrow));
+
+    (
+        ((integer >> bits) as i32 ^ mask as i32) + i32::from(carry),
+        fraction,
+    )
+}
+
+/// [`frame`]'s negation on the accurate leg's full 384-bit triple.
 #[inline]
 fn signed(y: [u128; 3], negative: bool) -> [u128; 3] {
     if negative { neg_384(y) } else { y }
@@ -607,9 +665,9 @@ mod ziv_soundness {
     /// The fast leg's raw `(exponent, significand)`, as [`exp_generic`] sees it.
     fn leg(x: f128, l: &Reduction) -> (i32, u128) {
         let (m, e) = split(x.to_bits() & !SIGN_MASK);
-        let y = signed(reduce(m, e, l.head), x.is_sign_negative());
+        let (n, f) = frame(m, e, l, x.is_sign_negative());
 
-        fast(y[2] as i32, y[1])
+        fast(n, f)
     }
 
     /// Worst `|leg − f| / ZIV_GATE` over the sample, the error measured in units
