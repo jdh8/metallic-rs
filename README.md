@@ -180,10 +180,10 @@ Each function is done when both gates hold:
 |----------|:--:|:--|
 | `atan2q` |    |    |
 | `cbrtq`  | ✅ |    |
-| `exp10q` | ✅ | 1.18× |
-| `exp2q`  | ✅ | 1.14× |
+| `exp10q` | ✅ | 0.93× |
+| `exp2q`  | ✅ | 0.94× |
 | `expm1q` | ✅ | 1.42× |
-| `expq`   | ✅ | 1.19× |
+| `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ |    |
 | `logq`   |    |    |
 | `rsqrtq` | ✅ |    |

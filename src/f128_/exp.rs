@@ -15,7 +15,9 @@
 //!    width that the seventh term already sits below 2^-142.
 //! 4. **Round.** The product of the three table entries with `2^t` is `2^f`,
 //!    which is exactly `[1, 2)`, so no renormalization is needed except for the
-//!    boundary carry.  `n` becomes the exponent field.
+//!    boundary carry.  `n` becomes the exponent field, and a normal result
+//!    always discards the same 15 low bits — only overflow and the subnormal
+//!    ladder need a variable shift, so they live in [`extreme`].
 //!
 //! Everything is unsigned fixed point: an `f128` multiply is soft-float on every
 //! target that has no hardware binary128, so integer limbs are both faster and
@@ -35,6 +37,12 @@ use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split
 /// (three table roundings, three truncated products, and the polynomial), so 32
 /// units leave the 2× soundness margin certified in [`ziv_soundness`].
 const ZIV_GATE: u128 = 32;
+
+/// The bits a normal result discards — the fast leg's 128 less binary128's 113
+/// — with the mask and the tie of the rounding they decide.
+const GUARD: u32 = 15;
+const GUARD_MASK: u128 = (1 << GUARD) - 1;
+const GUARD_HALF: u128 = 1 << (GUARD - 1);
 
 /// `|x| ≥ 2^15` overflows or underflows every member of the family.
 const SATURATE: u128 = ((BIAS + 15) as u128) << EXP_SHIFT;
@@ -87,6 +95,30 @@ fn exp_generic(x: f128, l: &Reduction) -> f128 {
     let (n, f) = frame(m, e, l, negative);
     let (n, r) = fast(n, f);
 
+    // A normal result always discards the same 15 bits, so the common path needs
+    // no variable shift at all.  Overflow and the subnormal ladder do, but only
+    // for 0.3% of the arguments, so their masks stay in [`extreme`].
+    if (n - (f128::MIN_EXP - 1)) as u32 > (f128::MAX_EXP - f128::MIN_EXP) as u32 {
+        return extreme(n, r, m, e, negative, l);
+    }
+    let rest = r & GUARD_MASK;
+
+    if rest.abs_diff(GUARD_HALF) <= ZIV_GATE {
+        return accurate(m, e, negative, l);
+    }
+    // The gate has already ruled out an exact tie, so the round bit decides.
+    f128::from_bits(
+        (((n + BIAS) as u128) << EXP_SHIFT)
+            + ((r >> GUARD) - IMPLICIT_BIT)
+            + u128::from(rest > GUARD_HALF),
+    )
+}
+
+/// The results a normal one's 15-bit rounding does not cover: overflow, and the
+/// subnormals that discard more.
+#[cold]
+#[inline(never)]
+fn extreme(n: i32, r: u128, m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {
     if undecided(n, r, ZIV_GATE) {
         return accurate(m, e, negative, l);
     }
@@ -189,7 +221,8 @@ fn frame(m: u128, e: i32, l: &Reduction, negative: bool) -> (i32, u128) {
     )
 }
 
-/// [`frame`]'s negation on the accurate leg's full 384-bit triple.
+/// [`frame`]'s negation on a full 384-bit triple, for the callers that need the
+/// whole reduced fraction: the accurate leg and [`expm1q`].
 #[inline]
 fn signed(y: [u128; 3], negative: bool) -> [u128; 3] {
     if negative { neg_384(y) } else { y }
