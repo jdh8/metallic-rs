@@ -14,9 +14,10 @@
 //!    a 6-bit dyadic, numerator and denominator are *exact* in 128-bit limbs
 //!    (`dn ≤ 7` whenever `i ≥ 1`), and the reduced tangent `T` stays below
 //!    2^-6.98.
-//! 4. **Divide.** A float-seeded Newton reciprocal — no integer division
-//!    anywhere — yields `T` to 128 bits (fast) or 384 bits (accurate), always
-//!    from below, as a floating fraction with its own exponent.
+//! 4. **Divide.** One hardware 128-by-64 divide against the denominator's top
+//!    limb seeds a Newton reciprocal that yields `T` to 128 bits (fast) or 384
+//!    bits (accurate), always from below, as a floating fraction with its own
+//!    exponent.
 //! 5. **Evaluate.** `atan(T) = T·(1 − Σ (−1)^k T^{2k}/(2k+3))`: the Taylor tail
 //!    needs ten terms at the fast width, eighteen at the accurate one, in the
 //!    same tiered fixed point as the rest of the family.

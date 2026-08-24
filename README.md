@@ -60,9 +60,9 @@ log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
 significand is exact, so the logarithms to add back are the only table the sum
 needs.  `atan2q` reduces on dyadic breakpoints: one float divide picks
 `i ≈ round(64·min/max)`, the 6-bit dyadic `i/64` makes both sides of
-tan(θ &minus; atan(i/64)) exact 128-bit integers, and a float-seeded Newton
-reciprocal &mdash; no integer division anywhere &mdash; divides them to 128 or
-384 bits before the atan(i/64) table and the quadrant offset add back.
+tan(θ &minus; atan(i/64)) exact 128-bit integers, and one hardware 128-by-64
+divide seeds the Newton reciprocal that divides them to 128 or 384 bits before
+the atan(i/64) table and the quadrant offset add back.
 
 ## Enable [fused multiply-add][fma] for best performance
 
@@ -189,7 +189,7 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `atan2q` | ✅ | 1.24× |
+| `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
 | `exp2q`  | ✅ | 0.94× |
