@@ -16,11 +16,14 @@ wrote from scratch, so I decided to rewrite them in Rust.
 ## Usage
 
 The functions follow the C / libm naming convention: bare names operate on
-`f64`, and the `f` suffix marks the `f32` variant, so the crate is a drop-in
-replacement for `libm` and `core-math`.  Every C99 transcendental ships in
-both precisions, plus the C23 additions `sinpi`, `cospi`, `tanpi`, `asinpi`,
+`f64`, and the `f` suffix marks the `f32` variant.  Like [CORE-MATH], Metallic
+focuses on difficult correctly rounded functions rather than the complete
+libc/libm surface.  Every C99 transcendental ships in both precisions, plus
+selected C23 functions and extensions: `sinpi`, `cospi`, `tanpi`, `asinpi`,
 `acospi`, `atanpi`, `atan2pi`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`,
 `rsqrt`, and `compound` (and their `f` variants) — all correctly rounded.
+
+[CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 
 ```rust
 assert_eq!(metallic::exp(0.0), 1.0); // f64
@@ -98,24 +101,6 @@ on a newer CPU will trap with `SIGILL` on an older one.
 [fma]: https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation
 [double-rounding]: https://en.wikipedia.org/wiki/Rounding#Double_rounding
 
-## Using faster functions from [CORE-MATH]
-
-I struggle to make some functions faster than [CORE-MATH].  You can enable the
-[`core-math`](crate) feature in your `Cargo.toml`:
-
-```toml
-[dependencies]
-metallic = { version = "0.2.0", features = ["core-math"] }
-```
-
-This would replace the following functions with those from
-[`core-math`][crate]:
-
-- `powf`, which is notoriously hard to round correctly
-
-[CORE-MATH]: https://core-math.gitlabpages.inria.fr/
-[crate]: https://crates.io/crates/core-math
-
 ## Assumptions
 
 C libraries tend to have strict yet obsolete assumptions on math functions.
@@ -150,34 +135,26 @@ library is the default [rounding half to even][round-even].
 
 ### Non-goals
 
-- I skip rounding functions such as `rint`, `round`, and `trunc` because
-  - They are likely to be a single instruction on modern CPUs.
-  - Rust already provides
-    [`f32::round_ties_even`](https://doc.rust-lang.org/std/primitive.f32.html#method.round_ties_even),
-    [`f32::round`](https://doc.rust-lang.org/std/primitive.f32.html#method.round),
-    [`f32::trunc`](https://doc.rust-lang.org/std/primitive.f32.html#method.trunc),
-    etc.
-  - Their software implementations are slow and tedious, unlike `fabs`.
+- Most simple rounding and utility functions, such as `rint`, `trunc`, and
+  `fabs`, are out of scope.  They typically map to a single instruction or an
+  existing Rust primitive method; Metallic focuses on functions whose correct
+  rounding requires nontrivial algorithms.
 
 ## Milestones
 
-- [x] Real `f32`/`float` functions in [`<math.h>`][math]
-  - [x] Exponential functions
-  - [x] Logarithm with constant base
-  - [x] Power with arbitrary base
-  - [x] Trigonometric and hyperbolic functions
-  - [x] Miscellaneous elementary functions
-  - [x] Non-elementary functions (optional)
-- [ ] Complex `f32`/`float` functions in [`<complex.h>`][complex]
-- [x] Real `f64`/`double` functions in [`<math.h>`][math]
-  - [x] Exponential functions
-  - [x] Logarithm with constant base
-  - [x] Power with arbitrary base
-  - [x] Trigonometric and hyperbolic functions
-  - [x] Miscellaneous elementary functions
-  - [x] Non-elementary functions (optional)
-- [ ] Complex `f64`/`double` functions in [`<complex.h>`][complex]
-- [ ] Real `f128`/binary128 functions (`q` suffix; nightly) — see
+- [x] C99 transcendental and special functions for `f32` and `f64`, all
+      correctly rounded:
+  - Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+  - Hyperbolic: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
+  - Exponential, logarithmic, power, and root: `exp`, `exp2`, `expm1`, `log`,
+    `log2`, `log10`, `log1p`, `pow`, `cbrt`, `hypot`
+  - Error and gamma: `erf`, `erfc`, `tgamma`, `lgamma`
+- [x] Selected C23 functions and extensions for `f32` and `f64`, all correctly
+      rounded: `sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`, `atanpi`,
+      `atan2pi`, `exp10`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`, `rsqrt`,
+      `compound`, and `sincos`
+- [ ] Complex `f32` and `f64` functions from [`<complex.h>`][complex]
+- [ ] Expand the real `f128`/binary128 functions (`q` suffix; nightly) — see
       [Binary128 status](#binary128-status)
 
 ### Binary128 status
@@ -203,5 +180,4 @@ Each function is done when both gates hold:
 | `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 0.87× |
 
-[math]: https://en.cppreference.com/w/c/numeric/math
 [complex]: https://en.cppreference.com/w/c/numeric/complex
