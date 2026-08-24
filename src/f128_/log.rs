@@ -203,11 +203,11 @@ fn scale(e: i32, l: [u128; 2]) -> [u128; 2] {
 
 /// `log(1 + z)` scaled by 2^145, from `z` at the same scale.
 ///
-/// Only the last product needs all of `z`: a Horner step answers a correction
-/// under 2^-18.7, so the narrower `z·2^128` lands its truncation 2^-147 below
-/// the result and saves the whole chain a shift.  The Taylor tail rides on
-/// `z^4 < 2^-74` and holds to 2^-138 in 64-bit limbs — a quarter of the
-/// multiplier work of the 128-bit steps, which start where that no longer
+/// Only the last product needs all of `z`: a polynomial step answers a
+/// correction under 2^-18.7, so the narrower `z·2^128` lands its truncation
+/// 2^-147 below the result and saves the whole chain a shift.  The Taylor tail
+/// rides on `z^4 < 2^-74` and holds to 2^-138 in 64-bit limbs — a quarter of
+/// the multiplier work of the 128-bit steps, which start where that no longer
 /// suffices.
 #[inline]
 fn log1p(z: i128) -> i128 {
@@ -218,12 +218,25 @@ fn log1p(z: i128) -> i128 {
     for k in (4..6).rev() {
         tail = coefficient(k) - mul_hi_i64(short, tail);
     }
-    let mut q = COEF[3][1].wrapping_sub(mul_hi_i128(narrow, (tail as u128) << 64) as u128);
+    // Balanced instead of Horner: both leaves and the powers of `narrow`
+    // overlap each other and the 64-bit tail, so the serial chain is two
+    // products shorter.  `n⁴ < 2^-74` at scale 2^128 fits one limb, making
+    // the tail's join a single 64-bit product.
+    let a = COEF[0][1].wrapping_sub(mul_hi_i128(narrow, COEF[1][1]) as u128);
+    let b = COEF[2][1].wrapping_sub(mul_hi_i128(narrow, COEF[3][1]) as u128);
+    let nn = sqr_hi(narrow);
+    let n4 = mhi_approx(nn, nn);
+    let q = a
+        .wrapping_add(mhi_approx(nn, b))
+        .wrapping_add(u128::from(mul_hi_64(n4 as u64, tail as u64)));
 
-    for c in COEF[..3].iter().rev() {
-        q = c[1].wrapping_sub(mul_hi_i128(narrow, q) as u128);
-    }
     mul_hi_i128(z, q) << 1
+}
+
+/// High half of `x²` for a signed `x`, up to two units short.
+#[inline]
+fn sqr_hi(x: i128) -> u128 {
+    mhi_approx(x as u128, x as u128).wrapping_sub((((x >> 127) as u128) & (x as u128)) << 1)
 }
 
 /// The `k`-th Taylor coefficient truncated to 64 bits, scaled by 2^-63.

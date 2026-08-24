@@ -199,7 +199,7 @@ Each function is done when both gates hold:
 | `expm1q` | ✅ | 0.94× |
 | `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ | 1.01× |
-| `logq`   | ✅ | 1.07× |
+| `logq`   | ✅ | 1.00× |
 | `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 0.87× |
 
