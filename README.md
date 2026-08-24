@@ -55,14 +55,17 @@ same power series in r²z &minus; 1.
 with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
 `expm1q` reuses that engine above 2<sup>&minus;6</sup>; below, a Taylor
 correction rides on top of the exact input significand, so subtracting 1 from
-2<sup>f</sup> &isin; [1, 2) never gets to cancel the bits that matter.  `logq` reduces in log space instead: an 18-bit estimate of
+2<sup>f</sup> &isin; [1, 2) never gets to cancel the bits that matter.
+`logq` reduces in log space instead: an 18-bit estimate of
 log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
 significand is exact, so the logarithms to add back are the only table the sum
 needs.  `atan2q` reduces on dyadic breakpoints: one float divide picks
 `i ≈ round(64·min/max)`, the 6-bit dyadic `i/64` makes both sides of
 tan(θ &minus; atan(i/64)) exact 128-bit integers, and one hardware 128-by-64
 divide seeds the Newton reciprocal that divides them to 128 or 384 bits before
-the atan(i/64) table and the quadrant offset add back.
+the atan(i/64) table and the quadrant offset add back &mdash; every variable
+shift along the way cut out of 64-bit limbs, since LLVM has no 128-bit funnel
+shift.
 
 ## Enable [fused multiply-add][fma] for best performance
 
