@@ -267,3 +267,25 @@ pub const COEF: [[u128; 2]; 13] = [
     [0xa2ee61ced55dbe2c_a23eed317239744d, 0x000000001c3bd650_fc2985e2b5687e17],
     [0xf71b19cdfd03e10e_e2954a2eb9b19357, 0x0000000001816193_166d0f96281ac300],
 ];
+
+/// `1/(j + 2)!` for `j = 0..=14`, scaled by 2^128: the Taylor coefficients of
+/// `h(x) = (e^x - 1 - x)/x^2`, whose sign-folded Horner sums drive the
+/// `expm1q` fast legs below 2^-6.
+#[rustfmt::skip]
+pub const INV_FACT: [u128; 15] = [
+    0x8000000000000000_0000000000000000,
+    0x2aaaaaaaaaaaaaaa_aaaaaaaaaaaaaaab,
+    0x0aaaaaaaaaaaaaaa_aaaaaaaaaaaaaaab,
+    0x0222222222222222_2222222222222222,
+    0x005b05b05b05b05b_05b05b05b05b05b0,
+    0x000d00d00d00d00d_00d00d00d00d00d0,
+    0x0001a01a01a01a01_a01a01a01a01a01a,
+    0x00002e3bc74aad8e_671f5583911ca003,
+    0x0000049f93edde27_d71cbbc05b4fa99a,
+    0x0000006b99159fd5_138e3f9d1f92e0df,
+    0x00000008f76c77fc_6c4bdaa26d4c3d68,
+    0x00000000b092309d_43684be51c198e92,
+    0x000000000c9cba54_603e4e905d6f8a2f,
+    0x0000000000d73f9f_399dc0f88ec32b58,
+    0x00000000000d73f9_f399dc0f88ec32b6,
+];

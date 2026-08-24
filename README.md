@@ -53,9 +53,9 @@ decide; `sqrtq` rides the same seed as `rsqrtq` and corrects s = r·z by the
 same power series in r²z &minus; 1.
 `expq`, `exp2q` and `exp10q` share one fixed-point engine for 2<sup>x·L</sup>,
 with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
-`expm1q` reuses that engine, plus a near-zero leg of its own for the range where
-subtracting 1 from 2<sup>f</sup> &isin; [1, 2) would cancel every bit that
-matters.  `logq` reduces in log space instead: an 18-bit estimate of
+`expm1q` reuses that engine above 2<sup>&minus;6</sup>; below, a Taylor
+correction rides on top of the exact input significand, so subtracting 1 from
+2<sup>f</sup> &isin; [1, 2) never gets to cancel the bits that matter.  `logq` reduces in log space instead: an 18-bit estimate of
 log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
 significand is exact, so the logarithms to add back are the only table the sum
 needs.  `atan2q` reduces on dyadic breakpoints: one float divide picks
@@ -193,7 +193,7 @@ Each function is done when both gates hold:
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
 | `exp2q`  | ✅ | 0.94× |
-| `expm1q` | ✅ | 1.42× |
+| `expm1q` | ✅ | 0.94× |
 | `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ | 1.01× |
 | `logq`   | ✅ | 1.07× |

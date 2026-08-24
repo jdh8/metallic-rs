@@ -25,7 +25,7 @@
 //! needs; when the discarded 15 bits sit within [`ZIV_GATE`] of a rounding tie
 //! the accurate leg redoes the same steps at 256 bits.
 
-use super::exp_tables::{COEF, LOG2_10, LOG2E, ONE, Reduction, T0, T1, T2};
+use super::exp_tables::{COEF, INV_FACT, LOG2_10, LOG2E, ONE, Reduction, T0, T1, T2};
 use super::uint::{
     add_256, add_384, leading_zeros_384, mhi, mul_hi_64, mul_hi_256, neg_384, shl_384, sub_256,
     wmul,
@@ -222,8 +222,8 @@ fn frame(m: u128, e: i32, l: &Reduction, negative: bool) -> (i32, u128) {
     )
 }
 
-/// [`frame`]'s negation on a full 384-bit triple, for the callers that need the
-/// whole reduced fraction: the accurate leg and [`expm1q`].
+/// [`frame`]'s negation on a full 384-bit triple, for the accurate leg's whole
+/// reduced fraction.
 #[inline]
 fn signed(y: [u128; 3], negative: bool) -> [u128; 3] {
     if negative { neg_384(y) } else { y }
@@ -401,17 +401,21 @@ const MINUS_ONE: u128 = ((BIAS + 6) as u128) << EXP_SHIFT | 1 << (EXP_SHIFT - 2)
 /// `2^(e−114)` of `x`, so `e^x − 1` rounds to `x` itself.
 const TINY_EXPM1: u128 = ((BIAS - 114) as u128) << EXP_SHIFT;
 
-/// `|y| < 2^-18` leaves all three table indices zero, so the reduced fraction is
-/// itself the Taylor argument and `2^y − 1` comes out of [`near_zero`] with no
-/// cancellation at all.
+/// `|y| < 2^-18` keeps [`expm1_small`]'s thirteen-term series converged; the
+/// fallback routing tests it on the reduced fraction.
 const POLY_LIMIT: u128 = 1 << 110;
 
-/// `|y| ≥ 2^-5` holds `|2^y − 1| ≥ 2^-5.6`, which [`subtract_one`] can normalize
-/// within the six leading zeros the fast leg's fifteen guard bits absorb.
-const FRAME_LIMIT: u128 = 1 << 123;
+/// `|x| ≥ 2^-6` goes to the engine's frame: `|e^x − 1| > 2^-6.02` there, which
+/// [`subtract_one`] can normalize within [`MAX_SHIFT`].
+const FRAME_EXP: i32 = -6;
 
-/// Leading zeros of the subtracted frame the widened gate still covers.
-const MAX_SHIFT: u32 = 6;
+/// `|x| ≥ 2^-19` needs [`expm1_mid`]'s fifteen Taylor terms; below,
+/// [`expm1_tiny`]'s six reach the same depth.
+const MID_EXP: i32 = -19;
+
+/// Leading zeros of the subtracted frame the widened gate still covers: the
+/// deepest cancellation [`FRAME_EXP`] admits is `1 − e^(−2^-6) > 2^-6.02`.
+const MAX_SHIFT: u32 = 7;
 
 const _: () = assert!(MINUS_ONE == 80.0_f128.to_bits());
 
@@ -419,20 +423,17 @@ const _: () = assert!(MINUS_ONE == 80.0_f128.to_bits());
 ///
 /// Near zero `e^x − 1 ≈ x`, so the engine's `2^f ∈ [1, 2)` is the wrong frame:
 /// subtracting 1 from it is exact but leaves only `128 − |log2 x|` significant
-/// bits.  Three legs cover the range instead:
+/// bits.  The exponent of `x` picks one of three legs:
 ///
-/// - `|y| < 2^-18` — [`near_zero`] multiplies the whole 256-bit reduced
-///   fraction by the Taylor slope `(2^y − 1)/y`, so no bit is ever subtracted
-///   away.
-/// - `|y| ≥ 2^-5` — [`subtract_one`] takes the engine's fast leg and normalizes
-///   the difference, widening the Ziv gate by the shift it needed.
-/// - In between, and behind either gate, a 256-bit leg decides on its own:
-///   [`expm1_small`] near zero, [`expm1_accurate`] elsewhere.
-///
-/// The middle band has no fast leg because neither shape reaches it: the series
-/// would need seventeen terms where [`COEF`] carries thirteen, and the
-/// subtracted frame loses more bits than any gate covers.  It is the one slow
-/// spot, and the whole of this function's gap to CORE-MATH.
+/// - `|x| ≥ 2^-6` — the engine's fast leg, and [`subtract_one`] normalizes the
+///   difference, widening the Ziv gate by the shift it needed.
+/// - `|x| < 2^-6` — no log2(e) reduction at all: `|e^x − 1| = a·(1 ± d)` for
+///   `x = ±a` with `d = a·h(±a)` and `h(x) = (e^x − 1 − x)/x²`, so the
+///   correction `d < 2^-7` rides *on top of* the exact significand of `x` and
+///   no bit is ever subtracted away.  [`expm1_mid`] sums `h` as even and odd
+///   halves of [`INV_FACT`]; below 2^-19 [`expm1_tiny`]'s six terms suffice.
+/// - Behind either gate, a 256-bit leg decides on its own: [`expm1_small`]
+///   for `|y| < 2^-18`, [`expm1_accurate`] elsewhere.
 #[must_use]
 pub fn expm1q(x: f128) -> f128 {
     let bits = x.to_bits();
@@ -453,81 +454,123 @@ pub fn expm1q(x: f128) -> f128 {
     }
 
     let (m, e) = split(magnitude);
-    let y = reduce(m, e, LOG2E.head);
-    let small = y[2] == 0 && y[1] < POLY_LIMIT;
-    let decided = if y[2] != 0 || y[1] >= FRAME_LIMIT {
-        let y = signed(y, negative);
-        subtract_one(fast(y[2] as i32, y[1]))
+
+    if e >= FRAME_EXP {
+        let (n, f) = frame(m, e, &LOG2E, negative);
+        let decided = subtract_one(fast(n, f))
             .filter(|&(n, r, gate)| !undecided(n, r, gate))
-            .map(|(n, r, _)| round(n, r, 0))
-    } else if small {
-        let (n, r, low) = near_zero(y, negative);
-        (!undecided(n, r, ZIV_GATE)).then(|| round(n, r, low))
+            .map(|(n, r, _)| round(n, r, 0));
+        let value = decided.unwrap_or_else(|| expm1_accurate(m, e, negative));
+        return with_sign(value, negative);
+    }
+    let (n, r, low) = if e >= MID_EXP {
+        expm1_mid(m << 15, e, negative)
     } else {
-        None
+        expm1_tiny(m << 15, e, negative)
     };
-    let value = decided.unwrap_or_else(|| {
-        if small {
+    let value = if undecided(n, r, ZIV_GATE) {
+        let y = reduce(m, e, LOG2E.head);
+
+        if y[2] == 0 && y[1] < POLY_LIMIT {
             expm1_small(m, e, y, negative)
         } else {
             expm1_accurate(m, e, negative)
         }
-    });
+    } else {
+        round(n, r, low)
+    };
 
     with_sign(value, negative)
 }
 
-/// `|2^y − 1|` for `0 < |y| < 2^-18`, as `(exponent, significand scaled by
-/// 2^127, the bits below it)`.
-///
-/// Every table index is zero there, so the fraction is itself the Taylor
-/// argument.  Normalizing it *before* the product is what keeps the accuracy
-/// relative rather than absolute: [`slope`] holds `(2^y − 1)/y` to 2^-126
-/// whatever `y` is, and both halves of the product survive into [`round`].
+/// `1/(j + 2)!` truncated to 64 bits, scaled by 2^-64.
 #[inline]
-fn near_zero(y: [u128; 3], negative: bool) -> (i32, u128, u128) {
-    let q = slope(y[1], negative);
-
-    // `|y| ≥ 2^-114` keeps the leading limb nonzero, so one funnel shift
-    // normalizes the fraction.
-    let shift = y[1].leading_zeros();
-    let u = (y[1] << shift) | (y[0] >> 1 >> (127 - shift));
-    let (high, low) = wmul(u, q);
-
-    // `q < 1` leaves the product one bit short of the frame at most.
-    let (high, low, shift) = if high >> 127 == 0 {
-        ((high << 1) | (low >> 127), low << 1, shift + 1)
-    } else {
-        (high, low, shift)
-    };
-    (-1 - shift as i32, high, low)
+const fn inv_factorial_64(j: usize) -> u64 {
+    (INV_FACT[j] >> 64) as u64
 }
 
-/// `(2^t − 1)/t` at scale 2^-128, from `|t| < 2^-18` and the sign of `t`.
+/// `|e^x − 1|` for `2^-19 ≤ |x| < 2^-6`, as `(exponent, significand scaled by
+/// 2^127, the bits below it)`.
 ///
-/// Every Horner step keeps `|t·h|` far below the next coefficient, so the
-/// alternating series stays positive and the sign folds into a mask instead of
-/// a signed frame.
+/// `h(x) = (e^x − 1 − x)/x²` splits into even and odd sums of [`INV_FACT`] in
+/// `w = a²` — two short all-positive Horner chains that overlap, with the sign
+/// folded into the single combining add.
 #[inline]
-fn slope(t: u128, negative: bool) -> u128 {
+fn expm1_mid(m15: u128, e: i32, negative: bool) -> (i32, u128, u128) {
+    let t = m15 >> (-1 - e) as u32;
+    let w = mhi(t, t);
+    let short = (w >> 64) as u64;
+
+    // The last two terms of each chain ride on `w^6 < 2^-72`, so 64-bit limbs
+    // hold them to 2^-136.
+    let tail = inv_factorial_64(12) + mul_hi_64(short, inv_factorial_64(14));
+    let mut even = INV_FACT[10] + mhi(w, u128::from(tail) << 64);
+
+    for j in [8, 6, 4, 2, 0] {
+        even = INV_FACT[j] + mhi(w, even);
+    }
+    let tail = inv_factorial_64(11) + mul_hi_64(short, inv_factorial_64(13));
+    let mut odd = INV_FACT[9] + mhi(w, u128::from(tail) << 64);
+
+    for j in [7, 5, 3, 1] {
+        odd = INV_FACT[j] + mhi(w, odd);
+    }
+    // `h ≈ 1/2` dwarfs the odd half `a·Q(a²) < 2^-8`, so the difference stays
+    // far from zero and the sign is a mask, not a branch.
+    let mask = if negative { u128::MAX } else { 0 };
+    let h = even.wrapping_add((mhi(t, odd) ^ mask).wrapping_sub(mask));
+
+    apply_correction(m15, mhi(t, h), e, negative)
+}
+
+/// [`expm1_mid`] below 2^-19, where six terms of `h` already reach 2^-134: the
+/// alternating series keeps every Horner step positive, so the sign folds into
+/// masks instead of a signed frame.
+#[inline]
+fn expm1_tiny(m15: u128, e: i32, negative: bool) -> (i32, u128, u128) {
+    let t = m15 >> (-1 - e) as u32;
     let mask = if negative { u128::MAX } else { 0 };
     let narrow = mask as u64;
     let short = (t >> 64) as u64;
-    let mut tail = coefficient(6);
 
-    // Terms 4..=6 ride on `t^4 < 2^-72`, so 64-bit limbs hold them to 2^-136.
-    for k in (4..6).rev() {
-        let term = mul_hi_64(short, tail) ^ narrow;
-        tail = coefficient(k).wrapping_add(term.wrapping_sub(narrow));
-    }
+    // Terms 4..=5 ride on `a^4 < 2^-76`, so 64-bit limbs hold them to 2^-140.
+    let term = mul_hi_64(short, inv_factorial_64(5)) ^ narrow;
+    let tail = inv_factorial_64(4).wrapping_add(term.wrapping_sub(narrow));
     let term = mhi(t, u128::from(tail) << 64) ^ mask;
-    let mut q = COEF[3][1].wrapping_add(term.wrapping_sub(mask));
+    let mut h = INV_FACT[3].wrapping_add(term.wrapping_sub(mask));
 
-    for c in COEF[..3].iter().rev() {
-        let term = mhi(t, q) ^ mask;
-        q = c[1].wrapping_add(term.wrapping_sub(mask));
+    for j in [2, 1, 0] {
+        let term = mhi(t, h) ^ mask;
+        h = INV_FACT[j].wrapping_add(term.wrapping_sub(mask));
     }
-    q
+    apply_correction(m15, mhi(t, h), e, negative)
+}
+
+/// `s·(1 ± d)` on the exact significand `s = m15/2^128` of `|x|`: `|e^x − 1|`
+/// as `(exponent, significand scaled by 2^127, the bits below it)`, from the
+/// correction `d = a·h(±a) < 2^-7` scaled by 2^128.
+///
+/// The product `m15·d` is exact at 256 bits and the sum moves the leading bit
+/// at most one place either way, only when the significand sits within `d` of
+/// a binade edge — both carry branches are rare and well predicted.  The sign
+/// of `x` is a coin flip, so it stays mask arithmetic throughout.
+#[inline]
+fn apply_correction(m15: u128, d: u128, e: i32, negative: bool) -> (i32, u128, u128) {
+    let (hi, lo) = wmul(m15, d);
+    let mask = if negative { u128::MAX } else { 0 };
+    let low = (lo ^ mask).wrapping_sub(mask);
+    let signed = (hi ^ mask).wrapping_add(u128::from(negative && lo == 0));
+    let (high, carried) = m15.overflowing_add(signed);
+
+    // Two's complement wraps whenever the correction subtracts, so the true
+    // carry out is the flag *relative to the sign*.
+    if carried != negative {
+        (e + 1, 1 << 127 | high >> 1, high << 127 | low >> 1)
+    } else if high >> 127 != 0 {
+        (e, high, low)
+    } else {
+        (e - 1, high << 1 | low >> 127, low << 1)
+    }
 }
 
 /// `|2^n·r/2^127 − 1|` from the fast leg, as `(exponent, significand, gate)`.
@@ -742,21 +785,21 @@ mod ziv_soundness {
     }
 
     /// The raw `(exponent, significand, gate)` of whichever [`expm1q`] fast leg
-    /// applies, or `None` where the accurate leg decides alone.
+    /// applies.
     fn expm1_leg(x: f128) -> Option<(i32, u128, u128)> {
         let (m, e) = split(x.to_bits() & !SIGN_MASK);
         let negative = x.is_sign_negative();
-        let y = reduce(m, e, LOG2E.head);
 
-        if y[2] != 0 || y[1] >= FRAME_LIMIT {
-            let y = signed(y, negative);
-            subtract_one(fast(y[2] as i32, y[1]))
-        } else if y[1] < POLY_LIMIT {
-            let (n, r, _) = near_zero(y, negative);
-            Some((n, r, ZIV_GATE))
-        } else {
-            None
+        if e >= FRAME_EXP {
+            let (n, f) = frame(m, e, &LOG2E, negative);
+            return subtract_one(fast(n, f));
         }
+        let (n, r, _) = if e >= MID_EXP {
+            expm1_mid(m << 15, e, negative)
+        } else {
+            expm1_tiny(m << 15, e, negative)
+        };
+        Some((n, r, ZIV_GATE))
     }
 
     /// Both [`expm1q`] fast legs at once: the gate travels with the leg, so one

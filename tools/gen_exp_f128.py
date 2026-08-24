@@ -86,3 +86,15 @@ pub const COEF: [[u128; 2]; 13] = [""")
 for k in range(1, 14):
     print(f"    {pair(LN2 ** k / factorial(k), 256)},")
 print("];")
+
+print("""
+/// `1/(j + 2)!` for `j = 0..=14`, scaled by 2^128: the Taylor coefficients of
+/// `h(x) = (e^x - 1 - x)/x^2`, whose sign-folded Horner sums drive the
+/// `expm1q` fast legs below 2^-6.
+#[rustfmt::skip]
+pub const INV_FACT: [u128; 15] = [""")
+for k in range(2, 17):
+    fixed = int(mp.nint(1 / factorial(k) * mpf(2) ** 128))
+    assert 0 < fixed < 1 << 128
+    print(f"    {hexs(fixed, 32)},")
+print("];")
