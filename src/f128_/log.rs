@@ -36,19 +36,20 @@
 use super::log_tables::{COEF, CRUDE, LN2, LOG0, LOG1, LOG2, RECIP0, RECIP1, RECIP2};
 use super::uint::{
     add_256, add_384, any_below, extract_u128, funnel, funnel_down, leading_zeros_256,
-    leading_zeros_384, mhi, mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
+    leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 
 /// Half-width of the rounding-tie window the fast leg refuses to decide, in
 /// units of its frame's 2^-214.
 ///
-/// The leg's slip is absolute, not relative: `z` is cut at 2^-145 and the
-/// polynomial answers at the same width, for at most four units of it — 2^-143,
-/// or 2^71 of the frame.  Four times that costs nothing (a normal result's tie
-/// window is 2^86 wide at the very floor, 2^112 at the typical magnitude) and
-/// leaves the margin certified in [`ziv_soundness`].
-const ZIV_GATE: u128 = 1 << 74;
+/// The leg's slip is absolute, not relative: `z` is cut at 2^-145, the
+/// polynomial answers at the same width, and its [`mhi_approx`] products each
+/// fall up to two units short, for under six units of 2^-143 — 2^73.5 of the
+/// frame.  Twice that still costs nothing (a normal result's tie window is
+/// 2^86 wide at the very floor, 2^112 at the typical magnitude) and leaves the
+/// margin certified in [`ziv_soundness`].
+const ZIV_GATE: u128 = 1 << 75;
 
 /// The fast leg's floor, as a bound on the frame's high limb: below
 /// `|log x| = 2^-16` its absolute slip is worth fewer than fifteen guard bits,
@@ -239,14 +240,15 @@ const fn mul_hi_i64(x: i64, y: i64) -> i64 {
     ((x as i128 * y as i128) >> 64) as i64
 }
 
-/// High half of a signed × unsigned 128×128-bit product.
+/// High half of a signed × unsigned 128×128-bit product, up to two units
+/// short — [`mhi_approx`]'s slack, which [`ZIV_GATE`] budgets for.
 ///
 /// The sign correction is an arithmetic mask, not a select: a select on the
 /// loop-invariant sign of `z` invites LLVM to clone the whole Horner chain
 /// behind a 50/50 branch.
 #[inline]
 fn mul_hi_i128(x: i128, y: u128) -> i128 {
-    mhi(x as u128, y).wrapping_sub(((x >> 127) as u128) & y) as i128
+    mhi_approx(x as u128, y).wrapping_sub(((x >> 127) as u128) & y) as i128
 }
 
 /// [`logq`] at 384 bits, from the exact reduction the fast leg started from.
