@@ -5,14 +5,86 @@ use super::{
 };
 use core::cmp::Ordering;
 
+/// Half-width, in units of the candidate's 2^-125, of the rounding-tie window
+/// [`sqrtq`] refuses to decide from the fast candidate and hands to the exact
+/// midpoint walk instead.  [`sqrt_fixed`] is analytically within a handful of
+/// units of the true square root; [`ziv_soundness`] certifies the ≥ 2× margin
+/// the project requires.
+const SQRT_GATE: u128 = 32;
+
 /// The square root.
 #[must_use]
 #[inline]
 pub fn sqrtq(x: f128) -> f128 {
-    if x.is_nan() {
-        return f128::from_bits(x.to_bits() | QUIET_BIT);
+    let bits = x.to_bits();
+    let magnitude = bits & !SIGN_MASK;
+
+    if magnitude > EXP_MASK {
+        return f128::from_bits(bits | QUIET_BIT);
     }
-    x.sqrt()
+    if magnitude == 0 {
+        return x;
+    }
+    if bits & SIGN_MASK != 0 {
+        return f128::NAN;
+    }
+    if magnitude == EXP_MASK {
+        return x;
+    }
+
+    let (mantissa, exponent) = split(magnitude);
+    let w = exponent.rem_euclid(2);
+    let scale = exponent.div_euclid(2);
+
+    let candidate = sqrt_fixed(mantissa, w);
+    // Round the Q125 candidate to 113 bits.  Composing the bits by adding the
+    // significand onto a BIAS − 1 exponent field lets a carry out of the
+    // rounding land on an exact 2 instead of overflowing the mantissa; a
+    // square root is always normal, so the 2^scale factor folds into the same
+    // field for free.
+    let rounded =
+        f128::from_bits((((BIAS - 1 + scale) as u128) << EXP_SHIFT) + ((candidate + 4096) >> 13));
+    let rest = candidate & 8191;
+
+    if rest.abs_diff(4096) <= SQRT_GATE {
+        correct_sqrt(mantissa, exponent, rounded)
+    } else {
+        rounded
+    }
+}
+
+/// `sqrt(z)·2^125` for `z = mantissa·2^(w−112) ∈ [1, 4)`, within
+/// [`SQRT_GATE`]/2 units of 2^-125.
+///
+/// The same frame as [`rsqrt_fixed`] on the same seed: `r = R·2^-63 ≈
+/// z^(-1/2)` from [`rsqrt64`], then `s = r·z` misses the square root by
+/// `(1 + h)^(-1/2) ≈ 1 + |h|/2 + ⅜h²` with `h = r²z − 1` strictly negative,
+/// and both correction terms are short exact-width products.  With
+/// `|h| ≤ 2^-42`, the dropped 5⁄16·|h|³ term is below 2^-1 units and each
+/// shift truncation costs at most a few units.
+fn sqrt_fixed(mantissa: u128, w: i32) -> u128 {
+    let r = rsqrt64(mantissa, w);
+    let z = mantissa << (14 + w); // z·2^126, exact
+    // |h|·2^124: the square of r is exact in u128 and the 128×128 high product
+    // runs at most two units short, an overshoot of |h| the gate absorbs.
+    let hp = (1 << 124) - mhi_approx(u128::from(r) * u128::from(r), z);
+
+    // s·2^125 = r·z as one 64×128-bit product, truncated.
+    let s0 = u128::from(r) * (z >> 64) + ((u128::from(r) * (z & u128::from(u64::MAX))) >> 64);
+
+    // s·|h|/2·2^125 = s0·hp·2^-125.  Unlike [`rsqrt_fixed`], whose series
+    // multiplier is exactly the stored `r`, the multiplier here must carry the
+    // full width of `s0`: a 64-bit truncation of `s` costs `2^-63·|h|·2^249 ≈
+    // 2^17` units.  `hp < 2^81`, so pre-shifting by 3 cannot overflow.
+    let linear = mhi_approx(s0, hp << 3);
+    #[allow(clippy::cast_possible_truncation)]
+    let hs = u128::from((hp >> 28) as u64); // |h|·2^96
+    #[allow(clippy::cast_possible_truncation)]
+    let s64 = (s0 >> 62) as u64; // s·2^63, plenty for the quadratic term
+    // ⅜h²s·2^125; 3/8 is dyadic, so the shifts fold it in exactly.
+    let quadratic = (((hs * hs) >> 68) * 3 * u128::from(s64)) >> 65;
+
+    s0 + linear + quadratic
 }
 
 /// Half-width, in units of the candidate's 2^-124, of the rounding-tie window
@@ -75,6 +147,26 @@ pub fn rsqrtq(x: f128) -> f128 {
 /// exact-width products.  With `|h| ≤ 2^-42`, the dropped 5⁄16·h³ term is
 /// below 2^-4 units and each shift truncation costs at most a few units.
 fn rsqrt_fixed(mantissa: u128, w: i32) -> u128 {
+    let r = rsqrt64(mantissa, w);
+    let z = mantissa << (14 + w); // z·2^126, exact
+    // |h|·2^124: the square of r is exact in u128 and the 128×128 high product
+    // runs at most two units short, an overshoot of |h| the gate absorbs.
+    let hp = (1 << 124) - mhi_approx(u128::from(r) * u128::from(r), z);
+
+    // r·|h|/2·2^124 as one 64×128-bit product.
+    let linear = u128::from(r) * (hp >> 64) + ((u128::from(r) * (hp & u128::from(u64::MAX))) >> 64);
+    #[allow(clippy::cast_possible_truncation)]
+    let hs = u128::from((hp >> 28) as u64); // |h|·2^96
+    // ⅜h²r·2^124; 3/8 is dyadic, so the shifts fold it in exactly.
+    let quadratic = (((hs * hs) >> 68) * 3 * u128::from(r)) >> 66;
+
+    (u128::from(r) << 61) + linear + quadratic
+}
+
+/// `z^(-1/2)·2^63` for `z = mantissa·2^(w−112) ∈ [1, 4)`, strictly below the
+/// true value and within ~2^-43 of it — the shared seed of [`rsqrt_fixed`]
+/// and [`sqrt_fixed`].
+fn rsqrt64(mantissa: u128, w: i32) -> u64 {
     // Degree-2 Taylor expansion of m^(-1/2) from the nearest of 64 interval
     // centers c = 1 + (2i+1)/128: within 2^-22.6 of the true value, so the
     // Newton step below lands within 2^-43.7.
@@ -98,21 +190,9 @@ fn rsqrt_fixed(mantissa: u128, w: i32) -> u128 {
     let t = (3 << 61) - mul_hi_64(m64, r2); // (3 − m·r0²)·2^61
     let u = mul_hi_64(r0, t); // r0·(3 − m·r0²)·2^60
     #[allow(clippy::cast_possible_truncation)]
-    let r = (((u128::from(u) * u128::from(rsqrt_tables::NEWTON[w as usize])) >> 61) as u64) - 64;
-
-    let z = mantissa << (14 + w); // z·2^126, exact
-    // |h|·2^124: the square of r is exact in u128 and the 128×128 high product
-    // runs at most two units short, an overshoot of |h| the gate absorbs.
-    let hp = (1 << 124) - mhi_approx(u128::from(r) * u128::from(r), z);
-
-    // r·|h|/2·2^124 as one 64×128-bit product.
-    let linear = u128::from(r) * (hp >> 64) + ((u128::from(r) * (hp & u128::from(u64::MAX))) >> 64);
-    #[allow(clippy::cast_possible_truncation)]
-    let hs = u128::from((hp >> 28) as u64); // |h|·2^96
-    // ⅜h²r·2^124; 3/8 is dyadic, so the shifts fold it in exactly.
-    let quadratic = (((hs * hs) >> 68) * 3 * u128::from(r)) >> 66;
-
-    (u128::from(r) << 61) + linear + quadratic
+    {
+        (((u128::from(u) * u128::from(rsqrt_tables::NEWTON[w as usize])) >> 61) as u64) - 64
+    }
 }
 
 /// Half-width, in units of the candidate's 2^-123, of the rounding-tie window
@@ -257,6 +337,36 @@ fn mul3(a: u128, b: u128, c: u128) -> [u128; 3] {
     [low, middle, high]
 }
 
+/// Round an approximate square root of `mantissa * 2^(exponent-112)` by exact
+/// midpoint tests: `sqrt(x)` is below `L` iff `x < L²`, and `L²` is a single
+/// exact [`wmul`].
+fn correct_sqrt(mantissa: u128, exponent: i32, mut candidate: f128) -> f128 {
+    loop {
+        let bits = candidate.to_bits();
+        let (m, e) = parts(bits as i128);
+        let (lower, upper) = midpoints(m);
+        // x vs L² = l²·2^(2e−228): scale both by 2^(228−2e), so the input
+        // side is mantissa·2^(116 + exponent − 2e) with the shift in [114, 117].
+        let input = shl_384([mantissa, 0, 0], (116 + exponent - 2 * e) as u32);
+        let odd = bits & 1 != 0;
+
+        let (high, low) = wmul(lower, lower);
+        let side = cmp_384(input, [low, high, 0]);
+        if side == Ordering::Less || side == Ordering::Equal && odd {
+            candidate = f128::from_bits(bits - 1);
+            continue;
+        }
+
+        let (high, low) = wmul(upper, upper);
+        let side = cmp_384(input, [low, high, 0]);
+        if side == Ordering::Greater || side == Ordering::Equal && odd {
+            candidate = f128::from_bits(bits + 1);
+            continue;
+        }
+        return candidate;
+    }
+}
+
 /// Round an approximate reciprocal square root by exact midpoint tests.
 fn correct_rsqrt(mantissa: u128, exponent: i32, mut candidate: f128) -> f128 {
     loop {
@@ -308,9 +418,9 @@ fn correct_cbrt(mantissa: u128, remainder: i32, mut candidate: f128) -> f128 {
     }
 }
 
-/// MPFR certification that [`CBRT_GATE`] and [`RSQRT_GATE`] cover the true
-/// errors of [`cbrt_fixed`] and [`rsqrt_fixed`] with the 2× margin the project
-/// requires.  Run with
+/// MPFR certification that [`SQRT_GATE`], [`CBRT_GATE`] and [`RSQRT_GATE`]
+/// cover the true errors of [`sqrt_fixed`], [`cbrt_fixed`] and
+/// [`rsqrt_fixed`] with the 2× margin the project requires.  Run with
 /// `CC=clang cargo +nightly test --release --features "f128 mpfr"`.
 #[cfg(all(test, feature = "mpfr"))]
 mod ziv_soundness {
@@ -358,6 +468,43 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "cbrtq gate covers only {:.2}× the slip at m={:#x} w={}",
+            1.0 / worst,
+            worst_at.0,
+            worst_at.1
+        );
+    }
+
+    /// Worst `|candidate − sqrt(z)·2^125| / SQRT_GATE` over random reduced
+    /// arguments — exactly the units the gate compares.
+    #[test]
+    fn sqrt_candidate_is_sound() {
+        let mut worst = 0.0;
+        let mut worst_at = (0, 0);
+
+        for i in 0..SAMPLES {
+            let mantissa = (u128::from(mix(i)) << 64 | u128::from(mix(i ^ 0x9E37_79B9)))
+                & MANTISSA_MASK
+                | IMPLICIT_BIT;
+            let w = (mix(i ^ 0xABCD) % 2) as i32;
+            let candidate = sqrt_fixed(mantissa, w);
+            let z =
+                Float::with_val(PRECISION, mantissa) * Float::with_val(PRECISION, 2).pow(w - 112);
+            let truth = z.sqrt() * Float::with_val(PRECISION, 2).pow(125);
+            let slip: Float = truth - Float::with_val(PRECISION, candidate);
+            let ratio = slip.abs().to_f64() / SQRT_GATE as f64;
+
+            if ratio > worst {
+                worst = ratio;
+                worst_at = (mantissa, w);
+            }
+        }
+        println!(
+            "sqrtq fast candidate: worst |err|/gate = {worst:.4} at m={:#x} w={}",
+            worst_at.0, worst_at.1
+        );
+        assert!(
+            worst < 0.5,
+            "sqrtq gate covers only {:.2}× the slip at m={:#x} w={}",
             1.0 / worst,
             worst_at.0,
             worst_at.1

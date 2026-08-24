@@ -34,14 +34,18 @@ Building the `core-math` oracle for binary128 needs **`CC=clang`** — CORE-MATH
 `core-math-sys` fails to link.  The CI f128 jobs set it; set it locally too.
 
 Public names follow libquadmath and CORE-MATH's `q` suffix (`sqrtq`, `rsqrtq`,
-`cbrtq`, `hypotq`, `expq`, `exp2q`, `exp10q`).  `sqrtq` delegates to Rust's
-correctly rounded `f128::sqrt`.  `rsqrtq` and `cbrtq` are pure fixed point on
-one shared frame: a degree-2 Taylor table of `m^(-1/2)` / `m^(-1/3)` values
+`cbrtq`, `hypotq`, `expq`, `exp2q`, `exp10q`).  `sqrtq`, `rsqrtq` and `cbrtq`
+are pure fixed point on one shared frame: a degree-2 Taylor table of `m^(-1/2)`
+/ `m^(-1/3)` values
 (`tools/gen_rsqrt_f128.py`, `tools/gen_cbrt_f128.py` — mathematical constants,
 not fitted) plus one folded integer Newton step seeds `r` to ~2^-44, a
 power-series correction of the residual `h = r²z − 1` / `r³z − 1` reaches
 2^-119, and 11 guard bits round directly, keeping the exact midpoint walk only
-for the `RSQRT_GATE`/`CBRT_GATE` tie window (~3%).  `hypotq` needs no Ziv fallback at all: capping the
+for the `RSQRT_GATE`/`CBRT_GATE` tie window (~3%).  `sqrtq` rides the same
+`rsqrt64` seed, corrects `s = r·z` by `(1+h)^(-1/2)`, and rounds on 13 guard
+bits (`SQRT_GATE` tie window ~0.8%); its series multiplier must be the full
+Q125 `s0`, not a 64-bit truncation — the seed `r` is exact by definition but
+`s` is not.  `hypotq` needs no Ziv fallback at all: capping the
 exponent gap at 56 makes `a² + b²` an exact 384-bit integer, so two exact
 comparisons decide the last bit.  The shared wide-integer primitives live in
 `src/f128_/uint.rs`.
