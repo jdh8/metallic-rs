@@ -52,10 +52,11 @@ const GUARD_HALF: u128 = 1 << (GUARD - 1);
 /// units of 2^-15 of the result's last bit.
 ///
 /// The leg's slip is relative and its floor is the single-limb pipeline: the
-/// rounded reciprocal limb and the truncated quotient each cost 2^-127 of `T`,
-/// the truncated `atan` products about as much again, the rounded `T²` word
-/// and the tables far less.  Under 2^-125 relative in all, a tenth of one gate
-/// unit at the worst ulp ratio — the margin certified in [`ziv_soundness`].
+/// two-unit reciprocal and the truncated quotient each cost a few times 2^-127
+/// of `T`, the truncated `atan` products about as much again, the rounded `T²`
+/// word and the tables far less.  Under 2^-123.5 relative in all, a sixth of
+/// the gate at the worst ulp ratio — the margin certified in
+/// [`ziv_soundness`].
 const ZIV_GATE: u128 = 64;
 
 /// The two-argument arc tangent, `atan(y/x)` in the quadrant of `(x, y)`.
@@ -189,27 +190,38 @@ fn reduce(ay: u128, ax: u128, xneg: bool) -> Reduction {
     }
 }
 
-/// `(2^254/d)·(1 − δ)` with `0 ≤ δ < 2^-99`, for `d ∈ [2^127, 2^128)`: the
-/// float-seeded first Newton iterate every reciprocal here refines.  Every
-/// step in this family truncates toward zero and Newton converges from below,
-/// so no iterate ever exceeds its target — which keeps the refinements'
-/// residuals provably nonnegative.
-fn half_recip(d: u128) -> u128 {
-    // 51-bit seed `v ≈ 2^126·2^64/d`, clamped so `v << 65` stays in range.
-    // The divisor narrows to `u64` first: a `u128` conversion is a libcall.
-    let v = (((1u128 << 126) as f64 / ((d >> 64) as u64 as f64)) as u64).min((1 << 63) - 1);
-    // `⌊v·(2^128 − ⌊v·d/2^63⌋)/2^63⌋ − 2`: the floors overshoot Newton by at
-    // most one each, so the −2 keeps this iterate below target like the rest.
-    let q = mhi(u128::from(v) << 65, d).wrapping_neg();
-    let (high, low) = wmul(u128::from(v), q);
+/// `(2^254/d)·(1 − δ)` with `0 ≤ δ < 2^-125`, for `d ∈ [2^127, 2^128)`: the
+/// reciprocal both legs start from.  Every step in this family truncates
+/// toward zero and Newton converges from below, so no iterate ever exceeds its
+/// target — which keeps the refinements' residuals provably nonnegative.
+///
+/// The seed is a *hardware* 128-by-64 divide against the top limb, worth a
+/// full 64 bits where an `f64` seed is worth 51 — so one Newton step lands
+/// where two used to, and the third-order companion term (a dozen units wide
+/// at this seed width, one 64-bit multiply) pays for the limb the divide
+/// dropped.
+fn recip_128(d: u128) -> u128 {
+    let dh = d >> 64;
+    let dl = d & u64::MAX as u128;
+    // `r ∈ [2^191/d − 3, 2^191/d]`: dropping `dl` costs under two units and
+    // the floor one more, so `−2` is what keeps the seed below its target.
+    let r = ((1u128 << 127) / dh) - 2;
+    // `e = ⌈(2^191 − d·r)/2^64⌉ < 3·2^64`, the residual in the seed's units.
+    let e = (1u128 << 127) - (dh * r + ((dl * r) >> 64));
+    // Newton's `r·e/2^64`, then Halley's `c·e/2^127` — the latter only needs
+    // its top few bits, so both operands narrow to 32 bits first.
+    let c = ((r * (e & u64::MAX as u128)) >> 64) + r * (e >> 64);
+    let c2 = ((c >> 32) * (e >> 32)) >> 63;
 
-    ((high << 65) | (low >> 63)).saturating_sub(2)
+    // The two floors can each round the correction up by one; `−1` is enough
+    // to keep the whole iterate at or below `2^254/d`.
+    (r << 63) + c + c2 - 1
 }
 
-/// `(2^382/d)·(1 − δ)` with `0 ≤ δ < 2^-190`: the accurate leg's base, one
-/// full-width Newton doubling past [`half_recip`].
+/// `(2^382/d)·(1 − δ)` with `0 ≤ δ < 2^-249`: the accurate leg's base, one
+/// full-width Newton doubling past [`recip_128`].
 fn recip_256(d: u128) -> [u128; 2] {
-    let r = half_recip(d);
+    let r = recip_128(d);
     let (dh, dl) = wmul(d, r);
     let residual = sub_256([0, 1 << 126], [dl, dh]);
     let c = wmul_128x256(r, residual);
@@ -220,7 +232,7 @@ fn recip_256(d: u128) -> [u128; 2] {
     )
 }
 
-/// `(2^510/d)·(1 − δ)` with `0 ≤ δ < 2^-370`: one more Newton step.
+/// `(2^510/d)·(1 − δ)` with `0 ≤ δ < 2^-380`: one more Newton step.
 fn recip_384(d: u128) -> [u128; 3] {
     let r = recip_256(d);
     let p = wmul_128x256(d, r);
@@ -230,20 +242,8 @@ fn recip_384(d: u128) -> [u128; 3] {
     add_384([0, r[0], r[1]], [c[0], c[1], 0])
 }
 
-/// `(2^254/d)·(1 − δ)` with `0 ≤ δ < 2^-123`, for `d ∈ [2^127, 2^128)`: the
-/// fast leg's reciprocal.  The second refinement corrects at most 27 bits, so
-/// one 64×64 product of the residual's and iterate's tops delivers it whole.
-fn recip_128(d: u128) -> u128 {
-    let r = half_recip(d);
-    let (dh, dl) = wmul(d, r);
-    let residual = sub_256([0, 1 << 126], [dl, dh]);
-    let top = ((residual[1] << 37) | (residual[0] >> 91)) as u64;
-
-    r + ((u128::from((r >> 63) as u64) * u128::from(top)) >> 100)
-}
-
 /// The reduced ratio as a floating 128-bit fraction: the value is
-/// `t1·2^(et−128)` with `t1 ∈ [2^127, 2^128)`, off by under 2^-123 of it —
+/// `t1·2^(et−128)` with `t1 ∈ [2^127, 2^128)`, off by under 2^-125 of it —
 /// slip the fast leg's gate absorbs with room certified in [`ziv_soundness`].
 fn quotient_128(r: &Reduction) -> (u128, i32) {
     let (high, low) = wmul(r.numerator, recip_128(r.denominator));
