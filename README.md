@@ -46,11 +46,10 @@ assert_eq!(metallic::logq(1.0_f128), 0.0);
 ```
 
 Run its tests with `cargo +nightly test --features f128`. `sqrtq` uses Rust's
-correctly rounded binary128 square root; `rsqrtq` uses a table-free seed
-followed by exact integer midpoint correction for the final rounding, while
-`cbrtq` seeds a fixed-point z<sup>&minus;1/3</sup> from a degree-2 Taylor table
-(function values, no fitted coefficients) and keeps the midpoint walk only for
-the rounding-tie window its 11 guard bits cannot decide.
+correctly rounded binary128 square root, while `rsqrtq` and `cbrtq` seed a
+fixed-point z<sup>&minus;1/2</sup> / z<sup>&minus;1/3</sup> from degree-2
+Taylor tables (function values, no fitted coefficients) and keep the midpoint
+walk only for the rounding-tie window their 11 guard bits cannot decide.
 `expq`, `exp2q` and `exp10q` share one fixed-point engine for 2<sup>x·L</sup>,
 with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
 `expm1q` reuses that engine, plus a near-zero leg of its own for the range where
@@ -197,7 +196,7 @@ Each function is done when both gates hold:
 | `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ | 1.89× |
 | `logq`   | ✅ | 1.07× |
-| `rsqrtq` | ✅ | 8.49× |
+| `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 1.92× |
 
 [math]: https://en.cppreference.com/w/c/numeric/math

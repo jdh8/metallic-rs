@@ -16,6 +16,7 @@ mod misc;
 #[doc(hidden)]
 pub mod mpfr;
 mod roots;
+mod rsqrt_tables;
 #[allow(dead_code)]
 mod uint;
 

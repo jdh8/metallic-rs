@@ -1,8 +1,7 @@
-use super::cbrt_tables::{NEWTON, SEED_CURVE, SEED_SLOPE, SEED_VALUE};
 use super::uint::{cmp_384, mhi_approx, mul_hi_64, shl_384, wmul};
 use super::{
-    BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, MANTISSA_MASK, Magnitude, QUIET_BIT, SIGN_MASK,
-    fma128, normalize, split,
+    BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, MANTISSA_MASK, QUIET_BIT, SIGN_MASK, cbrt_tables,
+    rsqrt_tables, split,
 };
 use core::cmp::Ordering;
 
@@ -15,6 +14,13 @@ pub fn sqrtq(x: f128) -> f128 {
     }
     x.sqrt()
 }
+
+/// Half-width, in units of the candidate's 2^-124, of the rounding-tie window
+/// [`rsqrtq`] refuses to decide from the fast candidate and hands to the exact
+/// midpoint walk instead.  [`rsqrt_fixed`] is analytically within a handful of
+/// units of the true reciprocal square root; [`ziv_soundness`] certifies the
+/// ≥ 2× margin the project requires.
+const RSQRT_GATE: u128 = 32;
 
 /// The reciprocal square root.
 #[must_use]
@@ -36,21 +42,77 @@ pub fn rsqrtq(x: f128) -> f128 {
         return 0.0;
     }
 
-    let (_, Magnitude::Normalized(magnitude)) = normalize(x) else {
-        unreachable!()
-    };
-    let (mantissa, exponent) = parts(magnitude);
+    let (mantissa, exponent) = split(magnitude);
+    let w = exponent.rem_euclid(2);
+    let scale = -exponent.div_euclid(2);
 
-    // The native square root and division give a seed within a few ulps.  One
-    // compensated Newton step makes the exact midpoint walk below normally a
-    // no-op, while that walk remains the final authority on rounding.
-    let r = 1.0 / x.sqrt();
-    let rx = r * x;
-    let drx = fma128(r, x, -rx);
-    let h = fma128(r, rx, -1.0) + r * drx;
-    let candidate = fma128(-(r * 0.5), h, r);
+    let candidate = rsqrt_fixed(mantissa, w);
+    // Round the Q124 candidate to 113 bits.  Composing the bits by adding the
+    // significand onto an exponent field two below the result's lets a carry
+    // out of the rounding land on an exact power of two instead of overflowing
+    // the mantissa; a reciprocal square root is always normal, so the 2^scale
+    // factor folds into the same field for free.
+    let rounded =
+        f128::from_bits((((BIAS - 2 + scale) as u128) << EXP_SHIFT) + ((candidate + 1024) >> 11));
+    let rest = candidate & 2047;
 
-    correct_rsqrt(mantissa, exponent, candidate)
+    if rest.abs_diff(1024) <= RSQRT_GATE {
+        correct_rsqrt(mantissa, exponent, rounded)
+    } else {
+        rounded
+    }
+}
+
+/// `rsqrt(z)·2^124` for `z = mantissa·2^(w−112) ∈ [1, 4)`, within
+/// [`RSQRT_GATE`]/2 units of 2^-124.
+///
+/// Pure unsigned fixed point end to end, on the same frame as [`cbrt_fixed`]:
+/// a degree-2 Taylor seed and one folded Newton step land `r = R·2^-63 ≈
+/// z^(-1/2)` in a handful of 64-bit products.  The seed is biased a hair below
+/// the true value so the residual `h = r²z − 1` stays strictly negative and
+/// every limb stays unsigned; then `r` misses the reciprocal square root by
+/// `(1 + h)^(-1/2) ≈ 1 + |h|/2 + ⅜h²`, and both correction terms are short
+/// exact-width products.  With `|h| ≤ 2^-42`, the dropped 5⁄16·h³ term is
+/// below 2^-4 units and each shift truncation costs at most a few units.
+fn rsqrt_fixed(mantissa: u128, w: i32) -> u128 {
+    // Degree-2 Taylor expansion of m^(-1/2) from the nearest of 64 interval
+    // centers c = 1 + (2i+1)/128: within 2^-22.6 of the true value, so the
+    // Newton step below lands within 2^-43.7.
+    #[allow(clippy::cast_possible_truncation)]
+    let m64 = (mantissa >> 49) as u64; // m·2^63, truncated
+    let i = (m64 >> 57) as usize & 63;
+    #[allow(clippy::cast_possible_wrap)]
+    let d = (m64 & ((1 << 57) - 1)) as i64 - (1 << 56); // (m − c)·2^63
+    let slope = ((i128::from(d) * i128::from(rsqrt_tables::SEED_SLOPE[i])) >> 65) as i64;
+    #[allow(clippy::cast_sign_loss)]
+    let dd = ((i128::from(d) * i128::from(d)) >> 63) as u64; // d²·2^63
+    let curve = ((u128::from(dd) * u128::from(rsqrt_tables::SEED_CURVE[i])) >> 65) as i64;
+    #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+    let r0 = (rsqrt_tables::SEED_VALUE[i] as i64 - slope + curve) as u64; // m^(-1/2)·2^63
+
+    // One Newton step r ← r·(3 − m·r²)·2^(-w/2)/2 folds the halving and the
+    // octave scaling into its constant.  Its truncations push r at most a few
+    // units of 2^-63 up, so subtracting 64 units keeps r strictly below
+    // z^(-1/2).
+    let r2 = mul_hi_64(r0, r0); // r0²·2^62
+    let t = (3 << 61) - mul_hi_64(m64, r2); // (3 − m·r0²)·2^61
+    let u = mul_hi_64(r0, t); // r0·(3 − m·r0²)·2^60
+    #[allow(clippy::cast_possible_truncation)]
+    let r = (((u128::from(u) * u128::from(rsqrt_tables::NEWTON[w as usize])) >> 61) as u64) - 64;
+
+    let z = mantissa << (14 + w); // z·2^126, exact
+    // |h|·2^124: the square of r is exact in u128 and the 128×128 high product
+    // runs at most two units short, an overshoot of |h| the gate absorbs.
+    let hp = (1 << 124) - mhi_approx(u128::from(r) * u128::from(r), z);
+
+    // r·|h|/2·2^124 as one 64×128-bit product.
+    let linear = u128::from(r) * (hp >> 64) + ((u128::from(r) * (hp & u128::from(u64::MAX))) >> 64);
+    #[allow(clippy::cast_possible_truncation)]
+    let hs = u128::from((hp >> 28) as u64); // |h|·2^96
+    // ⅜h²r·2^124; 3/8 is dyadic, so the shifts fold it in exactly.
+    let quadratic = (((hs * hs) >> 68) * 3 * u128::from(r)) >> 66;
+
+    (u128::from(r) << 61) + linear + quadratic
 }
 
 /// Half-width, in units of the candidate's 2^-123, of the rounding-tie window
@@ -122,12 +184,12 @@ fn cbrt_fixed(mantissa: u128, remainder: i32) -> u128 {
     let i = (m64 >> 57) as usize & 63;
     #[allow(clippy::cast_possible_wrap)]
     let d = (m64 & ((1 << 57) - 1)) as i64 - (1 << 56); // (m − c)·2^63
-    let slope = ((i128::from(d) * i128::from(SEED_SLOPE[i])) >> 65) as i64;
+    let slope = ((i128::from(d) * i128::from(cbrt_tables::SEED_SLOPE[i])) >> 65) as i64;
     #[allow(clippy::cast_sign_loss)]
     let dd = ((i128::from(d) * i128::from(d)) >> 63) as u64; // d²·2^63
-    let curve = ((u128::from(dd) * u128::from(SEED_CURVE[i])) >> 66) as i64;
+    let curve = ((u128::from(dd) * u128::from(cbrt_tables::SEED_CURVE[i])) >> 66) as i64;
     #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-    let r0 = (SEED_VALUE[i] as i64 - slope + curve) as u64; // m^(-1/3)·2^63
+    let r0 = (cbrt_tables::SEED_VALUE[i] as i64 - slope + curve) as u64; // m^(-1/3)·2^63
 
     // One Newton step r ← r·(4 − m·r³)·2^(-w/3)/3 folds the octave scaling
     // into its constant.  Its truncations push r at most a few units of 2^-63
@@ -137,7 +199,8 @@ fn cbrt_fixed(mantissa: u128, remainder: i32) -> u128 {
     let t = (1 << 62) - mul_hi_64(m64, r3); // (4 − m·r0³)·2^60
     let u = mul_hi_64(r0, t); // r0·(4 − m·r0³)·2^59
     #[allow(clippy::cast_possible_truncation)]
-    let r = (((u128::from(u) * u128::from(NEWTON[remainder as usize])) >> 61) as u64) - 64;
+    let r =
+        (((u128::from(u) * u128::from(cbrt_tables::NEWTON[remainder as usize])) >> 61) as u64) - 64;
 
     let z = mantissa << (13 + remainder); // z·2^125, exact
     // r²z·2^123.  The units mhi_approx runs short cancel to a third of a unit:
@@ -245,8 +308,9 @@ fn correct_cbrt(mantissa: u128, remainder: i32, mut candidate: f128) -> f128 {
     }
 }
 
-/// MPFR certification that [`CBRT_GATE`] covers [`cbrt_fixed`]'s true error
-/// with the 2× margin the project requires.  Run with
+/// MPFR certification that [`CBRT_GATE`] and [`RSQRT_GATE`] cover the true
+/// errors of [`cbrt_fixed`] and [`rsqrt_fixed`] with the 2× margin the project
+/// requires.  Run with
 /// `CC=clang cargo +nightly test --release --features "f128 mpfr"`.
 #[cfg(all(test, feature = "mpfr"))]
 mod ziv_soundness {
@@ -294,6 +358,43 @@ mod ziv_soundness {
         assert!(
             worst < 0.5,
             "cbrtq gate covers only {:.2}× the slip at m={:#x} w={}",
+            1.0 / worst,
+            worst_at.0,
+            worst_at.1
+        );
+    }
+
+    /// Worst `|candidate − rsqrt(z)·2^124| / RSQRT_GATE` over random reduced
+    /// arguments — exactly the units the gate compares.
+    #[test]
+    fn rsqrt_candidate_is_sound() {
+        let mut worst = 0.0;
+        let mut worst_at = (0, 0);
+
+        for i in 0..SAMPLES {
+            let mantissa = (u128::from(mix(i)) << 64 | u128::from(mix(i ^ 0x9E37_79B9)))
+                & MANTISSA_MASK
+                | IMPLICIT_BIT;
+            let w = (mix(i ^ 0xABCD) % 2) as i32;
+            let candidate = rsqrt_fixed(mantissa, w);
+            let z =
+                Float::with_val(PRECISION, mantissa) * Float::with_val(PRECISION, 2).pow(w - 112);
+            let truth = z.recip_sqrt() * Float::with_val(PRECISION, 2).pow(124);
+            let slip: Float = truth - Float::with_val(PRECISION, candidate);
+            let ratio = slip.abs().to_f64() / RSQRT_GATE as f64;
+
+            if ratio > worst {
+                worst = ratio;
+                worst_at = (mantissa, w);
+            }
+        }
+        println!(
+            "rsqrtq fast candidate: worst |err|/gate = {worst:.4} at m={:#x} w={}",
+            worst_at.0, worst_at.1
+        );
+        assert!(
+            worst < 0.5,
+            "rsqrtq gate covers only {:.2}× the slip at m={:#x} w={}",
             1.0 / worst,
             worst_at.0,
             worst_at.1
