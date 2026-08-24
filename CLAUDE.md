@@ -45,8 +45,10 @@ for the `RSQRT_GATE`/`CBRT_GATE` tie window (~3%).  `sqrtq` rides the same
 `rsqrt64` seed, corrects `s = r·z` by `(1+h)^(-1/2)`, and rounds on 13 guard
 bits (`SQRT_GATE` tie window ~0.8%); its series multiplier must be the full
 Q125 `s0`, not a 64-bit truncation — the seed `r` is exact by definition but
-`s` is not.  `hypotq` needs no Ziv fallback at all: capping the
-exponent gap at 56 makes `a² + b²` an exact 384-bit integer, so two exact
+`s` is not.  `hypotq` runs that same `sqrt_wide` frame on a truncated 128-bit
+sum of squares (one-sided, ≤ 3 units low) and rounds on the same 13 guard
+bits; only the `HYPOT_GATE` tie window pays the exact tier, where capping the
+exponent gap at 56 makes `a² + b²` an exact 384-bit integer and two exact
 comparisons decide the last bit.  The shared wide-integer primitives live in
 `src/f128_/uint.rs`.
 

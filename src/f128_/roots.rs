@@ -55,16 +55,25 @@ pub fn sqrtq(x: f128) -> f128 {
 
 /// `sqrt(z)·2^125` for `z = mantissa·2^(w−112) ∈ [1, 4)`, within
 /// [`SQRT_GATE`]/2 units of 2^-125.
+fn sqrt_fixed(mantissa: u128, w: i32) -> u128 {
+    sqrt_wide(mantissa << (14 + w))
+}
+
+/// `sqrt(z)·2^125` for a full-width fixed-point `z·2^126 ∈ [2^126, 2^128)`,
+/// within [`SQRT_GATE`]/2 units of 2^-125 — the frame behind [`sqrt_fixed`],
+/// also fed a 127-bit sum of squares by [`super::hypot::hypotq`].
 ///
 /// The same frame as [`rsqrt_fixed`] on the same seed: `r = R·2^-63 ≈
 /// z^(-1/2)` from [`rsqrt64`], then `s = r·z` misses the square root by
 /// `(1 + h)^(-1/2) ≈ 1 + |h|/2 + ⅜h²` with `h = r²z − 1` strictly negative,
 /// and both correction terms are short exact-width products.  With
 /// `|h| ≤ 2^-42`, the dropped 5⁄16·|h|³ term is below 2^-1 units and each
-/// shift truncation costs at most a few units.
-fn sqrt_fixed(mantissa: u128, w: i32) -> u128 {
-    let r = rsqrt64(mantissa, w);
-    let z = mantissa << (14 + w); // z·2^126, exact
+/// shift truncation costs at most a few units.  The seed reads only the top
+/// 64 bits, so bits past the 113th cost it nothing.
+pub(super) fn sqrt_wide(z: u128) -> u128 {
+    #[allow(clippy::cast_possible_truncation)]
+    let w = (z >> 127) as i32;
+    let r = rsqrt64(z >> (14 + w), w);
     // |h|·2^124: the square of r is exact in u128 and the 128×128 high product
     // runs at most two units short, an overshoot of |h| the gate absorbs.
     let hp = (1 << 124) - mhi_approx(u128::from(r) * u128::from(r), z);

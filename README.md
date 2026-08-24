@@ -195,7 +195,7 @@ Each function is done when both gates hold:
 | `exp2q`  | ✅ | 0.94× |
 | `expm1q` | ✅ | 1.42× |
 | `expq`   | ✅ | 0.96× |
-| `hypotq` | ✅ | 1.89× |
+| `hypotq` | ✅ | 1.01× |
 | `logq`   | ✅ | 1.07× |
 | `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 0.87× |
