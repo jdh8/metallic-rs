@@ -38,8 +38,9 @@
 
 use super::atan2_tables::{COEF, FRAC_3PI_4, PHI, QOFF};
 use super::uint::{
-    add_256, add_384, any_below, extract_u128, mhi, mhi_approx, mul_hi_64, mul_hi_256, mul_hi_384,
-    shl_256, shl_384, shr_384_sat, sub_256, sub_384, wmul, wmul_128x256, wmul_128x384,
+    add_256, add_384, any_below, extract_u128, funnel, funnel_down, mhi, mhi_approx, mul_hi_64,
+    mul_hi_256, mul_hi_384, shl_256, shl_384, shr_384_sat, sub_256, sub_384, wmul, wmul_128x256,
+    wmul_128x384,
 };
 use super::{EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 use core::f128::consts;
@@ -330,21 +331,6 @@ fn fast(r: &Reduction) -> (u128, i32) {
     let lz = s[1].leading_zeros();
 
     (top_256(s, lz), 3 - lz as i32)
-}
-
-/// The top 64 bits of `(high:low) << shift`, for `shift < 64`.  LLVM has no
-/// 128-bit funnel shift, so every `u128` shift pair below would cost a `shld`,
-/// a plain shift and a `cmov`; cut from 64-bit limbs each is one `shld`.
-#[inline]
-const fn funnel(low: u64, high: u64, shift: u32) -> u64 {
-    (high << shift) | (low >> 1 >> (63 - shift))
-}
-
-/// The low 64 bits of `(high:low) >> shift`, for `shift < 64` — [`funnel`]'s
-/// mirror, one `shrd`.
-#[inline]
-const fn funnel_down(low: u64, high: u64, shift: u32) -> u64 {
-    (low >> shift) | (high << 1 << (63 - shift))
 }
 
 /// `x >> shift` rounded on the bit below it, for `0 < shift < 128`.  Adding

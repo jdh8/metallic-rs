@@ -305,6 +305,23 @@ pub const fn leading_zeros_384(x: [u128; 3]) -> u32 {
     }
 }
 
+/// The top 64 bits of `(high:low) << shift`, for `shift < 64`.  LLVM has no
+/// 128-bit funnel shift, so a `u128` shift pair would cost a `shld`, a plain
+/// shift and a `cmov`; cut from 64-bit limbs it is one `shld`.
+#[must_use]
+#[inline]
+pub const fn funnel(low: u64, high: u64, shift: u32) -> u64 {
+    (high << shift) | (low >> 1 >> (63 - shift))
+}
+
+/// The low 64 bits of `(high:low) >> shift`, for `shift < 64` — [`funnel`]'s
+/// mirror, one `shrd`.
+#[must_use]
+#[inline]
+pub const fn funnel_down(low: u64, high: u64, shift: u32) -> u64 {
+    (low >> shift) | (high << 1 << (63 - shift))
+}
+
 /// Bits `[shift, shift + 128)` of a 384-bit little-endian value.
 #[must_use]
 #[inline]

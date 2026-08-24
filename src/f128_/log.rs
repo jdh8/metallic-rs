@@ -35,8 +35,8 @@
 
 use super::log_tables::{COEF, CRUDE, LN2, LOG0, LOG1, LOG2, RECIP0, RECIP1, RECIP2};
 use super::uint::{
-    add_256, add_384, any_below, extract_u128, leading_zeros_256, leading_zeros_384, mhi,
-    mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
+    add_256, add_384, any_below, extract_u128, funnel, funnel_down, leading_zeros_256,
+    leading_zeros_384, mhi, mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 
@@ -78,28 +78,59 @@ pub fn logq(x: f128) -> f128 {
     let d = [low, high.wrapping_sub(1 << 77)];
     let s = fast(e, j, ((d[1] << 68) | (low >> 60)) as i128);
     let negative = s[1] >> 127 != 0;
-    let magnitude = if negative { sub_256([0, 0], s) } else { s };
+    let magnitude = negate_if(s, negative);
 
     if magnitude[1] < FAST_FLOOR {
         return accurate(e, j, d);
     }
-    let leading = magnitude[1].leading_zeros();
-    let shift = 143 - leading;
-    let rest = magnitude[0] & (u128::MAX >> (128 - shift));
-    let half = 1 << (shift - 1);
+    // `2^70 ≤ magnitude[1] < 2^100`, so its top limb is nonzero and `leading`
+    // lands in [29, 57]: every variable shift below stays under 64 bits, one
+    // funnel each instead of a `u128` shift pair and its `cmov` guard.
+    let leading = ((magnitude[1] >> 64) as u64).leading_zeros();
+    let shift = 79 - leading;
+    let window = leading - 15;
 
-    if rest.abs_diff(half) <= ZIV_GATE {
+    // The discarded field scaled by 2^window puts its tie center at the
+    // constant 2^127, the gate at `ZIV_GATE << window` — a bare high limb.
+    let v = (u128::from(funnel(
+        magnitude[0] as u64,
+        (magnitude[0] >> 64) as u64,
+        window,
+    )) << 64)
+        | u128::from((magnitude[0] as u64) << window);
+    let bound = u128::from(((ZIV_GATE >> 64) as u64) << window) << 64;
+
+    if (v ^ (1 << 127)).wrapping_add(bound) <= bound << 1 {
         return accurate(e, j, d);
     }
     // The gate has already ruled out a tie, so the round bit decides.
-    let mantissa = (magnitude[0] >> shift) | (magnitude[1] << (128 - shift));
+    let mantissa = (u128::from(funnel_down(
+        magnitude[1] as u64,
+        (magnitude[1] >> 64) as u64,
+        shift,
+    )) << 64)
+        | u128::from(funnel_down(
+            (magnitude[0] >> 64) as u64,
+            magnitude[1] as u64,
+            shift,
+        ));
 
     f128::from_bits(
         (u128::from(negative) << 127)
             | ((u128::from(FRAME_EXP - leading) << EXP_SHIFT)
                 + (mantissa - IMPLICIT_BIT)
-                + u128::from(rest > half)),
+                + u128::from(v >> 127 != 0)),
     )
+}
+
+/// `s` or `−s` by a coin-flip sign, in two's complement through an xor mask
+/// and a carry-in — never a data-dependent branch.
+#[inline]
+fn negate_if(s: [u128; 2], negative: bool) -> [u128; 2] {
+    let mask = 0_u128.wrapping_sub(u128::from(negative));
+    let (low, carry) = (s[0] ^ mask).overflowing_add(mask & 1);
+
+    [low, (s[1] ^ mask).wrapping_add(u128::from(carry))]
 }
 
 /// The arguments with no logarithm to compute: zero, negative, and nonfinite.
@@ -165,13 +196,8 @@ fn fast(e: i32, j: u32, z: i128) -> [u128; 2] {
 fn scale(e: i32, l: [u128; 2]) -> [u128; 2] {
     let a = u128::from(e.unsigned_abs());
     let (high, low) = wmul(a, l[0]);
-    let product = [low, high.wrapping_add(a.wrapping_mul(l[1]))];
 
-    if e < 0 {
-        sub_256([0, 0], product)
-    } else {
-        product
-    }
+    negate_if([low, high.wrapping_add(a.wrapping_mul(l[1]))], e < 0)
 }
 
 /// `log(1 + z)` scaled by 2^145, from `z` at the same scale.
@@ -214,9 +240,13 @@ const fn mul_hi_i64(x: i64, y: i64) -> i64 {
 }
 
 /// High half of a signed × unsigned 128×128-bit product.
+///
+/// The sign correction is an arithmetic mask, not a select: a select on the
+/// loop-invariant sign of `z` invites LLVM to clone the whole Horner chain
+/// behind a 50/50 branch.
 #[inline]
 fn mul_hi_i128(x: i128, y: u128) -> i128 {
-    mhi(x as u128, y).wrapping_sub(if x < 0 { y } else { 0 }) as i128
+    mhi(x as u128, y).wrapping_sub(((x >> 127) as u128) & y) as i128
 }
 
 /// [`logq`] at 384 bits, from the exact reduction the fast leg started from.
