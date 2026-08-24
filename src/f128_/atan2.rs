@@ -249,10 +249,7 @@ fn quotient_128(r: &Reduction) -> (u128, i32) {
     let (high, low) = wmul(r.numerator, recip_128(r.denominator));
     let lzp = high.leading_zeros();
 
-    (
-        (high << lzp) | (low >> (128 - lzp)),
-        r.scale + 2 - lzp as i32,
-    )
+    (top_256([low, high], lzp), r.scale + 2 - lzp as i32)
 }
 
 /// [`quotient_128`] at 384 bits, short by under 2^-370.
@@ -282,10 +279,7 @@ fn atan_frac(t1: u128, et: i32) -> u128 {
     if sh >= 128 {
         return t1;
     }
-    // Round the shift via the bit below it: adding 2^(sh−1) first could carry
-    // out of the limb when `T` is a breakpoint and the fraction is all ones.
-    let square = mhi_approx(t1, t1);
-    let u = (square >> sh) + (square >> (sh - 1) & 1);
+    let u = shr_round(mhi_approx(t1, t1), sh);
     let cube = mhi_approx(t1, u);
     let v = mhi_approx(u, u);
     let vh = (v >> 64) as u64;
@@ -299,15 +293,16 @@ fn atan_frac(t1: u128, et: i32) -> u128 {
     t1 - mhi_approx(cube, even - mhi_approx(u, odd))
 }
 
-/// The fast leg: the result as a floating 256-bit fraction, i.e. the value is
-/// `frac·2^(e2−256)` with `frac ∈ [2^255, 2^256)`.  Everything below the frame
-/// runs on single limbs; only the table sum needs the second.
-fn fast(r: &Reduction) -> ([u128; 2], i32) {
+/// The fast leg: the result as a floating 128-bit fraction, i.e. the value is
+/// `frac·2^(e2−128)` with `frac ∈ [2^127, 2^128)`.  The table sum runs in a
+/// second limb below, which the rounder never reads — 15 guard bits sit inside
+/// `frac` itself.
+fn fast(r: &Reduction) -> (u128, i32) {
     if r.relative() {
         let (t1, et) = quotient_128(r);
         let f = atan_frac(t1, et);
         let lz = f.leading_zeros();
-        return ([0, f << lz], et - lz as i32);
+        return (f << lz, et - lz as i32);
     }
     let theta = if r.numerator == 0 {
         [0, 0]
@@ -318,7 +313,7 @@ fn fast(r: &Reduction) -> ([u128; 2], i32) {
         // nonzero sector and only the sectorless `i = 0` band reaching below.
         let position = et + 125;
         if position >= 0 {
-            shl_256([f, 0], position as u32)
+            place_256(f, position as u32)
         } else if position > -128 {
             [f >> position.unsigned_abs(), 0]
         } else {
@@ -333,7 +328,74 @@ fn fast(r: &Reduction) -> ([u128; 2], i32) {
     // θ* ∈ [0.0078, π] keeps the frame normal: at most nine leading zeros.
     let lz = s[1].leading_zeros();
 
-    (shl_256(s, lz), 3 - lz as i32)
+    (top_256(s, lz), 3 - lz as i32)
+}
+
+/// The top 64 bits of `(high:low) << shift`, for `shift < 64`.  LLVM has no
+/// 128-bit funnel shift, so every `u128` shift pair below would cost a `shld`,
+/// a plain shift and a `cmov`; cut from 64-bit limbs each is one `shld`.
+#[inline]
+const fn funnel(low: u64, high: u64, shift: u32) -> u64 {
+    (high << shift) | (low >> 1 >> (63 - shift))
+}
+
+/// The low 64 bits of `(high:low) >> shift`, for `shift < 64` — [`funnel`]'s
+/// mirror, one `shrd`.
+#[inline]
+const fn funnel_down(low: u64, high: u64, shift: u32) -> u64 {
+    (low >> shift) | (high << 1 << (63 - shift))
+}
+
+/// `x >> shift` rounded on the bit below it, for `0 < shift < 128`.  Adding
+/// 2^(shift−1) first would be shorter but can carry out of the limb when `T`
+/// is a breakpoint and the fraction is all ones.
+#[inline]
+const fn shr_round(x: u128, shift: u32) -> u128 {
+    debug_assert!(shift > 0 && shift < 128);
+    let bits = shift & 63;
+    let [low, high] = if shift < 64 {
+        [x as u64, (x >> 64) as u64]
+    } else {
+        [(x >> 64) as u64, 0]
+    };
+    let below = shift - 1;
+    let word = if below < 64 {
+        x as u64
+    } else {
+        (x >> 64) as u64
+    };
+    let bit = (word >> (below & 63)) & 1;
+
+    (funnel_down(low, high, bits) as u128) | ((high >> bits) as u128) << 64 | bit as u128
+}
+
+/// `f << shift` in the 2^-253 frame, for `shift < 128`: the window starts in
+/// limb 0 or 1, picked without shifting, and four funnels cut it out.
+#[inline]
+const fn place_256(f: u128, shift: u32) -> [u128; 2] {
+    debug_assert!(shift < 128);
+    let bits = shift & 63;
+    let [a, b, c] = if shift < 64 {
+        [f as u64, (f >> 64) as u64, 0]
+    } else {
+        [0, f as u64, (f >> 64) as u64]
+    };
+
+    [
+        ((a << bits) as u128) | ((funnel(a, b, bits) as u128) << 64),
+        (funnel(b, c, bits) as u128) | ((funnel(c, 0, bits) as u128) << 64),
+    ]
+}
+
+/// The top 128 bits of `s << shift`, for `shift < 64`: all a normalization
+/// ever keeps, so the low limb never needs shifting at all.
+#[inline]
+const fn top_256(s: [u128; 2], shift: u32) -> u128 {
+    let low = (s[0] >> 64) as u64;
+    let middle = s[1] as u64;
+    let high = (s[1] >> 64) as u64;
+
+    (funnel(low, middle, shift) as u128) | ((funnel(middle, high, shift) as u128) << 64)
 }
 
 /// `a + b` or `a − b` without a data-dependent branch: the subtrahend enters
@@ -349,20 +411,20 @@ fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u128; 2] {
 
 /// Round the fast frame on its fixed 15-bit guard; `None` hands ties and the
 /// subnormal range to the accurate leg.
-fn round_fast(frac: [u128; 2], e2: i32, sign: u128) -> Option<f128> {
+fn round_fast(frac: u128, e2: i32, sign: u128) -> Option<f128> {
     if e2 < f128::MIN_EXP {
         return None;
     }
-    let rest = frac[1] & GUARD_MASK;
+    let rest = frac & GUARD_MASK;
 
     if rest.abs_diff(GUARD_HALF) <= ZIV_GATE {
         return None;
     }
     // The gate has already ruled out a tie: the guard's top bit decides, and
-    // the 128 bits below the guard cannot flip it.
+    // the frame's discarded limb cannot flip it.
     Some(f128::from_bits(
         sign | ((((e2 + 16382) as u128) << EXP_SHIFT)
-            + ((frac[1] >> GUARD) - IMPLICIT_BIT)
+            + ((frac >> GUARD) - IMPLICIT_BIT)
             + u128::from(rest > GUARD_HALF)),
     ))
 }
@@ -607,9 +669,7 @@ mod ziv_soundness {
     fn slip(y: f128, x: f128, xneg: bool) -> f64 {
         let r = reduce(y.to_bits(), x.to_bits(), xneg);
         let (frac, e2) = fast(&r);
-        let frame = (Float::with_val(PRECISION, frac[1]) * Float::with_val(PRECISION, 2).pow(128)
-            + Float::with_val(PRECISION, frac[0]))
-            * Float::with_val(PRECISION, 2).pow(e2 - 256);
+        let frame = Float::with_val(PRECISION, frac) * Float::with_val(PRECISION, 2).pow(e2 - 128);
         let x = Float::with_val(PRECISION, if xneg { -x } else { x });
         let truth = Float::with_val(PRECISION, y).atan2(&x);
         let unit: Float = Float::with_val(PRECISION, 2).pow(e2 - 128);
