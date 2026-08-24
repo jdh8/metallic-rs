@@ -50,6 +50,14 @@ accurate_tier`. Every lever below moves one of those three terms; diagnosing
   valid under load; absolute ns and cross-run deltas do not.
 - **Noise floor: ±1–3% on identical binaries**, even at moderate load. An A/B
   needs a calm box or a > 3% effect; a 2% "win" from one run is noise.
+- **An ablation series is absolute-time-only, so run it back to back in one box
+  state and re-measure the baseline inside the series.** A `SCHED_IDLE` batch
+  job filling 30 cores leaves the bench thread a full core but inflates every
+  absolute time ~40% through memory bandwidth (atan2q read 111 ns loaded vs
+  76 ns calm, same binary); the metallic/CORE-MATH ratio held to 1%. An
+  ablation delta compared against a baseline from a different box state is
+  meaningless. Check `ps -eo cls,pcpu` — load average counts idle-class work
+  that will not actually preempt you.
 - **Run benches strictly serially.** "Contention hits both arms equally" is
   false on the 8-physical-core box: an 8-way concurrent f32 sweep (2026-07-11)
   inflated absolute times up to 2× and corrupted *within-pair* ratios — atanhf
@@ -185,6 +193,15 @@ in the shadow of a division is already free, and removing it buys nothing
 - **Fuse reflections to save divisions**: rewrite `u = (1/a − c)/(1 + c/a)` as
   `u = (1 − a·c)/(a + c)` — never form `1/a` as a dd. atan 3→2 divisions
   (`7e942e7`), atan2 4→2 (`622010a`).
+- **Every variable `u128` shift on a hot path wants 64-bit limbs**, not just
+  the rounding tail.  atan2q `f5137be` re-cut four of them — placing a value
+  into a wider frame, normalizing that frame, normalizing a quotient, aligning
+  `T²` — as `shld`/`shrd` on `u64` limbs with the limb picked by a `cmov`:
+  8.1 ns of a 76.7 ns call.  Look for the ones whose shift range is *known
+  narrow* (a `leading_zeros` that can only be 0..9, an exponent that can only
+  be 0..127); those are pure `shld`s once LLVM stops guarding for >= 128.  A
+  normalization also rarely needs its low limb at all — if the rounder reads
+  only the top 128 bits, return only those and the whole low-limb shift dies.
 - **In `u128` fixed point, the shifts cost more than the multiplies.** LLVM
   has no 128-bit funnel shift: `(a >> k) | (b << 1 << (127 - k))` with a
   variable `k` becomes a `shrd`/`shrx` pair plus a `cmovne` per limb.  Cut the
@@ -199,13 +216,20 @@ in the shadow of a division is already free, and removing it buys nothing
   latency, not latency alone: stubbing binary128 atan2q's polynomial priced it
   at 20 ns, yet halving its serial depth returned only 2.4 — back-to-back
   bench iterations already overlapped the chain.
-- **Binary128 bivariate cost centers** (atan2q campaign, 1.58x -> 1.24x):
-  narrowing the whole fast pipeline from two `u128` limbs to one — reciprocal
-  top limb, quotient, polynomial, final product — bought the bulk; 3-mul
-  approximate high products (`mhi_approx`, ≤ 2 units short) and mask-select
-  add-or-sub over 50/50 quadrant branches the rest.  The open lead for the
-  remaining gap: CORE-MATH seeds its reciprocal with a 63-bit hardware divide
-  and needs one Newton step where an `f64` seed (51 bits) forces two.
+- **Binary128 bivariate cost centers** (atan2q campaign, 1.58x -> 1.24x ->
+  1.13x): narrowing the whole fast pipeline from two `u128` limbs to one —
+  reciprocal top limb, quotient, polynomial, final product — bought the bulk;
+  3-mul approximate high products (`mhi_approx`, ≤ 2 units short) and
+  mask-select add-or-sub over 50/50 quadrant branches the rest.  The last two
+  came from the seed and the shifts, below.
+- **A `u128 / u64`-valued divide is one hardware `divq`, not a soft divide.**
+  compiler_builtins' `__udivti3` dispatches on a zero divisor high limb
+  straight to `divq` — measured indistinguishable from inline asm, and worth a
+  full 64-bit seed where an `f64` divide is worth 51.  That halves a Newton
+  chain: 64 bits + one step + a *third-order* companion term (which at that
+  seed width is still a dozen units wide, so one 64x64 multiply on 32-bit
+  narrowed operands) lands 2^-125, where a 51-bit seed needed two full-width
+  steps.  atan2q `e0a7cfc`: the whole reciprocal 16.7 ns -> 11.4.
 - **The real round-to-nearest dividends** (vs CORE-MATH's 4-mode burden):
   un-normalized dd returns consumed directly by the Ziv gate, and free FMA
   contraction in `crate::poly` (CORE-MATH's `FENV_ACCESS ON` inhibits it).
@@ -227,12 +251,16 @@ evidence wastes a session.
 | Estrin on `poly_dint` | ~2% on the forced path — `Dint::mul` is port-bound; fewer terms is the only lever. |
 | Cutting multiplies in the binary128 exp kernel | Removing one of the three `mul127`s in the table product moved 0.0 ns. The kernel is latency- and *shift*-bound, not multiplier-bound; CORE-MATH's cheaper `u64 x u128` Horner has the same chain depth, so porting its shape is unlikely to pay. |
 | Series fast legs for **wide** bands | atanh +34% (75% fallback at band edge). A plain-f64 series leg floors at ~2⁻⁵³ relative on the correction, so it only pays when the band is narrow (asinh: win) or the general path is heavier than a polynomial. |
+| Folding a squaring's equal cross terms (`mhi_approx(x,x)` in 2 muls, not 3) | atan2q 98.1 -> 100.5 ns. Two multiplies out of ~31 in a chain that is neither multiplier- nor throughput-bound; the extra `<< 1` lengthens the serial step that mattered. |
+| Re-cutting `reduce`'s variable shifts onto 64-bit limbs (atan2q) | 100.2 vs 99.95 ns — exactly nothing. The reduction's shifts sit before the divide and overlap it entirely. Price a shift *in situ* before rewriting it; only the ones on the post-divide chain paid. |
 
 ## Current standings
 
 Live status (ratio table, open laggards, per-function notes) is maintained in
 **issue #5** — read it with `gh api repos/jdh8/metallic-rs/issues/5 --jq
-.body` and its comments before picking a target. As of 2026-07-02 (calm box):
+.body` and its comments before picking a target; the binary128 table lives in
+README.md § Binary128 status (as of 2026-08-24 no `q` function is above
+1.13x). As of 2026-07-02 (calm box):
 no function above 1.15×, and the remaining ~1.05–1.10 cluster (asinh, asin,
 atanh, log1p, exp2/exp10) has no known mechanism — treat those as research,
 not backlog.
