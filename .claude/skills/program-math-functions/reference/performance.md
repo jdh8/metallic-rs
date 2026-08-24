@@ -97,6 +97,13 @@ tax that can be >10% of the function. Fixes, cheapest first:
   arithmetic like `π/2 − copysign(π/2, x)` is safer); a checked `as` cast
   emits a saturating compare+cmov chain — use `to_int_unchecked` where the
   range is already proven, with a `// SAFETY:` comment.
+- A select whose condition is **loop-invariant** (`if x < 0 { y } else { 0 }`
+  inside a Horner chain, with `x` fixed per call) invites LLVM to unswitch and
+  **clone the entire chain behind a 50/50 jump** — the mispredict plus double
+  code. Write sign corrections as arithmetic masks (`((x >> 127) as u128) & y`,
+  or xor-mask + carry-in for a conditional negate) so there is no select to
+  unswitch. binary128 logq had three such coins (sign of e, of z, of the
+  result); killing all three was 61.5→54.2 ns (`d76ccf7`).
 
 **2. Fallback-bound or fast-leg-bound?** Estimate the Ziv fallback rate before
 touching either tier: `fallback ≈ 2 · gate / ulp(result)`. Measure it directly
@@ -230,7 +237,24 @@ in the shadow of a division is already free, and removing it buys nothing
   seed width is still a dozen units wide, so one 64x64 multiply on 32-bit
   narrowed operands) lands 2^-125, where a 51-bit seed needed two full-width
   steps.  atan2q `e0a7cfc`: the whole reciprocal 16.7 ns -> 11.4.
-- **The real round-to-nearest dividends** (vs CORE-MATH's 4-mode burden):
+- **Normalize the discarded field so the rounding constants go constant.** A
+  frame whose result magnitude varies makes `rest`/`half`/mask all variable
+  `u128` shifts. Scale the discarded bits to the top of one `u128` instead:
+  the tie center becomes the constant `2^127`, the Ziv gate scales to a bare
+  high limb (`(GATE >> 64) << window`, one `u64` shift), the tie test is one
+  xor + add + compare, and the round bit is the top bit. Past the leg's floor
+  the top limb is nonzero, so `leading` is a single `u64` `lzcnt` and the
+  mantissa is two `funnel_down`s (logq `d76ccf7`, part of 61.5→54.2 ns).
+- **Approximate high products + one gate step is a cheap latency trade.**
+  Where a fixed-point chain is ablation-proven latency-bound, `mhi_approx`
+  (3 mulx, ≤ 2 units short, never over) for `mhi` (4 mulx + carry chain) plus
+  a one-step-wider Ziv gate costs only certified margin — logq kept 9.0×
+  against the required 2× (`69b68aa`, 54.2→52.4 ns). Then a **balanced
+  (Estrin) regroup** of the shortened steps paid again where the poly_dint
+  Estrin dead-end did not: these steps are 3 mulx (not port-bound), and the
+  ablation had priced the serial chain at 2.8 ns/step (`220592c`,
+  52.4→50.1 ns = parity). Ablate first; the dead-end still stands for
+  port-bound `Dint` chains.
   un-normalized dd returns consumed directly by the Ziv gate, and free FMA
   contraction in `crate::poly` (CORE-MATH's `FENV_ACCESS ON` inhibits it).
   NOT `fast_ldexp` tricks or branch micro-hacks — those were measured dead.
