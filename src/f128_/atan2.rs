@@ -42,8 +42,11 @@ use super::uint::{
     mul_hi_256, mul_hi_384, shl_256, shl_384, shr_384_sat, sub_256, sub_384, wmul, wmul_128x256,
     wmul_128x384,
 };
-use super::{EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
+use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 use core::f128::consts;
+
+/// The bit pattern of `1.0`, [`atanq`]'s implicit denominator.
+const ONE: u128 = (BIAS as u128) << EXP_SHIFT;
 
 /// Discarded bits below the fast leg's 113-bit mantissa within its top limb.
 const GUARD: u32 = 15;
@@ -63,14 +66,127 @@ pub(super) const ZIV_GATE: u128 = 64;
 
 /// The arc tangent.
 ///
-/// `atan2(x, 1)` *is* `atan(x)`: the ratio `x/1` is exact, so the whole
-/// [`atan2q`] pipeline — the dyadic-breakpoint reduction, both legs, and the
-/// certified Ziv gate — carries over untouched, correct rounding included.
-/// The unit denominator constant-folds through the reduction once inlined.
+/// `atan2(x, 1)` *is* `atan(x)`, so both legs, the tables, and the certified
+/// Ziv gate of the [`atan2q`] pipeline carry over — but the reduction folds
+/// the unit operand away by hand.  The sector `i = round(64·min/max)` costs
+/// an integer shift when `|x| < 1` and one hardware divide when `|x| ≥ 1`
+/// instead of the bivariate float divide, one side of every exact product
+/// collapses into a shift, and below the first breakpoint the reduced tangent
+/// *is* the input significand: no quotient, no Newton reciprocal, the Taylor
+/// sum runs on exact bits (which only tightens the certified slip).
 #[must_use]
-#[inline]
 pub fn atanq(x: f128) -> f128 {
-    atan2q(x, 1.0)
+    let bits = x.to_bits();
+    let ax = bits & !SIGN_MASK;
+
+    // Zero, infinite, and NaN close over the same table as `atan2(x, 1)`.
+    if ax.wrapping_sub(1) >= EXP_MASK - 1 {
+        return edge(bits, ONE);
+    }
+    let sign = bits & SIGN_MASK;
+    let reduction = atan_reduce(ax);
+    let (frac, e2) = atan_fast(&reduction);
+
+    round_fast(frac, e2, sign).unwrap_or_else(|| match &reduction {
+        Err((t1, et)) => accurate_exact(*t1, *et, sign),
+        Ok(r) => accurate(r, sign),
+    })
+}
+
+/// [`reduce`] with the unit denominator folded away: `Ok` is a sector
+/// reduction for the shared pipeline, `Err` the exact reduced tangent
+/// `t1·2^(et−128) = |x|` below the first breakpoint.
+#[inline(always)]
+fn atan_reduce(ax: u128) -> Result<Reduction, (u128, i32)> {
+    let (m, e) = split(ax);
+
+    if ax < ONE {
+        let dn = (-e) as u32;
+        // `64·x` is `m` shifted: `i` rounds exactly, no divide at all.
+        let i = if dn < 8 {
+            ((m >> (105 + dn)) as usize + 1) >> 1
+        } else {
+            0
+        };
+        if i == 0 {
+            // `t = x` exactly: straight to the Taylor sum on the significand.
+            return Err((m << 15, 1 - dn as i32));
+        }
+        // `kn = 64·m − i·2^(112+dn)`, `kd = 2^(118+dn) + m·i`: the unit
+        // significand turns two of the three exact products into shifts.
+        let kn = ((m as i128) << 6) - ((i as i128) << (112 + dn));
+        let kd = (1u128 << (118 + dn)) + m * (i as u128);
+        Ok(normalize(kn, kd, i, 0, false))
+    } else {
+        let dn = e as u32;
+        // `i = round(64/x)·2^9` by one hardware divide on the top `48 + dn`
+        // bits: truncating `m` costs under 2^-42 of a unit and the floor
+        // under 2^-9, so `i` stays within 0.503 of `64·t`.
+        let i = if dn < 8 {
+            let q = (1u64 << 63) / ((m >> (64 - dn)) as u64);
+            (q as usize + 256) >> 9
+        } else {
+            0
+        };
+        if i == 0 {
+            return Ok(Reduction {
+                numerator: 1 << 127,
+                denominator: m << 15,
+                scale: -(dn as i32),
+                negative: false,
+                sector: 0,
+                quadrant: 1,
+                negate: true,
+            });
+        }
+        let kn = (1i128 << 118) - (((m as i128) * (i as i128)) << dn);
+        let kd = (m << (6 + dn)) + ((i as u128) << 112);
+        Ok(normalize(kn, kd, i, 1, true))
+    }
+}
+
+/// [`fast`] over [`atan_reduce`]'s split: the exact relative tangent skips
+/// the quotient and keeps its floating form, like the pipeline's own
+/// sectorless band.
+#[inline(always)]
+fn atan_fast(reduction: &Result<Reduction, (u128, i32)>) -> (u128, i32) {
+    match reduction {
+        Err((t1, et)) => {
+            let f = atan_frac(*t1, *et);
+            let lz = f.leading_zeros();
+            (f << lz, *et - lz as i32)
+        }
+        Ok(r) => fast(r),
+    }
+}
+
+/// [`reduce`]'s normalization of the exact ratio `kn/kd`, shared by
+/// [`atanq`]'s folded sector reductions.
+fn normalize(kn: i128, kd: u128, sector: usize, quadrant: usize, negate: bool) -> Reduction {
+    let magnitude = kn.unsigned_abs();
+    let lzn = magnitude.leading_zeros();
+    let lzd = kd.leading_zeros();
+
+    Reduction {
+        numerator: if magnitude == 0 { 0 } else { magnitude << lzn },
+        denominator: kd << lzd,
+        scale: lzd as i32 - lzn as i32,
+        negative: kn < 0,
+        sector,
+        quadrant,
+        negate,
+    }
+}
+
+/// [`accurate`]'s relative arm on an exact reduced tangent: below the first
+/// breakpoint `t` is the input itself, so the 384-bit quotient disappears too.
+#[cold]
+#[inline(never)]
+fn accurate_exact(t1: u128, et: i32, sign: u128) -> f128 {
+    let f = atan_frac_384([0, 0, t1], et);
+    let lz = f[2].leading_zeros();
+
+    round_384(shl_384(f, lz), et - lz as i32, sign)
 }
 
 /// The two-argument arc tangent, `atan(y/x)` in the quadrant of `(x, y)`.
@@ -710,6 +826,59 @@ mod ziv_soundness {
         let unit: Float = Float::with_val(PRECISION, 2).pow(e2 - 128);
 
         (Float::with_val(PRECISION, truth - frame).abs() / unit).to_f64() / ZIV_GATE as f64
+    }
+
+    /// `|frame − atan(x)| / ZIV_GATE` through [`atanq`]'s folded reduction.
+    fn atan_slip(x: f128) -> f64 {
+        let r = atan_reduce(x.to_bits() & !SIGN_MASK);
+        let (frac, e2) = atan_fast(&r);
+        let frame = Float::with_val(PRECISION, frac) * Float::with_val(PRECISION, 2).pow(e2 - 128);
+        let truth = Float::with_val(PRECISION, x).atan();
+        let unit: Float = Float::with_val(PRECISION, 2).pow(e2 - 128);
+
+        (Float::with_val(PRECISION, truth - frame).abs() / unit).to_f64() / ZIV_GATE as f64
+    }
+
+    /// Arguments covering the exact relative band, sectors on both sides of
+    /// the unit, near-breakpoint cancellations, and the far π/2 band.
+    fn draw_atan(i: u64) -> f128 {
+        match i % 4 {
+            // The sector band and its fringes, where the reduction works.
+            0 => sample(i, 16371..=16394),
+            // The full finite range, subnormals included.
+            1 => sample(i, 0..=32766),
+            // A few ulps around a breakpoint ratio `i/64` or its reciprocal.
+            2 => {
+                let j = (mix(i) % 64 + 1) as f128;
+                let near = if i % 8 < 4 { j / 64.0 } else { 64.0 / j };
+                let bits = near.to_bits().wrapping_add(mix(!i) as u128 % 15) - 7;
+                f128::from_bits(bits & !SIGN_MASK)
+            }
+            _ => sample(i, 16382..=16386),
+        }
+    }
+
+    /// Worst `|err|/gate` for [`atanq`]'s own reduction and relative band.
+    #[test]
+    fn atan_fast_leg_is_sound() {
+        let mut worst = 0.0;
+        let mut worst_at = 0.0_f128;
+
+        for i in 0..SAMPLES {
+            let x = draw_atan(i);
+            let ratio = atan_slip(x);
+
+            if ratio > worst {
+                worst = ratio;
+                worst_at = x;
+            }
+        }
+        println!("atanq fast leg: worst |err|/gate = {worst:.4} at {worst_at:?}");
+        assert!(
+            worst < 0.5,
+            "atanq gate covers only {:.2}× the slip at {worst_at:?}",
+            1.0 / worst
+        );
     }
 
     /// Worst `|err|/gate` over the sample, both signs of `x`.

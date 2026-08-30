@@ -171,7 +171,7 @@ Each function is done when both gates hold:
 |----------|:--:|:--|
 | `acosq`  | ✅ | 1.03× |
 | `asinq`  | ✅ | 1.09× |
-| `atanq`  | ✅ | 1.29× |
+| `atanq`  | ✅ | 1.02× |
 | `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
@@ -183,8 +183,13 @@ Each function is done when both gates hold:
 | `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 0.87× |
 
-`atanq` rides `atan2q`: `atan2(x, 1)` is exactly `atan(x)` — the ratio is
-exact — so the whole pipeline and its certified Ziv gate carry over.
+`atanq` rides `atan2q` — `atan2(x, 1)` is exactly `atan(x)` — but folds the
+unit operand through its own reduction: the sector is an integer shift
+(`|x| < 1`) or one hardware divide (`|x| ≥ 1`) instead of the float divide,
+and below the first breakpoint the reduced tangent *is* the input significand,
+so both legs skip the quotient and its Newton reciprocal outright.  The shared
+legs, tables, and Ziv gate carry over, and the folded path ships its own
+soundness certification.
 
 `asinq` and `acosq` split at `|x| = 2^-4`.  Below it the arc sine is its own
 reduced argument: no root is formed at all and the fast leg is a fourteen-term
