@@ -276,6 +276,7 @@ impl Reduction {
     }
 }
 
+#[inline]
 fn reduce(ay: u128, ax: u128, xneg: bool) -> Reduction {
     let swap = ay > ax;
     let (big, small) = if swap { (ay, ax) } else { (ax, ay) };
@@ -379,6 +380,7 @@ fn recip_384(d: u128) -> [u128; 3] {
 /// The reduced ratio as a floating 128-bit fraction: the value is
 /// `t1·2^(et−128)` with `t1 ∈ [2^127, 2^128)`, off by under 2^-125 of it —
 /// slip the fast leg's gate absorbs with room certified in [`ziv_soundness`].
+#[inline]
 fn quotient_128(r: &Reduction) -> (u128, i32) {
     let (high, low) = wmul(r.numerator, recip_128(r.denominator));
     let lzp = high.leading_zeros();
@@ -408,6 +410,7 @@ fn quotient_384(r: &Reduction) -> ([u128; 3], i32) {
 /// multiplies in while they run, so the chains' merge is the only work left.
 /// Each half rides its `v²` terms in a 64-bit tail whose slack sits below
 /// 2^-146 of the result.
+#[inline]
 fn atan_frac(t1: u128, et: i32) -> u128 {
     let sh = (-2 * et) as u32;
     if sh >= 128 {
@@ -431,26 +434,28 @@ fn atan_frac(t1: u128, et: i32) -> u128 {
 /// `frac·2^(e2−128)` with `frac ∈ [2^127, 2^128)`.  The table sum runs in a
 /// second limb below, which the rounder never reads — 15 guard bits sit inside
 /// `frac` itself.
+#[inline]
 pub(super) fn fast(r: &Reduction) -> (u128, i32) {
+    // A vanishing numerator means an exact breakpoint, which only a nonzero
+    // sector reaches: the tables alone are the answer, and the quotient would
+    // have no leading one to normalize.
+    if r.numerator == 0 {
+        return combine([0, 0], r.sector, r.negative, r.quadrant, r.negate);
+    }
+    let (t1, et) = quotient_128(r);
+    let f = atan_frac(t1, et);
+
     if r.relative() {
-        let (t1, et) = quotient_128(r);
-        let f = atan_frac(t1, et);
         let lz = f.leading_zeros();
         return (f << lz, et - lz as i32);
     }
-    let theta = if r.numerator == 0 {
-        [0, 0]
-    } else {
-        let (t1, et) = quotient_128(r);
-        place(atan_frac(t1, et), et)
-    };
-
-    combine(theta, r.sector, r.negative, r.quadrant, r.negate)
+    combine(place(f, et), r.sector, r.negative, r.quadrant, r.negate)
 }
 
 /// `f·2^(et−128)` in the fast leg's 2^-253 frame, i.e. `f·2^(et+125)`.  A
 /// nonzero sector keeps `et ≥ −125`; only the sectorless bands reach below,
 /// [`super::asin`]'s tiny arguments all the way off the bottom.
+#[inline]
 pub(super) fn place(f: u128, et: i32) -> [u128; 2] {
     let position = et + 125;
 
@@ -466,6 +471,7 @@ pub(super) fn place(f: u128, et: i32) -> [u128; 2] {
 /// `QOFF[quadrant] ± (PHI[sector] ± theta)` as the fast leg's floating frame.
 ///
 /// θ* ∈ [0.0078, π] keeps the frame normal: at most nine leading zeros.
+#[inline]
 pub(super) fn combine(
     theta: [u128; 2],
     sector: usize,
@@ -537,6 +543,7 @@ const fn top_256(s: [u128; 2], shift: u32) -> u128 {
 
 /// `a + b` or `a − b` without a data-dependent branch: the subtrahend enters
 /// in two's complement through an xor mask and a carry-in.
+#[inline]
 fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u128; 2] {
     let mask = 0u128.wrapping_sub(u128::from(negative));
 
@@ -548,6 +555,7 @@ fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u128; 2] {
 
 /// Round the fast frame on its fixed 15-bit guard; `None` hands ties and the
 /// subnormal range to the accurate leg.
+#[inline]
 pub(super) fn round_fast(frac: u128, e2: i32, sign: u128) -> Option<f128> {
     if e2 < f128::MIN_EXP {
         return None;

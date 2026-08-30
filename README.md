@@ -172,7 +172,7 @@ Each function is done when both gates hold:
 | `acosq`  | ✅ | 1.03× |
 | `asinq`  | ✅ | 1.09× |
 | `atanq`  | ✅ | 1.02× |
-| `atan2q` | ✅ | 1.13× |
+| `atan2q` | ✅ | 1.01× |
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
 | `exp2q`  | ✅ | 0.94× |
