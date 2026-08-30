@@ -61,6 +61,18 @@ const GUARD_HALF: u128 = 1 << (GUARD - 1);
 /// [`ziv_soundness`].
 const ZIV_GATE: u128 = 64;
 
+/// The arc tangent.
+///
+/// `atan2(x, 1)` *is* `atan(x)`: the ratio `x/1` is exact, so the whole
+/// [`atan2q`] pipeline — the dyadic-breakpoint reduction, both legs, and the
+/// certified Ziv gate — carries over untouched, correct rounding included.
+/// The unit denominator constant-folds through the reduction once inlined.
+#[must_use]
+#[inline]
+pub fn atanq(x: f128) -> f128 {
+    atan2q(x, 1.0)
+}
+
 /// The two-argument arc tangent, `atan(y/x)` in the quadrant of `(x, y)`.
 #[must_use]
 pub fn atan2q(y: f128, x: f128) -> f128 {

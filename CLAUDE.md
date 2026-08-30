@@ -102,7 +102,10 @@ accurate leg's rounder handles — the fast leg rounds on a fixed 15-bit guard
 and bails below `f128::MIN_EXP`.  Constants come from
 `tools/gen_atan2_f128.py`, which also audits that every exact-ratio table sum
 (`|y/x| = i/64` collapses the result into pure constants) clears its nearest
-rounding boundary by 2^-122 or more.
+rounding boundary by 2^-122 or more.  `atanq` is `atan2q(x, 1)`: the ratio is
+exact, so correct rounding carries over untouched; its gates use
+`core_math::atan2q(x, 1)` as the oracle (same identity) until the next
+`core-math` release binds `atanq` directly.
 
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic

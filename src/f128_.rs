@@ -20,7 +20,7 @@ mod rsqrt_tables;
 #[allow(dead_code)]
 mod uint;
 
-pub use atan2::atan2q;
+pub use atan2::{atan2q, atanq};
 pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
 pub use log::logq;

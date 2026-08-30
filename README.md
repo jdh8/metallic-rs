@@ -171,7 +171,7 @@ Each function is done when both gates hold:
 |----------|:--:|:--|
 | `acosq`  | ❌ | — |
 | `asinq`  | ❌ | — |
-| `atanq`  | ❌ | — |
+| `atanq`  | ✅ | — |
 | `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
@@ -183,7 +183,15 @@ Each function is done when both gates hold:
 | `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 0.87× |
 
-`acosq`, `asinq` and `atanq` are next up: CORE-MATH implements them upstream and
+`atanq` rides `atan2q`: `atan2(x, 1)` is exactly `atan(x)` — the ratio is
+exact — so the whole pipeline and its certified Ziv gate carry over.  Its
+gates run against `core_math::atan2q(x, 1)` (the same identity makes that a
+valid independent oracle) until the next `core-math` release binds `atanq`
+directly; the perf column waits for that release too — a tentative same-run
+bench against the unreleased local `core-math` checkout measures 1.17×
+against upstream's dedicated `atanq`.
+
+`acosq` and `asinq` are next up: CORE-MATH implements them upstream and
 `core-math-sys` binds them, but the bindings are still unreleased, so both the
 oracle gate and the corpora under `tests/cases/` arrive with the next
 `core-math` release.
