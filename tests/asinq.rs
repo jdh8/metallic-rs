@@ -7,12 +7,6 @@ mod common128;
 
 use common::Identity as _;
 
-// The published `core-math` crate does not bind `asinq` yet, so until the next
-// release the worst-case corpus and the sweeps run bit-exact against MPFR
-// (`--features "f128 mpfr"`) — the same independent gold standard CORE-MATH
-// checks itself with.  The parser count below runs unconditionally so the
-// corpus cannot rot unnoticed.
-
 #[test]
 fn test_parser() {
     assert_eq!(
@@ -25,7 +19,6 @@ const SAMPLE_COUNT: u64 = 200_000;
 
 /// Mantissa-uniform arguments filling `(-1, 1)`: every binade, subnormals
 /// included.
-#[cfg(feature = "mpfr")]
 fn domain(i: u64) -> f128 {
     let bits = common128::mix128(i);
     let exponent = (bits >> 112 & 0x7fff) % 0x3fff;
@@ -35,7 +28,6 @@ fn domain(i: u64) -> f128 {
 /// A few ulps around the sector pullbacks `±sin(atan(k/64))` and
 /// `±cos(atan(k/64))`, where the reduced tangent collapses and the wide
 /// square root's slip matters most.
-#[cfg(feature = "mpfr")]
 fn breakpoints() -> impl Iterator<Item = f128> {
     (0..SAMPLE_COUNT).map(|i| {
         let bits = common128::mix128(i);
@@ -49,7 +41,6 @@ fn breakpoints() -> impl Iterator<Item = f128> {
 }
 
 /// The top binade approaching `±1`, where `1 − x²` cancels hardest.
-#[cfg(feature = "mpfr")]
 fn near_one() -> impl Iterator<Item = f128> {
     (0..SAMPLE_COUNT).map(|i| {
         let bits = common128::mix128(i);
@@ -59,24 +50,15 @@ fn near_one() -> impl Iterator<Item = f128> {
 }
 
 /// Uniform dense sweep of `[-1, 1]`.
-#[cfg(feature = "mpfr")]
 fn dense() -> impl Iterator<Item = f128> {
     (0..=SAMPLE_COUNT).map(|i| 2.0 * i as f128 / SAMPLE_COUNT as f128 - 1.0)
 }
 
-#[cfg(feature = "mpfr")]
-fn oracle(x: f128) -> f128 {
-    use rug::float::Round::Nearest;
-
-    metallic::f128_mpfr::cr_unop(x, |y| y.asin_round(Nearest))
-}
-
-#[cfg(feature = "mpfr")]
 #[test]
 fn test_asinq() {
     common::test_univariate_cases(
         metallic::asinq,
-        oracle,
+        core_math::asinq,
         dense()
             .chain(breakpoints())
             .chain(near_one())
@@ -102,8 +84,20 @@ fn test_asinq_special() {
     assert!(metallic::asinq(f128::MIN_POSITIVE).is(&f128::MIN_POSITIVE));
 }
 
-#[cfg(feature = "mpfr")]
 #[test]
 fn test_asinq_worst_cases() {
-    common128::test_worst_univariate_f128("asin", metallic::asinq, oracle);
+    common128::test_worst_univariate_f128("asin", metallic::asinq, core_math::asinq);
+}
+
+#[cfg(feature = "mpfr")]
+#[test]
+fn test_asinq_vs_mpfr() {
+    use rug::float::Round::Nearest;
+
+    common128::mpfr_sweep_univariate_f128(
+        metallic::asinq,
+        |x| metallic::f128_mpfr::cr_unop(x, |y| y.asin_round(Nearest)),
+        domain,
+        500_000,
+    );
 }

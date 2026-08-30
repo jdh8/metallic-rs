@@ -545531,3 +545531,5 @@
 -0x1.0000000000004p-1024
 0x1.ffffffffffff8p-1025
 -0x1.ffffffffffff8p-1025
+# the following might raise an UB
+-0x1.fffffffffffffp+1023

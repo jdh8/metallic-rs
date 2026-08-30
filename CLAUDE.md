@@ -98,10 +98,7 @@ free), then the fast leg truncates to the top 128 bits and rejoins `atan2q`'s
 `fast`, guard, and `ZIV_GATE` unchanged — `asin.rs`'s own `ziv_soundness`
 re-certifies the gate at the widened budget (worst |err|/gate 0.166 ≈ 6×
 margin).  Tiny inputs need no special path: the saturated `1 − 2^-384` keeps
-`asin(x)` strictly inside `(x, x + ½ulp)`, which rounds to `x`.  Until the
-next `core-math` release binds `asinq`/`acosq`, their worst-case corpora and
-sweeps gate bit-exact against MPFR under `--features "f128 mpfr"` — there is
-no exact identity through `atan2q` like `atanq`'s.
+`asin(x)` strictly inside `(x, x + ½ulp)`, which rounds to `x`.
 
 `atan2q` reduces on *dyadic breakpoints*: one float divide picks
 `i ≈ round(64·min/max)`, and because `i/64` is a 6-bit dyadic both sides of
@@ -122,9 +119,7 @@ and bails below `f128::MIN_EXP`.  Constants come from
 `tools/gen_atan2_f128.py`, which also audits that every exact-ratio table sum
 (`|y/x| = i/64` collapses the result into pure constants) clears its nearest
 rounding boundary by 2^-122 or more.  `atanq` is `atan2q(x, 1)`: the ratio is
-exact, so correct rounding carries over untouched; its gates use
-`core_math::atan2q(x, 1)` as the oracle (same identity) until the next
-`core-math` release binds `atanq` directly.
+exact, so correct rounding carries over untouched.
 
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic

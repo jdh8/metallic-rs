@@ -19,6 +19,30 @@
 0x1.0000000000000000000000000001p-16382
 -0x1.0000000000000000000000000001p-16382
 
+# cr_logq() general path, near the normalization `int ns = nz - 15;`.
+# The nearone window check is high-word only:
+#   u.b[1] >= 0x3ffefffff0000040 -> as_logq_nearone
+# In the general path:
+#   high word 0x3ffefffff000003f
+#   low word [0xffff555556aaaaa9, 0xffffffffffffffff]
+0x1.fffff000003fp-1
+0x1.fffff000003fffff555556aaaaa8p-1
+0x1.fffff000003fffff555556aaaaa9p-1
+0x1.fffff000003fffff555556aaaaaap-1
+0x1.fffff000003ffffffp-1
+0x1.fffff000003fffffffp-1
+0x1.fffff000003ffffffffp-1
+0x1.fffff000003fffffffffp-1
+0x1.fffff000003ffffffffffp-1
+0x1.fffff000003fffffffffffp-1
+0x1.fffff000003ffffffffffffp-1
+0x1.fffff000003fffffffffffffp-1
+0x1.fffff000003ffffffffffffffp-1
+0x1.fffff000003fffffffffffffffp-1
+0x1.fffff000003ffffffffffffffffp-1
+0x1.fffff000003fffffffffffffffffp-1
+0x1.fffff0000040p-1
+
 0x1.5239a620b2c80e3fe60fb62af2d4p-1
 0x1.b0bf11dbf18963f1fceffa0c2b18p-1
 0x1.9f5743187eb5c735871327c59ca6p-1

@@ -290562,3 +290562,5 @@
 0x1.6101663bb01fcp+9
 0x1.6101663e3fa0bp+9
 0x1.6101663eac0ecp+9
+# the following yields a large error with GNU libc 2.44
+0x1.26a89f348627ap+5

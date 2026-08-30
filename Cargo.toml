@@ -28,7 +28,7 @@ fast_polynomial = { version = "0.4", features = ["std"] }
 rug = { version = "1", optional = true }
 
 [dev-dependencies]
-core-math = "1.2"
+core-math = "1.3"
 criterion = "0.8"
 hexf-parse = "0.2"
 libm = "0.2"
@@ -463,3 +463,13 @@ name = "atanq"
 harness = false
 required-features = ["f128"]
 
+
+[[bench]]
+name = "asinq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "acosq"
+harness = false
+required-features = ["f128"]

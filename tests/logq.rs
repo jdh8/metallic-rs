@@ -15,7 +15,7 @@ fn test_parser() {
     );
 }
 
-const PARSER_COUNT: usize = 51_661;
+const PARSER_COUNT: usize = 51_678;
 
 const SAMPLE_COUNT: u64 = 200_000;
 

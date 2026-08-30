@@ -169,9 +169,9 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `acosq`  | ✅ | — |
-| `asinq`  | ✅ | — |
-| `atanq`  | ✅ | — |
+| `acosq`  | ✅ | 2.07× |
+| `asinq`  | ✅ | 2.38× |
+| `atanq`  | ✅ | 1.29× |
 | `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
@@ -184,20 +184,11 @@ Each function is done when both gates hold:
 | `sqrtq`  | ✅ | 0.87× |
 
 `atanq` rides `atan2q`: `atan2(x, 1)` is exactly `atan(x)` — the ratio is
-exact — so the whole pipeline and its certified Ziv gate carry over.  Its
-gates run against `core_math::atan2q(x, 1)` (the same identity makes that a
-valid independent oracle) until the next `core-math` release binds `atanq`
-directly; the perf column waits for that release too — a tentative same-run
-bench against the unreleased local `core-math` checkout measures 1.17×
-against upstream's dedicated `atanq`.
+exact — so the whole pipeline and its certified Ziv gate carry over.
 
 `asinq` and `acosq` are the `atan2q` pipeline fed a wide `√(1−x²)`:
 `1 − x²` is exact in fixed point, the root reaches 2^-233 (fast leg) and
 2^-355 (accurate leg), and the reduction runs in 256/384-bit limbs before
-rejoining `atan2q`'s legs, tables, and certified Ziv gate.  CORE-MATH's
-upstream bindings are still unreleased, so their worst-case corpora (already
-synced under `tests/cases/`) and sweeps gate bit-exact against MPFR
-(`--features "f128 mpfr"`) until the next `core-math` release adds the
-oracle; the perf column waits for that release too.
+rejoining `atan2q`'s legs, tables, and certified Ziv gate.
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex

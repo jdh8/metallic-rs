@@ -118635,6 +118635,11 @@
 0x1.00ec085626c64p+62
 0x1.00ec048053e66p+62
 0x1.00ec043c0bc5cp+62
+0x1.9d9af563b360dp+4
+0x1.9d9af563b360ep+4
+0x1.9da0115479bf1p+4
+0x1.9da8686f7a64cp+4
+0x1.9db1bb14cd932p+4
 # the following are failures found by John Mather on Apple Silicon
 # which seem due to an issue in ldexp, reported at FB21774989
 # and FB21774410 (https://feedbackassistant.apple.com/feedback)

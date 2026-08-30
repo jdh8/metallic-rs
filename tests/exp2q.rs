@@ -17,7 +17,7 @@ fn test_parser() {
     );
 }
 
-const PARSER_COUNT: usize = 118_915;
+const PARSER_COUNT: usize = 118_924;
 
 #[test]
 fn test_exp2q() {

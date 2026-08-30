@@ -65,7 +65,7 @@ const CORPUS_LEN: usize = 1990;
 fn test_tgamma_worst_cases() {
     let cases: Vec<f64> = common::parse_case_file("tgamma.wc", common::parse_f64).collect();
     assert!(
-        cases.is_empty() || cases.len() == 545_521,
+        cases.is_empty() || cases.len() == 545_522,
         "corpus size changed; update this count"
     );
     common::test_univariate_cases(metallic::tgamma, core_math::tgamma, cases.into_iter());

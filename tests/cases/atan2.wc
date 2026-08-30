@@ -26614,7 +26614,7 @@
 0x1.c5dd8bcdee159p+890,0x1.03d2f84785d4dp+897
 -0x1.e2d9f2a56fd81p+78,0x1.01c75af7d0e1p+85
 0x1.fffffffffffffp-1022,0x1p-1014
-# inputs contributed by Erik E.
+# inputs contributed by Erik Enikeev <evonatarius@gmail.com>
 -0x1.0000000000001p-119,0x1p+939
 0x1.0000000000001p-119,0x1p+939
 -0x1.0000000000001p-131,0x1p+919
@@ -27441,7 +27441,7 @@
 0x1.fffffffffffffp-962,0x1p+61
 -0x1.fffffffffffffp-982,0x1p+83
 0x1.fffffffffffffp-982,0x1p+83
-# values contributed by Erik E. <evonatarius@gmail.com>
+# values contributed by Erik Enikeev <evonatarius@gmail.com>
 -0x0p+3,-0x1p-1074
 -0x0p+3,-0x1.ffffffffffffep-1023
 -0x0p+3,-0x1p-1022
@@ -27944,6 +27944,182 @@
 0x1.fffffffffffffp-790,-0x1.0000000000001p-733
 0x1p-1022,0x1p+53
 -0x1p-1022,0x1p+53
+0x1.ffffffffffffep-1014, 0x1.0000000000001p-965
+-0x1.ffffffffffffep-1014, 0x1.0000000000001p-965
+0x1.43556c92f1009p-1010, 0x1.27012e0ae22b8p-966
+-0x1.43556c92f1009p-1010, 0x1.27012e0ae22b8p-966
+0x1.be28a0d1b39ccp-1011, 0x1.0000000000001p-963
+-0x1.be28a0d1b39ccp-1011, 0x1.0000000000001p-963
+0x1.fffffffffffffp-1010, 0x1.b5d015bdfd9c4p-957
+-0x1.fffffffffffffp-1010, 0x1.b5d015bdfd9c4p-957
+0x1.fffffffffffffp-1006, 0x1.50d637b2edfd1p-967
+-0x1.fffffffffffffp-1006, 0x1.50d637b2edfd1p-967
+-0x1.ffffffffffffep-1004, 0x1.fffffffffffffp-960
+0x1.ffffffffffffep-1004, 0x1.fffffffffffffp-960
+0x1p-1005, 0x1.0000000000001p-957
+-0x1p-1005, 0x1.0000000000001p-957
+0x1.a71378377a4f5p-1002, 0x1.8d062e60c883cp-964
+-0x1.a71378377a4f5p-1002, 0x1.8d062e60c883cp-964
+0x1.0c0124a97210ap-1003, 0x1.8526addd96643p-963
+-0x1.0c0124a97210ap-1003, 0x1.8526addd96643p-963
+0x1p-1003, 0x1.ffffffffffffep-956
+-0x1p-1003, 0x1.ffffffffffffep-956
+0x1.0393b67472865p-1001, 0x1.3fff136d347f6p-955
+-0x1.0393b67472865p-1001, 0x1.3fff136d347f6p-955
+0x1.ffffffffffffep-1002, 0x1.0000000000001p-949
+-0x1.ffffffffffffep-1002, 0x1.0000000000001p-949
+0x1.c8b898f588e36p-997, 0x1.ea85243931eeap-964
+-0x1.c8b898f588e36p-997, 0x1.ea85243931eeap-964
+0x1.fffffffffffffp-996, 0x1.fc93e3ae173b4p-963
+-0x1.fffffffffffffp-996, 0x1.fc93e3ae173b4p-963
+0x1.d701913eac234p-996, 0x1.fffffffffffffp-958
+-0x1.d701913eac234p-996, 0x1.fffffffffffffp-958
+0x1.fffffffffffffp-996, 0x1.590db07b37fdp-955
+-0x1.fffffffffffffp-996, 0x1.590db07b37fdp-955
+-0x1.ffffffffffffep-998, 0x1.fffffffffffffp-948
+0x1.ffffffffffffep-998, 0x1.fffffffffffffp-948
+0x1.d3ee309894ba6p-998, 0x1.28639089f2b6ep-946
+-0x1.d3ee309894ba6p-998, 0x1.28639089f2b6ep-946
+0x1.57e4965fef33cp-995, 0x1.fffffffffffffp-966
+-0x1.57e4965fef33cp-995, 0x1.fffffffffffffp-966
+0x1.8d39ca440793ep-995, 0x1.fffffffffffffp-958
+-0x1.8d39ca440793ep-995, 0x1.fffffffffffffp-958
+0x1.f3b2c83b11bcfp-992, 0x1.bd3b0cfdcedc1p-953
+-0x1.f3b2c83b11bcfp-992, 0x1.bd3b0cfdcedc1p-953
+0x1.fffffffffffffp-994, 0x1.f07251ab95beep-944
+-0x1.fffffffffffffp-994, 0x1.f07251ab95beep-944
+0x1p-991, 0x1.ffffffffffffep-966
+-0x1p-991, 0x1.ffffffffffffep-966
+0x1.81def3a89ca8bp-989, 0x1.c4db70e22e7cdp-963
+-0x1.81def3a89ca8bp-989, 0x1.c4db70e22e7cdp-963
+0x1.0cfacf03d307ap-989, 0x1.d2e1b2b17f6e1p-957
+-0x1.0cfacf03d307ap-989, 0x1.d2e1b2b17f6e1p-957
+0x1.6a3fa76d1dff7p-991, 0x1.0000000000001p-955
+-0x1.6a3fa76d1dff7p-991, 0x1.0000000000001p-955
+0x1.74567910fdeb5p-990, 0x1.6ee8388d1c54bp-948
+-0x1.74567910fdeb5p-990, 0x1.6ee8388d1c54bp-948
+0x1p-989, 0x1.400688a67db48p-946
+-0x1p-989, 0x1.400688a67db48p-946
+0x1.ec9413e15b529p-990, 0x1.8869cf2131b69p-941
+-0x1.ec9413e15b529p-990, 0x1.8869cf2131b69p-941
+0x1.c2e122bd12a88p-986, 0x1.0c63cec82b379p-966
+-0x1.c2e122bd12a88p-986, 0x1.0c63cec82b379p-966
+0x1.a163a141e234ap-987, 0x1.0000000000001p-963
+-0x1.a163a141e234ap-987, 0x1.0000000000001p-963
+0x1.5fcffc07e6e75p-985, 0x1.908aa77ea7d03p-957
+-0x1.5fcffc07e6e75p-985, 0x1.908aa77ea7d03p-957
+0x1p-985, 0x1.a21be7846739dp-955
+-0x1p-985, 0x1.a21be7846739dp-955
+0x1.fffffffffffffp-984, 0x1.fffffffffffffp-946
+-0x1.fffffffffffffp-984, 0x1.fffffffffffffp-946
+0x1.4c937687a9dedp-986, 0x1.8a7ef396351f7p-942
+-0x1.4c937687a9dedp-986, 0x1.8a7ef396351f7p-942
+0x1.ffffffffffffep-982, 0x1.0000000000001p-965
+-0x1.ffffffffffffep-982, 0x1.0000000000001p-965
+0x1.fbb432c7b8357p-982, 0x1.84be662ebe2a9p-962
+-0x1.fbb432c7b8357p-982, 0x1.84be662ebe2a9p-962
+0x1.fffffffffffffp-980, 0x1.262ec7afaaa5bp-958
+-0x1.fffffffffffffp-980, 0x1.262ec7afaaa5bp-958
+0x1.b26a9b84818b4p-981, 0x1.dabd359991517p-954
+-0x1.b26a9b84818b4p-981, 0x1.dabd359991517p-954
+0x1.a87cc2b400837p-983, 0x1.9b16945f198cp-948
+-0x1.a87cc2b400837p-983, 0x1.9b16945f198cp-948
+0x1.8fcf69dced1f9p-983, 0x1.fffffffffffffp-946
+-0x1.8fcf69dced1f9p-983, 0x1.fffffffffffffp-946
+0x1.ae080fea1f936p-983, 0x1.7d14b80f30895p-942
+-0x1.ae080fea1f936p-983, 0x1.7d14b80f30895p-942
+0x1.a99eba7c12626p-982, 0x1.ffffffffffffep-936
+-0x1.a99eba7c12626p-982, 0x1.ffffffffffffep-936
+0x1p-983, 0x1.e8f434c1d4aa6p-933
+-0x1p-983, 0x1.e8f434c1d4aa6p-933
+0x1.0000000000001p-981, 0x1.d00a052db9593p-931
+-0x1.0000000000001p-981, 0x1.d00a052db9593p-931
+0x1.39cfa3173938p-979, 0x1.b6adeffc593afp-968
+-0x1.39cfa3173938p-979, 0x1.b6adeffc593afp-968
+0x1p-979, 0x1.ffffffffffffep-966
+-0x1p-979, 0x1.ffffffffffffep-966
+0x1.da2ef01e1bc7ep-977, 0x1.6e6e80074deb3p-961
+-0x1.da2ef01e1bc7ep-977, 0x1.6e6e80074deb3p-961
+0x1.fffffffffffffp-976, 0x1.fffffffffffffp-958
+-0x1.fffffffffffffp-976, 0x1.fffffffffffffp-958
+0x1.ec10349e3c138p-978, 0x1.a875f8df497c7p-954
+-0x1.ec10349e3c138p-978, 0x1.a875f8df497c7p-954
+0x1p-979, 0x1.ffffffffffffep-950
+-0x1p-979, 0x1.ffffffffffffep-950
+0x1.c8f6a8d5897a3p-979, 0x1.056205ce4b734p-945
+-0x1.c8f6a8d5897a3p-979, 0x1.056205ce4b734p-945
+0x1.0000000000001p-977, 0x1.c570fa2f954e7p-937
+-0x1.0000000000001p-977, 0x1.c570fa2f954e7p-937
+0x1.0000000000001p-977, 0x1.8ec2e7832d836p-933
+-0x1.0000000000001p-977, 0x1.8ec2e7832d836p-933
+0x1p-979, 0x1.ffffffffffffep-928
+-0x1p-979, 0x1.ffffffffffffep-928
+0x1.ad19a1331fc5bp-973, 0x1.4bbcb79381355p-968
+-0x1.ad19a1331fc5bp-973, 0x1.4bbcb79381355p-968
+0x1.ffffffffffffep-972, 0x1.57360c6ebcdacp-966
+-0x1.ffffffffffffep-972, 0x1.57360c6ebcdacp-966
+0x1.0000000000001p-973, 0x1.dc9eb43b09e15p-963
+-0x1.0000000000001p-973, 0x1.dc9eb43b09e15p-963
+0x1.0000000000001p-975, 0x1.d7d171e36a8f2p-956
+-0x1.0000000000001p-975, 0x1.d7d171e36a8f2p-956
+0x1p-973, 0x1.fc63867f37076p-955
+-0x1p-973, 0x1.fc63867f37076p-955
+0x1.2a4715237c7bp-972, 0x1.1e47a45ecb095p-950
+-0x1.2a4715237c7bp-972, 0x1.1e47a45ecb095p-950
+0x1.ffffffffffffep-974, 0x1.0000000000001p-945
+-0x1.ffffffffffffep-974, 0x1.0000000000001p-945
+0x1.a1d508e8c0ab3p-973, 0x1.5dcaa99952526p-943
+-0x1.a1d508e8c0ab3p-973, 0x1.5dcaa99952526p-943
+0x1.cae91ac625cbap-975, 0x1.b8f842b55642dp-938
+-0x1.cae91ac625cbap-975, 0x1.b8f842b55642dp-938
+0x1.fffffffffffffp-972, 0x1.8e2d0c7f1633dp-932
+-0x1.fffffffffffffp-972, 0x1.8e2d0c7f1633dp-932
+0x1.16a020ae9e692p-974, 0x1.0000000000001p-927
+-0x1.16a020ae9e692p-974, 0x1.0000000000001p-927
+0x1p-973, 0x1.04a4372e75c03p-923
+-0x1p-973, 0x1.04a4372e75c03p-923
+-0x1p-971, 0x1.96750c0c34c3ap-960
+0x1p-971, 0x1.96750c0c34c3ap-960
+0x1.bf5ddaa6d9ffp-971, 0x1.471ad3031e303p-936
+-0x1.bf5ddaa6d9ffp-971, 0x1.471ad3031e303p-936
+-0x1.fffffffffffffp-970, 0x1.fffffffffffffp-932
+0x1.fffffffffffffp-970, 0x1.fffffffffffffp-932
+0x1.0a53782bf5cf7p-971, 0x1.0000000000001p-923
+-0x1.0a53782bf5cf7p-971, 0x1.0000000000001p-923
+0x1.ffffffffffffep-964, 0x1.7224011e73f4dp-958
+-0x1.ffffffffffffep-964, 0x1.7224011e73f4dp-958
+0x1p-965, -0x1.0d367326db02p-966
+-0x1p-965, -0x1.0d367326db02p-966
+0x1.0000000000001p-961, 0x1.ae2927dc2d2d9p-957
+-0x1.0000000000001p-961, 0x1.ae2927dc2d2d9p-957
+0x1.ffffffffffffep-960, 0x1.0d5ae9bf23776p-953
+-0x1.ffffffffffffep-960, 0x1.0d5ae9bf23776p-953
+0x1.fffffffffffffp-962, 0x1p+61
+-0x1.fffffffffffffp-962, 0x1p+61
+0x1.ffffffffffffep-940, 0x1.fffffffffffffp+82
+-0x1.ffffffffffffep-940, 0x1.fffffffffffffp+82
+0x1.ffffffffffffep-678, 0x1.fffffffffffffp+344
+-0x1.ffffffffffffep-678, 0x1.fffffffffffffp+344
+0x1.fffffffffffffp-664, 0x1p+359
+-0x1.fffffffffffffp-664, 0x1p+359
+0x1.fffffffffffffp-630, 0x1p+393
+-0x1.fffffffffffffp-630, 0x1p+393
+0x1.fffffffffffffp-542, 0x1p+481
+-0x1.fffffffffffffp-542, 0x1p+481
+0x1p-525, 0x1.0000000000001p+497
+-0x1p-525, 0x1.0000000000001p+497
+0x1.ffffffffffffep-408, 0x1.fffffffffffffp+614
+-0x1.ffffffffffffep-408, 0x1.fffffffffffffp+614
+0x1.fffffffffffffp-356, 0x1p+667
+-0x1.fffffffffffffp-356, 0x1p+667
+0x1.ffffffffffffep-272, 0x1.fffffffffffffp+750
+-0x1.ffffffffffffep-272, 0x1.fffffffffffffp+750
+0x1.ffffffffffffep-230, 0x1.fffffffffffffp+792
+-0x1.ffffffffffffep-230, 0x1.fffffffffffffp+792
+0x1.ffffffffffffep-80, 0x1.fffffffffffffp+942
+-0x1.ffffffffffffep-80, 0x1.fffffffffffffp+942
+0x1.ffffffffffffep-12, 0x1.fffffffffffffp+1010
+-0x1.ffffffffffffep-12, 0x1.fffffffffffffp+1010
 # test inputs from the GNU libc
 0x1p+0,0x1.23456789p-1000
 0x1p+0,0xf.ffffffffffff8p-1004

@@ -1,52 +1,6 @@
 # this file need only contain positive worst cases since WORST_SYMMETRIC
 # is defined in function_under_test.h
 #
-# worst cases from the proof
-# x0
-0x1.d12ed0af1a27fp-27 
-0x1.d12ed0af1a280p-27
-0x1.d12ed0af1a281p-27
-0x1.d12ed0af1a282p-27
-0x1.d12ed0af1a283p-27
-0x1.d12ed0af1a284p-27
-0x1.d12ed0af1a285p-27
-0x1.d12ed0af1a286p-27
-0x1.d12ed0af1a287p-27
-0x1.d12ed0af1a288p-27
-0x1.d12ed0af1a289p-27
-0x1.d12ed0af1a28ap-27
-0x1.d12ed0af1a28bp-27
-0x1.d12ed0af1a28cp-27
-0x1.d12ed0af1a28dp-27
-0x1.d12ed0af1a28ep-27
-0x1.d12ed0af1a28fp-27
-0x1.d12ed0af1a290p-27
-0x1.d12ed0af1a291p-27
-0x1.d12ed0af1a292p-27
-0x1.d12ed0af1a293p-27
-0x1.d12ed0af1a294p-27 
-# bottom of I2
-#
-# top of I2
-0x1.0x250bfe1b082edp-26
-0x1.0x250bfe1b082eep-26
-0x1.0x250bfe1b082efp-26
-0x1.0x250bfe1b082f0p-26
-0x1.0x250bfe1b082f1p-26
-0x1.0x250bfe1b082f2p-26
-0x1.0x250bfe1b082f3p-26
-0x1.0x250bfe1b082f4p-26
-0x1.0x250bfe1b082f5p-26
-0x1.0x250bfe1b082f6p-26
-0x1.0x250bfe1b082f7p-26
-0x1.0x250bfe1b082f8p-26
-0x1.0x250bfe1b082f9p-26
-0x1.0x250bfe1b082fap-26
-0x1.0x250bfe1b082fbp-26
-0x1.0x250bfe1b082fcp-26
-0x1.0x250bfe1b082fdp-26
-# bottom of I1 
-#
 # worst cases from https://www.vinc17.net/research/testlibm/testlibm-data.xz
 # (update from update on 2020-11-27, downloaded on March 1st, 2023)
 0x1.000b47bdb383fp-9
@@ -31508,3 +31462,6 @@
 0x1.09c53f70fe242p+2
 0x1.09cc2de69e78cp+2
 0x1.628539e852a9ep+2
+0x1.a0bd10af4ac2bp+1
+0x1.a0bd1178ea346p+1
+0x1.a0bd144ac78ap+1

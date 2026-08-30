@@ -7,13 +7,6 @@ mod common128;
 
 use common::Identity as _;
 
-/// `atan2(x, 1)` is exactly `atan(x)`, so CORE-MATH's correctly rounded
-/// `atan2q` is a valid independent oracle until the published `core-math`
-/// crate binds `atanq` itself.
-fn oracle(x: f128) -> f128 {
-    core_math::atan2q(x, 1.0)
-}
-
 #[test]
 fn test_parser() {
     assert_eq!(
@@ -64,7 +57,7 @@ fn dense() -> impl Iterator<Item = f128> {
 fn test_atanq() {
     common::test_univariate_cases(
         metallic::atanq,
-        oracle,
+        core_math::atanq,
         dense()
             .chain(banded())
             .chain(breakpoints())
@@ -90,7 +83,7 @@ fn test_atanq_special() {
 
 #[test]
 fn test_atanq_worst_cases() {
-    common128::test_worst_univariate_f128("atan", metallic::atanq, oracle);
+    common128::test_worst_univariate_f128("atan", metallic::atanq, core_math::atanq);
 }
 
 #[cfg(feature = "mpfr")]
