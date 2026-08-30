@@ -59,7 +59,7 @@ const GUARD_HALF: u128 = 1 << (GUARD - 1);
 /// word and the tables far less.  Under 2^-123.5 relative in all, a sixth of
 /// the gate at the worst ulp ratio — the margin certified in
 /// [`ziv_soundness`].
-const ZIV_GATE: u128 = 64;
+pub(super) const ZIV_GATE: u128 = 64;
 
 /// The arc tangent.
 ///
@@ -129,29 +129,33 @@ fn edge(ybits: u128, xbits: u128) -> f128 {
 }
 
 /// The exact integer reduction both legs share.
-struct Reduction {
+///
+/// [`super::asin`] builds the same shape from its 256-bit reduction (one side
+/// there is a wide square root, not an exact significand), so the fields are
+/// crate-internal.
+pub(super) struct Reduction {
     /// `|64·N − i·D·2^dn|` in a nonzero sector, the small significand `N` when
     /// `i = 0` — normalized into `[2^127, 2^128)`, or zero on a breakpoint.
-    numerator: u128,
+    pub(super) numerator: u128,
     /// `64·D·2^dn + i·N` in a nonzero sector, the large significand `D` when
     /// `i = 0` — normalized into `[2^127, 2^128)`.
-    denominator: u128,
+    pub(super) denominator: u128,
     /// Binary exponent of the ratio net of both normalizations, so the reduced
     /// tangent is `(numerator/denominator)·2^scale`.
-    scale: i32,
+    pub(super) scale: i32,
     /// The ratio sits below its breakpoint, so `atan(T)` enters downward.
-    negative: bool,
+    pub(super) negative: bool,
     /// Breakpoint index: the reduction subtracts `atan(sector/64)`.
-    sector: usize,
+    pub(super) sector: usize,
     /// Quadrant offset index into [`QOFF`]: 0, π/2, or π.
-    quadrant: usize,
+    pub(super) quadrant: usize,
     /// The whole arc tangent enters the offset downward (`π/2 − θ`, `π − θ`).
-    negate: bool,
+    pub(super) negate: bool,
 }
 
 impl Reduction {
     /// No table term at all: the result is `atan(t)` in floating form.
-    const fn relative(&self) -> bool {
+    pub(super) const fn relative(&self) -> bool {
         self.sector == 0 && self.quadrant == 0
     }
 }
@@ -214,7 +218,7 @@ fn reduce(ay: u128, ax: u128, xneg: bool) -> Reduction {
 /// where two used to, and the third-order companion term (a dozen units wide
 /// at this seed width, one 64-bit multiply) pays for the limb the divide
 /// dropped.
-fn recip_128(d: u128) -> u128 {
+pub(super) const fn recip_128(d: u128) -> u128 {
     let dh = d >> 64;
     let dl = d & u64::MAX as u128;
     // `r ∈ [2^191/d − 3, 2^191/d]`: dropping `dl` costs under two units and
@@ -311,7 +315,7 @@ fn atan_frac(t1: u128, et: i32) -> u128 {
 /// `frac·2^(e2−128)` with `frac ∈ [2^127, 2^128)`.  The table sum runs in a
 /// second limb below, which the rounder never reads — 15 guard bits sit inside
 /// `frac` itself.
-fn fast(r: &Reduction) -> (u128, i32) {
+pub(super) fn fast(r: &Reduction) -> (u128, i32) {
     if r.relative() {
         let (t1, et) = quotient_128(r);
         let f = atan_frac(t1, et);
@@ -410,7 +414,7 @@ fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u128; 2] {
 
 /// Round the fast frame on its fixed 15-bit guard; `None` hands ties and the
 /// subnormal range to the accurate leg.
-fn round_fast(frac: u128, e2: i32, sign: u128) -> Option<f128> {
+pub(super) fn round_fast(frac: u128, e2: i32, sign: u128) -> Option<f128> {
     if e2 < f128::MIN_EXP {
         return None;
     }
@@ -455,7 +459,7 @@ fn correction_384(t: &[u128; 3], et: i32) -> [u128; 3] {
 }
 
 /// [`atan_frac`] at 384 bits.
-fn atan_frac_384(t: [u128; 3], et: i32) -> [u128; 3] {
+pub(super) fn atan_frac_384(t: [u128; 3], et: i32) -> [u128; 3] {
     sub_384(t, mul_hi_384(t, correction_384(&t, et)))
 }
 
@@ -478,15 +482,29 @@ fn accurate(r: &Reduction, sign: u128) -> f128 {
         let (t, et) = quotient_384(r);
         shr_384_sat(atan_frac_384(t, et), (3 - et) as u32)
     };
-    let arc = if r.negative {
-        sub_384(PHI[r.sector], theta)
+    assemble_384(theta, r.negative, r.sector, r.quadrant, r.negate, sign)
+}
+
+/// Add the reduced arc `θ` (in the 2^-381 frame) back onto its breakpoint and
+/// quadrant tables and round: the accurate legs of the whole `atan` family
+/// end here.
+pub(super) fn assemble_384(
+    theta: [u128; 3],
+    negative: bool,
+    sector: usize,
+    quadrant: usize,
+    negate: bool,
+    sign: u128,
+) -> f128 {
+    let arc = if negative {
+        sub_384(PHI[sector], theta)
     } else {
-        add_384(PHI[r.sector], theta)
+        add_384(PHI[sector], theta)
     };
-    let s = if r.negate {
-        sub_384(QOFF[r.quadrant], arc)
+    let s = if negate {
+        sub_384(QOFF[quadrant], arc)
     } else {
-        add_384(QOFF[r.quadrant], arc)
+        add_384(QOFF[quadrant], arc)
     };
     let lz = s[2].leading_zeros();
 
@@ -496,7 +514,7 @@ fn accurate(r: &Reduction, sign: u128) -> f128 {
 /// Round a floating 384-bit fraction (`frac·2^(e2−384)`, `frac` normalized) to
 /// binary128, ties to even, over the whole grid: normal, subnormal, and the
 /// underflow to zero below half the least subnormal.
-fn round_384(frac: [u128; 3], e2: i32, sign: u128) -> f128 {
+pub(super) fn round_384(frac: [u128; 3], e2: i32, sign: u128) -> f128 {
     let keep = (e2 + 16494).min(113);
 
     if keep < 0 {

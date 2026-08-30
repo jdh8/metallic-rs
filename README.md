@@ -169,8 +169,8 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `acosq`  | ❌ | — |
-| `asinq`  | ❌ | — |
+| `acosq`  | ✅ | — |
+| `asinq`  | ✅ | — |
 | `atanq`  | ✅ | — |
 | `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
@@ -191,9 +191,13 @@ directly; the perf column waits for that release too — a tentative same-run
 bench against the unreleased local `core-math` checkout measures 1.17×
 against upstream's dedicated `atanq`.
 
-`acosq` and `asinq` are next up: CORE-MATH implements them upstream and
-`core-math-sys` binds them, but the bindings are still unreleased, so both the
-oracle gate and the corpora under `tests/cases/` arrive with the next
-`core-math` release.
+`asinq` and `acosq` are the `atan2q` pipeline fed a wide `√(1−x²)`:
+`1 − x²` is exact in fixed point, the root reaches 2^-233 (fast leg) and
+2^-355 (accurate leg), and the reduction runs in 256/384-bit limbs before
+rejoining `atan2q`'s legs, tables, and certified Ziv gate.  CORE-MATH's
+upstream bindings are still unreleased, so their worst-case corpora (already
+synced under `tests/cases/`) and sweeps gate bit-exact against MPFR
+(`--features "f128 mpfr"`) until the next `core-math` release adds the
+oracle; the perf column waits for that release too.
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex

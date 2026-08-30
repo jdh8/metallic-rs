@@ -84,6 +84,25 @@ former being the top limbs of the latter's tables. Its constants come from
 is left with `log(1+z)` alone and an exact `z`, and it takes that whole
 neighbourhood (`|log x| < 2^-16`) on its own.
 
+`asinq`/`acosq` are the `atan2q` pipeline fed a *wide* square root:
+`asin(x) = atan2(x, √(1−x²))`, `acos(x) = atan2(√(1−x²), x)`.  `1 − x²` is
+exact in fixed point (`x²` is an exact 226-bit integer; a one-sided ⌈·⌉ at
+2^-384 covers deep exponents), so the root keeps full relative accuracy even
+next to `|x| = 1`, and `√(1−x²) ≥ 2^-57` keeps every exponent narrow.  An
+f64-seeded rsqrt (hypot's `rsqrt_step` pair) plus one Newton step at 256 bits
+reaches ~2^-233 for the fast leg; the accurate leg takes one more step at 384
+bits (~2^-355) and re-derives its own sort, sector, and reduction.  The
+breakpoint reduction runs in 256/384-bit limbs (the root is no longer a
+113-bit significand; a 14-bit downshift buys the headroom `atan2q` had for
+free), then the fast leg truncates to the top 128 bits and rejoins `atan2q`'s
+`fast`, guard, and `ZIV_GATE` unchanged — `asin.rs`'s own `ziv_soundness`
+re-certifies the gate at the widened budget (worst |err|/gate 0.166 ≈ 6×
+margin).  Tiny inputs need no special path: the saturated `1 − 2^-384` keeps
+`asin(x)` strictly inside `(x, x + ½ulp)`, which rounds to `x`.  Until the
+next `core-math` release binds `asinq`/`acosq`, their worst-case corpora and
+sweeps gate bit-exact against MPFR under `--features "f128 mpfr"` — there is
+no exact identity through `atan2q` like `atanq`'s.
+
 `atan2q` reduces on *dyadic breakpoints*: one float divide picks
 `i ≈ round(64·min/max)`, and because `i/64` is a 6-bit dyadic both sides of
 `tan(θ − atan(i/64))` are exact 128-bit integers (`dn ≤ 7` whenever `i ≥ 1`,

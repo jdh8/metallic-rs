@@ -163,7 +163,7 @@ fn exact(ma: u128, mb: u128, dn: u32, eb: i32) -> f128 {
 /// high multiplies against the fixed point 2^124: `w q²` lands there, and the
 /// residual times `q/2` is the correction.
 #[inline]
-fn rsqrt_step(w: u128, q: u128) -> u128 {
+pub(super) fn rsqrt_step(w: u128, q: u128) -> u128 {
     const UNIT: u128 = 1 << 124;
     let residual = mhi(w, mhi(q, q));
 
