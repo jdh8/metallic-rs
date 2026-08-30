@@ -84,21 +84,35 @@ former being the top limbs of the latter's tables. Its constants come from
 is left with `log(1+z)` alone and an exact `z`, and it takes that whole
 neighbourhood (`|log x| < 2^-16`) on its own.
 
-`asinq`/`acosq` are the `atan2q` pipeline fed a *wide* square root:
+`asinq`/`acosq` split at `|x| = 2^-4` (`BAND`).  Below it the arc sine is its
+own reduced argument: no square root is formed and the fast leg is the bare
+Taylor series `asin(x)/x = Σ A_k·x^(2k)` (exact rational coefficients, the
+generator command is in the `COEF` doc comment) — fourteen terms, even/odd
+Horner chains in `x⁴` so the serial depth halves, the last seven coefficients
+narrowed to 64 bits.  `asin` keeps the floating frame; `acos` places it into
+`atan2q`'s 2^-253 frame as `π/2 ∓ ·`, reusing `PHI`/`QOFF` through the shared
+`place`/`combine`.  Widening this band is the cheapest lever the pair has: the
+series stays far below the root pipeline's cost well past 2^-4, so the width is
+set by the blend, not by feasibility.
+
+Above the band both are the `atan2q` pipeline fed a *wide* square root:
 `asin(x) = atan2(x, √(1−x²))`, `acos(x) = atan2(√(1−x²), x)`.  `1 − x²` is
 exact in fixed point (`x²` is an exact 226-bit integer; a one-sided ⌈·⌉ at
 2^-384 covers deep exponents), so the root keeps full relative accuracy even
 next to `|x| = 1`, and `√(1−x²) ≥ 2^-57` keeps every exponent narrow.  An
-f64-seeded rsqrt (hypot's `rsqrt_step` pair) plus one Newton step at 256 bits
-reaches ~2^-233 for the fast leg; the accurate leg takes one more step at 384
-bits (~2^-355) and re-derives its own sort, sector, and reduction.  The
-breakpoint reduction runs in 256/384-bit limbs (the root is no longer a
-113-bit significand; a 14-bit downshift buys the headroom `atan2q` had for
-free), then the fast leg truncates to the top 128 bits and rejoins `atan2q`'s
-`fast`, guard, and `ZIV_GATE` unchanged — `asin.rs`'s own `ziv_soundness`
-re-certifies the gate at the widened budget (worst |err|/gate 0.166 ≈ 6×
-margin).  Tiny inputs need no special path: the saturated `1 − 2^-384` keeps
-`asin(x)` strictly inside `(x, x + ½ulp)`, which rounds to `x`.
+f64-seeded rsqrt refined by *one* `rsqrt_step` plus one Newton step at 256 bits
+reaches ~2^-207 for the fast leg — the leg's true need is 2^-133 (the sector's
+2^7 cancellation over a 2^-126 reduction), so hypot's second doubling step is
+pure latency here and `frame_residual` keeps the resulting shift windows
+honest.  The accurate leg takes one more step at 384 bits (~2^-305) and
+re-derives its own sort, sector, and reduction.  The breakpoint reduction runs
+in 256/384-bit limbs (the root is no longer a 113-bit significand; a 14-bit
+downshift buys the headroom `atan2q` had for free), then the fast leg truncates
+to the top 128 bits and rejoins `atan2q`'s `fast`, guard, and `ZIV_GATE`
+unchanged.  `asin.rs`'s own `ziv_soundness` certifies both legs together (worst
+|err|/gate 0.0667 ≈ 15× margin).  Tiny inputs need no special path: once
+`x² < 2^-128` of `x` the series *is* `x`, which is what `asin(x) = x + x³/6 + …`
+rounds to, down through the subnormals.
 
 `atan2q` reduces on *dyadic breakpoints*: one float divide picks
 `i ≈ round(64·min/max)`, and because `i/64` is a 6-bit dyadic both sides of

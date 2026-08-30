@@ -326,24 +326,42 @@ pub(super) fn fast(r: &Reduction) -> (u128, i32) {
         [0, 0]
     } else {
         let (t1, et) = quotient_128(r);
-        let f = atan_frac(t1, et);
-        // Into the 2^-253 frame: `f·2^(et−128)·2^253`, with `et ≥ −125` for a
-        // nonzero sector and only the sectorless `i = 0` band reaching below.
-        let position = et + 125;
-        if position >= 0 {
-            place_256(f, position as u32)
-        } else if position > -128 {
-            [f >> position.unsigned_abs(), 0]
-        } else {
-            [0, 0]
-        }
+        place(atan_frac(t1, et), et)
     };
+
+    combine(theta, r.sector, r.negative, r.quadrant, r.negate)
+}
+
+/// `f·2^(et−128)` in the fast leg's 2^-253 frame, i.e. `f·2^(et+125)`.  A
+/// nonzero sector keeps `et ≥ −125`; only the sectorless bands reach below,
+/// [`super::asin`]'s tiny arguments all the way off the bottom.
+pub(super) fn place(f: u128, et: i32) -> [u128; 2] {
+    let position = et + 125;
+
+    if position >= 0 {
+        place_256(f, position as u32)
+    } else if position > -128 {
+        [f >> position.unsigned_abs(), 0]
+    } else {
+        [0, 0]
+    }
+}
+
+/// `QOFF[quadrant] ± (PHI[sector] ± theta)` as the fast leg's floating frame.
+///
+/// θ* ∈ [0.0078, π] keeps the frame normal: at most nine leading zeros.
+pub(super) fn combine(
+    theta: [u128; 2],
+    sector: usize,
+    negative: bool,
+    quadrant: usize,
+    negate: bool,
+) -> (u128, i32) {
     // Both signs are coin flips on mixed quadrants: select by mask, not branch.
-    let phi = [PHI[r.sector][1], PHI[r.sector][2]];
-    let arc = add_signed_256(phi, theta, r.negative);
-    let qoff = [QOFF[r.quadrant][1], QOFF[r.quadrant][2]];
-    let s = add_signed_256(qoff, arc, r.negate);
-    // θ* ∈ [0.0078, π] keeps the frame normal: at most nine leading zeros.
+    let phi = [PHI[sector][1], PHI[sector][2]];
+    let arc = add_signed_256(phi, theta, negative);
+    let qoff = [QOFF[quadrant][1], QOFF[quadrant][2]];
+    let s = add_signed_256(qoff, arc, negate);
     let lz = s[1].leading_zeros();
 
     (top_256(s, lz), 3 - lz as i32)
@@ -353,7 +371,7 @@ pub(super) fn fast(r: &Reduction) -> (u128, i32) {
 /// 2^(shift−1) first would be shorter but can carry out of the limb when `T`
 /// is a breakpoint and the fraction is all ones.
 #[inline]
-const fn shr_round(x: u128, shift: u32) -> u128 {
+pub(super) const fn shr_round(x: u128, shift: u32) -> u128 {
     debug_assert!(shift > 0 && shift < 128);
     let bits = shift & 63;
     let [low, high] = if shift < 64 {

@@ -169,8 +169,8 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `acosq`  | ✅ | 2.07× |
-| `asinq`  | ✅ | 2.38× |
+| `acosq`  | ✅ | 1.03× |
+| `asinq`  | ✅ | 1.09× |
 | `atanq`  | ✅ | 1.29× |
 | `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
@@ -186,9 +186,12 @@ Each function is done when both gates hold:
 `atanq` rides `atan2q`: `atan2(x, 1)` is exactly `atan(x)` — the ratio is
 exact — so the whole pipeline and its certified Ziv gate carry over.
 
-`asinq` and `acosq` are the `atan2q` pipeline fed a wide `√(1−x²)`:
-`1 − x²` is exact in fixed point, the root reaches 2^-233 (fast leg) and
-2^-355 (accurate leg), and the reduction runs in 256/384-bit limbs before
+`asinq` and `acosq` split at `|x| = 2^-4`.  Below it the arc sine is its own
+reduced argument: no root is formed at all and the fast leg is a fourteen-term
+Taylor series, in floating form for `asin` and summed into `π/2 ∓ ·` for
+`acos`.  Above it both are the `atan2q` pipeline fed a wide `√(1−x²)`:
+`1 − x²` is exact in fixed point, the root reaches 2^-207 (fast leg) and
+2^-305 (accurate leg), and the reduction runs in 256/384-bit limbs before
 rejoining `atan2q`'s legs, tables, and certified Ziv gate.
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex

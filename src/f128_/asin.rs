@@ -1,7 +1,13 @@
 //! The binary128 arc sine and arc cosine.
 //!
-//! Both are the [`atan2q`](super::atan2) pipeline fed a *wide* square root:
-//! `asin(x) = atan2(x, √(1−x²))` and `acos(x) = atan2(√(1−x²), x)`.  The
+//! Two legs meet at [`BAND`].  Below `|x| = 2^-4` the arc sine *is* its own
+//! reduced argument: no square root is formed at all and the fast leg is the
+//! bare Taylor series ([`series`]), in floating form for `asin` and summed
+//! into `π/2 ∓ ·` in `atan2q`'s frame for `acos`.  Fourteen terms cover the
+//! band, and the last seven of them only need their top halves.
+//!
+//! Above it both are the [`atan2q`](super::atan2) pipeline fed a *wide* square
+//! root: `asin(x) = atan2(x, √(1−x²))` and `acos(x) = atan2(√(1−x²), x)`.  The
 //! pieces that made `atan2q` exact no longer are — one side of the ratio is
 //! irrational — so the reduction runs wider instead:
 //!
@@ -10,35 +16,39 @@
 //!    cancels without error in fixed point.  Since `|x| ≤ 1 − 2^-113`, the
 //!    difference stays above 2^-112 and the square root above 2^-57 — the
 //!    ratio's exponents stay narrow even where `x` is subnormal.
-//! 2. **Root.** An f64-seeded reciprocal square root refined by two of
+//! 2. **Root.** An f64-seeded reciprocal square root refined by *one* of
 //!    [`hypotq`](super::hypot)'s doubling steps reads the top 128 bits of
-//!    `1 − x²`; one Newton step against the top 256 bits reaches ~2^-233
-//!    ([`wide_sqrt`]), and the accurate leg takes one more against all 384
-//!    bits to ~2^-355 ([`sqrt_384`]).
+//!    `1 − x²`; one Newton step against the top 256 bits squares that 2^-102
+//!    into ~2^-207 ([`wide_sqrt`]), and the accurate leg takes one more
+//!    against all 384 bits ([`sqrt_384`]).  The fast leg's true need is only
+//!    2^-133 — the sector's 2^7 cancellation over a 2^-126 reduction — so a
+//!    second doubling step would buy nothing but latency ([`frame_residual`]
+//!    keeps the first step's window honest).
 //! 3. **Reduce.** The same dyadic-breakpoint reduction as `atan2q`, but in
 //!    256-bit (fast) or 384-bit (accurate) limbs, since the square-root side
 //!    is no longer a 113-bit significand.  The fast leg then truncates the
 //!    normalized numerator and denominator to their top 128 bits — a relative
 //!    slip under 2^-126 on the reduced tangent — and rides `atan2q`'s
 //!    [`fast`] leg, guard, and certified Ziv gate unchanged.  [`ziv_soundness`]
-//!    re-certifies the gate for the widened error budget.
+//!    re-certifies the gate across both legs.
 //! 4. **Refine.** The accurate leg re-derives everything from the 384-bit
 //!    root: a fresh sort and sector, a 384-bit reduction, a Newton reciprocal
 //!    of the wide denominator ([`recip_wide`]), and `atan2q`'s own
-//!    [`atan_frac_384`], tables, and rounder.
+//!    [`atan_frac_384`], tables, and rounder.  It also catches every gate miss
+//!    from the series band, where it forms the root it skipped.
 //!
-//! Tiny arguments need no special path: below 2^-128 the ⌈·⌉ saturates
-//! `1 − x²` to `1 − 2^-384`, and the ~2^-256 slip that leaves on the ratio
-//! keeps the result strictly between `x` and its half-ulp fence, where
-//! `asin(x) = x + x³/6 + …` rounds to `x` regardless.
+//! Tiny arguments need no special path either way: once `x² < 2^-128` of `x`
+//! the series is exactly `x`, which is what `asin(x) = x + x³/6 + …` rounds
+//! to, all the way down through the subnormals.
 
 use super::atan2::{
-    Reduction, assemble_384, atan_frac_384, fast, recip_128, round_384, round_fast,
+    Reduction, assemble_384, atan_frac_384, combine, fast, place, recip_128, round_384, round_fast,
+    shr_round,
 };
 use super::hypot::rsqrt_step;
 use super::uint::{
-    add_256, add_384, cmp_384, leading_zeros_256, leading_zeros_384, mhi, mul_hi_384, neg_384,
-    shl_256, shl_384, shr_256_sat, shr_384_sat, sub_256, sub_384, wmul,
+    add_256, add_384, cmp_384, leading_zeros_256, leading_zeros_384, mhi, mhi_approx, mul_hi_64,
+    mul_hi_384, neg_384, shl_256, shl_384, shr_256_sat, shr_384_sat, sub_256, sub_384, wmul,
 };
 use super::{EXP_MASK, EXP_SHIFT, QUIET_BIT, SIGN_MASK, split};
 use core::f128::consts;
@@ -97,14 +107,125 @@ fn edge(bits: u128, ax: u128, endpoint: f128) -> f128 {
     f128::NAN
 }
 
+/// Frame exponent below which the fast leg is the bare Taylor series: `x` is
+/// its own reduced argument and no square root is formed at all.
+///
+/// The series stays far cheaper than the root pipeline well past this point,
+/// so the width is set by the blend instead: each binade moved in costs the
+/// series a Horner level and saves it a whole root, and the two meet here.
+const BAND: i32 = -4;
+
+/// `asin(x)/x = Σ_k A_k·x^(2k)` past its leading 1, in units of 2^-128:
+/// `A_k = binomial(2k+2, k+1)/(4^(k+1)·(2k+3))`, the arc sine's own Taylor
+/// coefficients, rounded to nearest.  Fourteen terms bury the fifteenth
+/// 2^-119.7 below `Q`, and the last seven need only their top halves — `x^14`
+/// already buries a 64-bit tail's own slack that far down.
+///
+/// ```text
+/// python3 -c 'from fractions import Fraction as F
+/// from math import comb
+/// for k in range(1, 15):
+///     q = F(comb(2*k, k), 4**k*(2*k+1)) * (1 << 128)
+///     h = f"{(2*q.numerator + q.denominator)//(2*q.denominator):032x}"
+///     print("0x" + "_".join(h[i:i+4] for i in range(0, 32, 4)) + ",")'
+/// ```
+const COEF: [u128; 14] = [
+    0x2aaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
+    0x1333_3333_3333_3333_3333_3333_3333_3333,
+    0x0b6d_b6db_6db6_db6d_b6db_6db6_db6d_b6db,
+    0x07c7_1c71_c71c_71c7_1c71_c71c_71c7_1c72,
+    0x05ba_2e8b_a2e8_ba2e_8ba2_e8ba_2e8b_a2e9,
+    0x0471_3b13_b13b_13b1_3b13_b13b_13b1_3b14,
+    0x0393_3333_3333_3333_3333_3333_3333_3333,
+    0x02f5_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f,
+    0x027f_bca1_af28_6bca_1af2_86bc_a1af_286c,
+    0x0225_de79_e79e_79e7_9e79_e79e_79e7_9e7a,
+    0x01df_3bd3_7a6f_4de9_bd37_a6f4_de9b_d37a,
+    0x01a6_863d_70a3_d70a_3d70_a3d7_0a3d_70a4,
+    0x0178_2dda_12f6_84bd_a12f_684b_da12_f685,
+    0x0151_ba30_8d3d_cb08_d3dc_b08d_3dcb_08d4,
+];
+
 /// The shared pipeline for `0 < |x| < 1`: `x = m·2^(e−112)`, with `sign`
 /// applied to the result (asin only) and `xneg` steering the acos quadrant.
 fn arc(m: u128, e: i32, sign: u128, acos: bool, xneg: bool) -> f128 {
-    let sq = wide_sqrt(m, e);
-    let r = reduce(m << 15, e + 1, &sq, acos, xneg);
-    let (frac, e2) = fast(&r);
+    let (frac, e2) = fast_frame(m, e, acos, xneg);
 
-    round_fast(frac, e2, sign).unwrap_or_else(|| accurate(m << 15, e + 1, &sq, acos, xneg, sign))
+    round_fast(frac, e2, sign)
+        .unwrap_or_else(|| accurate(m << 15, e + 1, &wide_sqrt(m, e), acos, xneg, sign))
+}
+
+/// The fast leg's floating frame, shared with [`ziv_soundness`].
+///
+/// Below [`BAND`] the root would be a wasted 2^-207 approximation of 1: `x` is
+/// its own reduced argument, so the series is the whole leg — in floating form
+/// for `asin`, summed into `π/2 ∓ ·` in `atan2q`'s 2^-253 frame for `acos`.
+fn fast_frame(m: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
+    let fx = m << 15;
+    let ex = e + 1;
+
+    if ex <= BAND {
+        let (f, et) = series(fx, ex);
+
+        return if acos {
+            combine(place(f, et), 0, false, 1, !xneg)
+        } else {
+            (f, et)
+        };
+    }
+    let sq = wide_sqrt(m, e);
+
+    fast(&reduce(fx, ex, &sq, acos, xneg))
+}
+
+/// `asin(x)` as a floating 128-bit fraction from `x = t1·2^(et−128)`, for
+/// `et ≤ BAND`.
+///
+/// The reduced argument *is* `x`, so the whole reduction collapses to the
+/// series: with `u = x²` rounded into a 2^-128 word and `v = u²`, the even and
+/// odd halves of `Σ A_k·u^k` are two independent Horner chains in `v` — half
+/// the serial depth — and `x³` multiplies in while they run.  Each half closes
+/// on a 64-bit tail, whose slack sits 2^-120 below `Q`; the correction itself
+/// is only 2^-10.6 of the result, so `Q` never needs more than 115 bits.
+fn series(t1: u128, et: i32) -> (u128, i32) {
+    let sh = (-2 * et) as u32;
+    // `x² < 2^-128` of `x`: `asin(x) − x < ½ulp`, and the series is exactly `x`.
+    if sh >= 128 {
+        return (t1, et);
+    }
+    let u = shr_round(mhi_approx(t1, t1), sh);
+    let cube = mhi_approx(t1, u);
+    let v = mhi_approx(u, u);
+    let vh = (v >> 64) as u64;
+    let narrow = |k: usize| (COEF[k] >> 64) as u64;
+    let tail_even = narrow(8) + mul_hi_64(vh, narrow(10) + mul_hi_64(vh, narrow(12)));
+    let tail_odd = narrow(7)
+        + mul_hi_64(
+            vh,
+            narrow(9) + mul_hi_64(vh, narrow(11) + mul_hi_64(vh, narrow(13))),
+        );
+    let even = COEF[0]
+        + mhi_approx(
+            v,
+            COEF[2]
+                + mhi_approx(
+                    v,
+                    COEF[4] + mhi_approx(v, COEF[6] + mhi_approx(v, u128::from(tail_even) << 64)),
+                ),
+        );
+    let odd = COEF[1]
+        + mhi_approx(
+            v,
+            COEF[3] + mhi_approx(v, COEF[5] + mhi_approx(v, u128::from(tail_odd) << 64)),
+        );
+    let (f, carry) = t1.overflowing_add(mhi_approx(cube, even + mhi_approx(u, odd)));
+
+    // `asin(x)/x < 1 + 2^-10.6` carries out of the frame only just below 2^128.
+    if carry {
+        ((f >> 1) | 1 << 127, et + 1)
+    } else {
+        (f, et)
+    }
 }
 
 /// `√(1 − x²)` carried wide, plus the pieces the accurate leg reuses.
@@ -113,10 +234,10 @@ struct Sqrt {
     /// shift, with the square ⌈·⌉ed at 2^-384 so the value never overshoots.
     vn: [u128; 3],
     /// `≈ 2^190/√vn[2]`, the reciprocal square root both Newton steps divide
-    /// by, good to ~2^-119.
+    /// by, good to ~2^-102.
     q: u128,
     /// `√(vn·2^-384)·2^256` unnormalized (clamped to all-ones at the top),
-    /// within ~2^-233 relative after one Newton step.
+    /// within ~2^-207 relative after one Newton step.
     frame: [u128; 2],
     /// [`Sqrt::frame`] normalized into `[2^255, 2^256)`.
     s: [u128; 2],
@@ -145,9 +266,11 @@ fn wide_sqrt(m: u128, e: i32) -> Sqrt {
     let vn = shl_384(v, parity);
     let w = vn[2];
 
-    // The f64 seed and doubling steps are `hypotq`'s exact-tier recipe.
+    // `hypotq`'s exact-tier seed, but only one of its doubling steps: the
+    // Newton step below squares 2^-102 into 2^-207, and the fast leg's true
+    // need is 2^-133 — the sector's 2^7 cancellation over a 2^-126 frame.
     let seed = crate::exp2i(158) / ((w >> 64) as u64 as f64).sqrt();
-    let q = rsqrt_step(w, rsqrt_step(w, seed as u128));
+    let q = rsqrt_step(w, seed as u128);
 
     // s0h ≈ √(vn·2^-384)·2^128; the shift clamps when the root grazes 1.
     let s0 = mhi(w, q);
@@ -157,10 +280,10 @@ fn wide_sqrt(m: u128, e: i32) -> Sqrt {
     // q·2^-127 ≈ 1/(2√z) in the frame's own units.
     let (sqh, sql) = wmul(s0h, s0h);
     let (h, downward) = sub_signed_256(&[vn[1], vn[2]], &[sql, sqh]);
-    debug_assert!(h[1] < 1 << 18);
-    let hs = (h[1] << 110) | (h[0] >> 18);
+    debug_assert!(h[1] < 1 << 34);
+    let hs = (h[1] << 94) | (h[0] >> 34);
     let (p1, p0) = wmul(hs, q);
-    let corr = [(p1 << 19) | (p0 >> 109), p1 >> 109];
+    let corr = [(p1 << 35) | (p0 >> 93), p1 >> 93];
     let frame = if downward {
         sub_256([0, s0h], corr)
     } else {
@@ -183,7 +306,7 @@ fn wide_sqrt(m: u128, e: i32) -> Sqrt {
     }
 }
 
-/// One more Newton step against the full 384-bit `1 − x²`, to ~2^-355:
+/// One more Newton step against the full 384-bit `1 − x²`, to ~2^-305:
 /// the accurate leg's root, normalized, with its exponent.
 fn sqrt_384(sq: &Sqrt) -> ([u128; 3], i32) {
     let f3 = [0, sq.frame[0], sq.frame[1]];
@@ -194,10 +317,10 @@ fn sqrt_384(sq: &Sqrt) -> ([u128; 3], i32) {
     } else {
         sub_384(sq.vn, square)
     };
-    debug_assert!(h[1] < 1 << 28 && h[2] == 0);
-    let hs = (h[1] << 100) | (h[0] >> 28);
+    debug_assert!(h[1] < 1 << 96 && h[2] == 0);
+    let hs = (h[1] << 32) | (h[0] >> 96);
     let (p1, p0) = wmul(hs, sq.q);
-    let corr = [(p1 << 29) | (p0 >> 99), p1 >> 99, 0];
+    let corr = [(p1 << 97) | (p0 >> 31), p1 >> 31, 0];
     let s3 = if downward {
         sub_384(f3, corr)
     } else {
@@ -546,9 +669,11 @@ mod ziv_soundness {
         // Everything from just above zero to just below one, weighted toward
         // the top binades where the reduction and the root work hardest.
         let exponent = match bits >> 112 & 7 {
-            0..4 => 0x3ffe,
-            4..6 => 0x3ffe - (bits >> 115) % 8,
-            6 => 0x3ffe - (bits >> 115) % 64,
+            0..3 => 0x3ffe,
+            3..5 => 0x3ffe - (bits >> 115) % 8,
+            5 => 0x3ffe - (bits >> 115) % 64,
+            // The series band: every exponent below 2^-6, subnormals included.
+            6 => 1 + (bits >> 115) % 0x3ffb,
             _ => 1 + (bits >> 115) % 0x3ffe,
         };
         f128::from_bits(exponent << EXP_SHIFT | bits & MANTISSA_MASK)
@@ -569,9 +694,7 @@ mod ziv_soundness {
     /// frame's 2^(e2−128).
     fn slip(x: f128, acos: bool, xneg: bool) -> f64 {
         let (m, e) = split(x.to_bits());
-        let sq = wide_sqrt(m, e);
-        let r = reduce(m << 15, e + 1, &sq, acos, xneg);
-        let (frac, e2) = fast(&r);
+        let (frac, e2) = fast_frame(m, e, acos, xneg);
         let frame = Float::with_val(PRECISION, frac) * Float::with_val(PRECISION, 2).pow(e2 - 128);
         let arg = Float::with_val(PRECISION, if xneg { -x } else { x });
         let truth = if acos { arg.acos() } else { arg.asin() };
@@ -608,5 +731,43 @@ mod ziv_soundness {
             "asinq/acosq gate covers only {:.2}× the slip at {worst_at:?}",
             1.0 / worst
         );
+    }
+}
+
+/// The fast leg's root, checked through the residual [`sqrt_384`] already
+/// forms: `|vn − frame²|` reaching 50 bits above the low limb puts `frame`
+/// within 2^-207 of `√vn`, far inside the 2^-133 the sector's 2^7 cancellation
+/// over a 2^-126 reduction actually needs, and leaves that step's own 96-bit
+/// window 46 bits clear.  A shift constant cut too fine in [`wide_sqrt`]
+/// corrupts the frame and widens this residual first.
+#[cfg(test)]
+mod frame_residual {
+    use super::super::MANTISSA_MASK;
+    use super::*;
+
+    #[test]
+    fn newton_step_has_headroom() {
+        let mut worst = 0;
+
+        for i in 0..2_000_000u64 {
+            let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            let bits =
+                u128::from(z ^ (z >> 31)) << 64 | u128::from(i.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            let exponent = 1 + (bits >> 112) % 0x3fff;
+            let (m, e) = split(exponent << EXP_SHIFT | bits & MANTISSA_MASK);
+            let sq = wide_sqrt(m, e);
+            let square = square_top(sq.frame);
+            let h = if cmp_384(sq.vn, square).is_lt() {
+                sub_384(square, sq.vn)
+            } else {
+                sub_384(sq.vn, square)
+            };
+            assert_eq!(h[2], 0);
+            worst = worst.max(128 - h[1].leading_zeros());
+        }
+        println!("wide_sqrt residual reaches {worst} bits of a 96-bit window");
+        assert!(worst < 96);
     }
 }
