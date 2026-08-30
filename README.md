@@ -169,6 +169,9 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
+| `acosq`  | ❌ | — |
+| `asinq`  | ❌ | — |
+| `atanq`  | ❌ | — |
 | `atan2q` | ✅ | 1.13× |
 | `cbrtq`  | ✅ | 0.89× |
 | `exp10q` | ✅ | 0.93× |
@@ -179,5 +182,10 @@ Each function is done when both gates hold:
 | `logq`   | ✅ | 1.00× |
 | `rsqrtq` | ✅ | 0.76× |
 | `sqrtq`  | ✅ | 0.87× |
+
+`acosq`, `asinq` and `atanq` are next up: CORE-MATH implements them upstream and
+`core-math-sys` binds them, but the bindings are still unreleased, so both the
+oracle gate and the corpora under `tests/cases/` arrive with the next
+`core-math` release.
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex
