@@ -1,10 +1,13 @@
 //! The binary128 arc sine and arc cosine.
 //!
-//! Two legs meet at [`BAND`].  Below `|x| = 2^-4` the arc sine *is* its own
+//! Two legs meet at [`BAND`].  Below `|x| = 2^-3` the arc sine *is* its own
 //! reduced argument: no square root is formed at all and the fast leg is the
 //! bare Taylor series ([`series`]), in floating form for `asin` and summed
-//! into `π/2 ∓ ·` in `atan2q`'s frame for `acos`.  Fourteen terms cover the
-//! band, and the last seven of them only need their top halves.
+//! into `π/2 ∓ ·` in `atan2q`'s frame for `acos`.  The band pays for its own
+//! width one binade at a time: [`taylor_14`] serves everything below 2^-4,
+//! and only the top binade runs the nineteen terms of [`taylor_19`].  Since
+//! the root pipeline costs some 2.7× the series even there, every binade the
+//! series can reach is one the root should not.
 //!
 //! Above it both are the [`atan2q`](super::atan2) pipeline fed a *wide* square
 //! root: `asin(x) = atan2(x, √(1−x²))` and `acos(x) = atan2(√(1−x²), x)`.  The
@@ -110,26 +113,32 @@ fn edge(bits: u128, ax: u128, endpoint: f128) -> f128 {
 /// Frame exponent below which the fast leg is the bare Taylor series: `x` is
 /// its own reduced argument and no square root is formed at all.
 ///
-/// The series stays far cheaper than the root pipeline well past this point,
-/// so the width is set by the blend instead: each binade moved in costs the
-/// series a Horner level and saves it a whole root, and the two meet here.
-const BAND: i32 = -4;
+/// A binade moved in here costs the series terms and saves it a whole root —
+/// 63 ns against 172 at this edge, so the trade is worth making as long as the
+/// terms are charged only to the binade that needs them ([`NARROW_BAND`]).
+/// One binade further would need some twenty-nine terms, which is where the
+/// two finally meet.
+const BAND: i32 = -3;
+
+/// Frame exponent below which the series needs only [`taylor_14`]: the wider
+/// chain of [`taylor_19`] is the top binade's alone.
+const NARROW_BAND: i32 = -4;
 
 /// `asin(x)/x = Σ_k A_k·x^(2k)` past its leading 1, in units of 2^-128:
 /// `A_k = binomial(2k+2, k+1)/(4^(k+1)·(2k+3))`, the arc sine's own Taylor
-/// coefficients, rounded to nearest.  Fourteen terms bury the fifteenth
-/// 2^-119.7 below `Q`, and the last seven need only their top halves — `x^14`
-/// already buries a 64-bit tail's own slack that far down.
+/// coefficients, rounded to nearest.  Nineteen of them cover the whole band:
+/// the twentieth term is 2^-128.4 at `|x| = 2^-3`, and [`taylor_14`] drops
+/// the last five because at 2^-4 the fifteenth is already 2^-127.7.
 ///
 /// ```text
 /// python3 -c 'from fractions import Fraction as F
 /// from math import comb
-/// for k in range(1, 15):
+/// for k in range(1, 20):
 ///     q = F(comb(2*k, k), 4**k*(2*k+1)) * (1 << 128)
 ///     h = f"{(2*q.numerator + q.denominator)//(2*q.denominator):032x}"
 ///     print("0x" + "_".join(h[i:i+4] for i in range(0, 32, 4)) + ",")'
 /// ```
-const COEF: [u128; 14] = [
+const COEF: [u128; 19] = [
     0x2aaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
     0x1333_3333_3333_3333_3333_3333_3333_3333,
     0x0b6d_b6db_6db6_db6d_b6db_6db6_db6d_b6db,
@@ -144,6 +153,11 @@ const COEF: [u128; 14] = [
     0x01a6_863d_70a3_d70a_3d70_a3d7_0a3d_70a4,
     0x0178_2dda_12f6_84bd_a12f_684b_da12_f685,
     0x0151_ba30_8d3d_cb08_d3dc_b08d_3dcb_08d4,
+    0x0131_683b_def7_bdef_7bde_f7bd_ef7b_def8,
+    0x0115_ee9d_45d1_745d_1745_d174_5d17_45d1,
+    0x00fe_57c7_db6d_b6db_6db6_db6d_b6db_6db7,
+    0x00e9_e954_706e_b3e4_5306_eb3e_4530_6eb4,
+    0x00d8_137a_bd89_d89d_89d8_9d89_d89d_89d9,
 ];
 
 /// The shared pipeline for `0 < |x| < 1`: `x = m·2^(e−112)`, with `sign`
@@ -185,8 +199,14 @@ fn fast_frame(m: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
 /// series: with `u = x²` rounded into a 2^-128 word and `v = u²`, the even and
 /// odd halves of `Σ A_k·u^k` are two independent Horner chains in `v` — half
 /// the serial depth — and `x³` multiplies in while they run.  Each half closes
-/// on a 64-bit tail, whose slack sits 2^-120 below `Q`; the correction itself
-/// is only 2^-10.6 of the result, so `Q` never needs more than 115 bits.
+/// on a 64-bit tail whose slack sits far below `Q`; the correction itself is
+/// only 2^-8.6 of the result, so `Q` never needs more than 113 bits.
+///
+/// The two chains below are the same series truncated for the two halves of
+/// the band.  Only the top binade needs nineteen terms (and full-width
+/// coefficients out to `A_10`); everything under 2^-4 is served by
+/// [`taylor_14`] at five terms and three levels less, which is the whole
+/// reason the band is split rather than run wide throughout.
 fn series(t1: u128, et: i32) -> (u128, i32) {
     let sh = (-2 * et) as u32;
     // `x² < 2^-128` of `x`: `asin(x) − x < ½ulp`, and the series is exactly `x`.
@@ -196,6 +216,25 @@ fn series(t1: u128, et: i32) -> (u128, i32) {
     let u = shr_round(mhi_approx(t1, t1), sh);
     let cube = mhi_approx(t1, u);
     let v = mhi_approx(u, u);
+    let (even, odd) = if et <= NARROW_BAND {
+        taylor_14(v)
+    } else {
+        taylor_19(v)
+    };
+    let (f, carry) = t1.overflowing_add(mhi_approx(cube, even + mhi_approx(u, odd)));
+
+    // `asin(x)/x < 1 + 2^-8.6` carries out of the frame only just below 2^128.
+    if carry {
+        ((f >> 1) | 1 << 127, et + 1)
+    } else {
+        (f, et)
+    }
+}
+
+/// The even and odd halves of `Σ A_k·v^k` for `|x| < 2^-4`: fourteen terms,
+/// the last seven of them 64-bit — `x^14` already buries a half coefficient's
+/// own slack below `Q` there.
+fn taylor_14(v: u128) -> (u128, u128) {
     let vh = (v >> 64) as u64;
     let narrow = |k: usize| (COEF[k] >> 64) as u64;
     let tail_even = narrow(8) + mul_hi_64(vh, narrow(10) + mul_hi_64(vh, narrow(12)));
@@ -218,14 +257,67 @@ fn series(t1: u128, et: i32) -> (u128, i32) {
             v,
             COEF[3] + mhi_approx(v, COEF[5] + mhi_approx(v, u128::from(tail_odd) << 64)),
         );
-    let (f, carry) = t1.overflowing_add(mhi_approx(cube, even + mhi_approx(u, odd)));
 
-    // `asin(x)/x < 1 + 2^-10.6` carries out of the frame only just below 2^128.
-    if carry {
-        ((f >> 1) | 1 << 127, et + 1)
-    } else {
-        (f, et)
-    }
+    (even, odd)
+}
+
+/// [`taylor_14`] for the band's top binade, `2^-4 ≤ |x| < 2^-3`: nineteen
+/// terms, and the 64-bit tails cannot start before `A_11` — at `x = 2^-3` a
+/// half `A_8` would slip 2^11 units of the frame, where a half `A_11` slips
+/// 2^-7.
+fn taylor_19(v: u128) -> (u128, u128) {
+    let vh = (v >> 64) as u64;
+    let narrow = |k: usize| (COEF[k] >> 64) as u64;
+    let tail_even = narrow(10)
+        + mul_hi_64(
+            vh,
+            narrow(12)
+                + mul_hi_64(
+                    vh,
+                    narrow(14) + mul_hi_64(vh, narrow(16) + mul_hi_64(vh, narrow(18))),
+                ),
+        );
+    let tail_odd = narrow(11)
+        + mul_hi_64(
+            vh,
+            narrow(13) + mul_hi_64(vh, narrow(15) + mul_hi_64(vh, narrow(17))),
+        );
+    let even = COEF[0]
+        + mhi_approx(
+            v,
+            COEF[2]
+                + mhi_approx(
+                    v,
+                    COEF[4]
+                        + mhi_approx(
+                            v,
+                            COEF[6]
+                                + mhi_approx(
+                                    v,
+                                    COEF[8] + mhi_approx(v, u128::from(tail_even) << 64),
+                                ),
+                        ),
+                ),
+        );
+    let odd = COEF[1]
+        + mhi_approx(
+            v,
+            COEF[3]
+                + mhi_approx(
+                    v,
+                    COEF[5]
+                        + mhi_approx(
+                            v,
+                            COEF[7]
+                                + mhi_approx(
+                                    v,
+                                    COEF[9] + mhi_approx(v, u128::from(tail_odd) << 64),
+                                ),
+                        ),
+                ),
+        );
+
+    (even, odd)
 }
 
 /// `√(1 − x²)` carried wide, plus the pieces the accurate leg reuses.
@@ -672,8 +764,10 @@ mod ziv_soundness {
             0..3 => 0x3ffe,
             3..5 => 0x3ffe - (bits >> 115) % 8,
             5 => 0x3ffe - (bits >> 115) % 64,
-            // The series band: every exponent below 2^-6, subnormals included.
-            6 => 1 + (bits >> 115) % 0x3ffb,
+            // The series band's own top binades, where its truncated Taylor
+            // tail is worst; the arm below reaches the rest, subnormals
+            // included.
+            6 => 0x3ffc - (bits >> 115) % 4,
             _ => 1 + (bits >> 115) % 0x3ffe,
         };
         f128::from_bits(exponent << EXP_SHIFT | bits & MANTISSA_MASK)

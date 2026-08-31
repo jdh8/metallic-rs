@@ -84,16 +84,21 @@ former being the top limbs of the latter's tables. Its constants come from
 is left with `log(1+z)` alone and an exact `z`, and it takes that whole
 neighbourhood (`|log x| < 2^-16`) on its own.
 
-`asinq`/`acosq` split at `|x| = 2^-4` (`BAND`).  Below it the arc sine is its
+`asinq`/`acosq` split at `|x| = 2^-3` (`BAND`).  Below it the arc sine is its
 own reduced argument: no square root is formed and the fast leg is the bare
 Taylor series `asin(x)/x = Σ A_k·x^(2k)` (exact rational coefficients, the
-generator command is in the `COEF` doc comment) — fourteen terms, even/odd
-Horner chains in `x⁴` so the serial depth halves, the last seven coefficients
-narrowed to 64 bits.  `asin` keeps the floating frame; `acos` places it into
-`atan2q`'s 2^-253 frame as `π/2 ∓ ·`, reusing `PHI`/`QOFF` through the shared
-`place`/`combine`.  Widening this band is the cheapest lever the pair has: the
-series stays far below the root pipeline's cost well past 2^-4, so the width is
-set by the blend, not by feasibility.
+generator command is in the `COEF` doc comment) — even/odd Horner chains in
+`x⁴` so the serial depth halves, with the high coefficients narrowed to 64
+bits.  The band is charged per binade (`NARROW_BAND`): `taylor_14` serves
+everything below 2^-4, and only the top binade runs `taylor_19`, whose five
+extra terms and full-width `A_8`..`A_10` cost ~7 ns.  Widening the band
+wholesale is a *wash* — measured 2026-08-31: the top binade fell 173 → 63 ns
+but the 75% of a log-uniform sweep that lives below 2^-4 paid the same 7 ns,
+and the full-range ratio did not move.  Per-binade term counts are what make
+the widening pay.  One more binade would need ~29 terms, which is where the
+series and the root finally meet.  `asin` keeps the floating frame; `acos`
+places it into `atan2q`'s 2^-253 frame as `π/2 ∓ ·`, reusing `PHI`/`QOFF`
+through the shared `place`/`combine`.
 
 Above the band both are the `atan2q` pipeline fed a *wide* square root:
 `asin(x) = atan2(x, √(1−x²))`, `acos(x) = atan2(√(1−x²), x)`.  `1 − x²` is

@@ -169,8 +169,8 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `acosq`  | ✅ | 1.03× |
-| `asinq`  | ✅ | 1.09× |
+| `acosq`  | ✅ | 0.97× |
+| `asinq`  | ✅ | 1.03× |
 | `atanq`  | ✅ | 1.02× |
 | `atan2q` | ✅ | 1.01× |
 | `cbrtq`  | ✅ | 0.89× |
@@ -191,10 +191,14 @@ so both legs skip the quotient and its Newton reciprocal outright.  The shared
 legs, tables, and Ziv gate carry over, and the folded path ships its own
 soundness certification.
 
-`asinq` and `acosq` split at `|x| = 2^-4`.  Below it the arc sine is its own
-reduced argument: no root is formed at all and the fast leg is a fourteen-term
-Taylor series, in floating form for `asin` and summed into `π/2 ∓ ·` for
-`acos`.  Above it both are the `atan2q` pipeline fed a wide `√(1−x²)`:
+`asinq` and `acosq` split at `|x| = 2^-3`.  Below it the arc sine is its own
+reduced argument: no root is formed at all and the fast leg is a bare Taylor
+series, in floating form for `asin` and summed into `π/2 ∓ ·` for `acos`.  The
+band charges each binade for its own width — fourteen terms below 2^-4,
+nineteen in the top binade alone — because the root pipeline costs 2.7× the
+series there and the extra terms must not be billed to the binades that never
+needed them.  Above the band both are the `atan2q` pipeline fed a wide
+`√(1−x²)`:
 `1 − x²` is exact in fixed point, the root reaches 2^-207 (fast leg) and
 2^-305 (accurate leg), and the reduction runs in 256/384-bit limbs before
 rejoining `atan2q`'s legs, tables, and certified Ziv gate.
