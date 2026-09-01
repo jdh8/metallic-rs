@@ -104,6 +104,82 @@ CORE-MATH's own per-function check discipline. Each `tests/<fn>.rs` carries:
 Shared helpers live in `tests/common/mod.rs` (`test_worst_univariate`,
 `test_worst_bivariate`, `mpfr_sweep_univariate`, `parse_case_file`, …).
 
+**`f128` (binary128): no proof-grade corpus exists anywhere — CORE-MATH
+included — so a `q` function needs nothing from upstream but the perf headline.**
+The binary64 `.wc` files are true worst cases from exhaustive searches; the
+binary128 ones (`~/src/core-math-sys/vendor/src/binary128/<fn>/`) are
+*structural*, and their oracle is MPFR (`<fn>q_mpfr.c`), exactly as ours is:
+
+- `expq.wc` is threshold inputs plus "some worst cases computed with BaCSeL,
+  with 10 to 56 identical bits after the round bit"; `expm1q.wc` is BaCSeL at
+  `-m 10..59`. On a 2¹²⁸ domain, 56 bits is regression fodder, not a certificate.
+- `sin.wc` / `cos.wc` (16k lines each, **no C yet**) come from `sin.sage`: per
+  binade, the continued-fraction convergents of `2^(e−113)/(π/2)`, keeping the
+  input nearest an odd (sin) or even (cos) multiple of π/2. The worst has **133
+  identical bits** after the round bit — number theory beats BaCSeL, and
+  CORE-MATH publishes the corpus *before* the implementation.
+- `atan2q.sage` is the inverse trick (ARITH 2022 § IIB): pick a hard *output*
+  `z` at 114 bits, take the convergents of `tan z` with 113-bit numerator and
+  denominator, and `(y, x)` is hard by construction.
+- The roots' corpora are labelled sections: special values, exact values, near
+  powers of 2, subnormals, random.
+
+The precedent is asinq/acosq/atanq before core-math 1.3.0 bound them
+(`9b50018`, `7b4a074`; the switch-over is `0f1c593`). Ship a `q` function
+CORE-MATH lacks in five steps:
+
+1. **Oracle: MPFR at precision 113** — `metallic::f128_mpfr::cr_unop` /
+   `cr_binop` (ternary-aware subnormalization) under `--features "f128 mpfr"`.
+   Done when `test_<fn>q` sweeps mantissa-uniform inputs over every binade
+   *plus* the function's own danger windows (`tests/asinq.rs` at `9b50018`:
+   `breakpoints()`, `near_one()`) and `test_<fn>q_special` pins every edge.
+2. **Corpus: generate it, with answers.** `tests/cases/<fn>q.wc` in the
+   `f64_tgamma.wc` shape — `x, f(x)` per line, generator command in the
+   header, an unconditional parser-count guard — so the strict gate replays
+   under plain `--features f128` with no MPFR in CI. Done when all three layers
+   are in:
+   - *Derived from the math, not from search:* the exact and midpoint set
+     (Lindemann–Weierstrass / Baker / Niven leave the transcendental families
+     only the trivial ones — `exp 0`, `log 1`, `log2 2ᵏ`, `sinpi ⅙` — while the
+     algebraic ones — roots, `hypot`, `pow`, `compound` — have real families and
+     need exact-case *detection*, as f64 `pow` has), subnormal edges,
+     overflow/underflow thresholds, and the `f(x) = x` boundary of every
+     small-argument leg.
+   - *The function's Diophantine family*, a ~30-line mpmath script
+     `tools/gen_<fn>_f128_cases.py` mirroring the `.sage` scripts above:
+     convergents of π/2 per binade for sin/cos; convergents of `tan z` for
+     atan/atan2; near-Pythagorean triples for hypot; for a small-argument leg
+     `x + c·xᵏ`, the inputs whose correction lands nearest a half-ulp of `x`.
+   - *Regression layer:* an MPFR near-midpoint scan in the
+     `examples/gen_f64_tgamma_cases.rs` mould (~30 bits past the round bit at
+     10⁹ samples), or a BaCSeL run if matching their 56-bit layer matters.
+3. **Ziv-gate soundness stays the rigorous part** — the in-source
+   `ziv_soundness` certification below, unchanged. No corpus ever certified a
+   fast leg.
+4. **Accurate-leg precision by policy, not by a known worst case.** With
+   relative error 2⁻ᴾ, Ziv's heuristic puts the expected number of misrounded
+   inputs over the whole domain at ~2^(242−P). The analytic families add a
+   *floor* that BaCSeL's 56 bits never reveals:
+
+   | leg | precision | expected misses |
+   |---|---|---|
+   | `logq` accurate | 2⁻³⁴² | ~2⁻¹⁰⁰ |
+   | `atan2q` accurate | 2⁻³⁸¹ | ~2⁻¹³⁹ |
+   | floor for a `sinq` | ≥ 2⁻²⁴⁷ (113 + 133 + 1) | the π/2 family reaches every binade to 2¹⁶³⁸⁴, so Payne–Hanek must resolve δ to ~2⁻²⁵⁰ there |
+
+5. **When upstream binds it** (`0f1c593` is the template): bump the `core-math`
+   pin, switch `test_<fn>q_worst_cases` to bit-exact `core_math::<fn>q`, keep
+   `test_<fn>q_vs_mpfr`, add the name to `FUNCS128` in
+   `tools/sync-worst-cases.sh` (upstream files the trig corpora as `sin.wc`,
+   not `sinq.wc`), keep our corpus beside theirs, then bench for the same-run
+   ratio — the one deliverable that genuinely waits.
+
+Candidates, in the order the structure favours: `sinq`/`cosq` (corpus already
+upstream, unbindable for at least a release); `log2q`/`log10q`/`log1pq` on the
+`logq` engine and the hyperbolics on `expq`/`logq`; `powq`, whose real risk is
+the exact/midpoint tier, not the corpus; `erf`/gamma last — MPFR-only for good,
+like their f64 versions.
+
 ## The CR mechanism (the house template)
 
 Every f64 function follows the same shape:

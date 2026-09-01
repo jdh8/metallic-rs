@@ -3,14 +3,15 @@ name: program-math-functions
 description: >-
   Methodology and metallic-rs conventions for implementing math-library
   functions from scratch in Rust — exp, log, sin, pow, erf, and friends. Use
-  when adding or improving a function under src/f32_/ or src/f64_/, doing
+  when adding or improving a function under src/f32_/, src/f64_/ or
+  src/f128_/, doing
   argument reduction, generating minimax/Remez polynomial or rational
   coefficients (rminimax/Sollya, Remez.jl), choosing a polynomial evaluation
   scheme, applying error-free transforms and compensated arithmetic (true FMA
   available), making a function correctly rounded (≤ 0.5 ulp; Table Maker's
   Dilemma, CORE-MATH, RLIBM), or benchmarking and optimizing a function's
   performance against CORE-MATH (criterion benches, Ziv fallback rates,
-  branchless rewrites, issue #5). Covers f32 and f64.
+  branchless rewrites, issue #5). Covers f32, f64 and binary128 (`q`).
 ---
 
 # Programming math functions
@@ -183,7 +184,9 @@ skill cross-references these rungs instead of repeating "only where needed":
    `tests/<fn>.rs` gates (CORE-MATH worst-case corpus, MPFR sweep) are the
    proof; if you added or changed a Ziv fast leg or gate, its in-source
    `ziv_soundness` certification ships **in the same commit**. See
-   [reference/correct-rounding.md](reference/correct-rounding.md).
+   [reference/correct-rounding.md](reference/correct-rounding.md). For `f128`,
+   its § `f128` ships a `q` function CORE-MATH has not bound yet: MPFR gate,
+   home-grown corpus with answers, oracle switch once upstream lands.
 
 8. **Build, test, commit atomically.** Per `CLAUDE.md`: `cargo fmt`, then
    `cargo test` — **NOT `--all-features`** (the `_no_fma` feature disables FMA

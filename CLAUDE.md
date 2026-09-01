@@ -150,6 +150,10 @@ bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic
 full-representation samples, and MPFR precision-113 operation + ternary-aware
 IEEE subnormalization under `--features "f128 mpfr"`. Keep each corpus count
 guard current so a missing or partially parsed file cannot pass vacuously.
+A `q` function CORE-MATH has not shipped follows the skill's
+`reference/correct-rounding.md` § `f128`: MPFR gate, a home-grown corpus that
+carries its answers, then the oracle switch once upstream binds it — no upstream
+corpus is proof-grade in binary128, CORE-MATH's included.
 
 Refresh q corpora from `vendor/src/binary128/<fn>/<fn>q.wc` with
 `tools/sync-worst-cases.sh`. CORE-MATH remains an oracle and structural
