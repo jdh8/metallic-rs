@@ -150,7 +150,7 @@ Newton reciprocal, both legs run the Taylor sum on exact bits.  Its own
 everything above the units bit but its two low bits is a multiple of 4 and
 drops, and the product with the 113-bit significand yields the quadrant and a
 192-bit (fast) or 448-bit (accurate) fraction, cut out by four `funnel_down`s
-at one offset.  The fraction rounds to `n = round(512·x/π) mod 512` —
+at one offset.  The fraction rounds to `n = round(256·x/π) mod 512` —
 quadrant `n >> 7`, breakpoint `j = n & 127` — and the signed residual
 `|g| ≤ 1/256` normalizes into a floating fraction at its own exponent, so
 `θ = g·π/2 < 2^-7.35` keeps full relative precision however close `x` sits
@@ -163,13 +163,31 @@ accurate) and `sin(jπ/256 + θ)`, `cos(jπ/256 + θ)` recombine from a
 128-entry table of `sin`/`cos(jπ/256)` in `atan2q`'s 256/384-bit frames;
 `j = 0` with the sine wanted is the relative band, like `atan2q`'s sectorless
 one.  Below 2^-8 the argument is its own reduced angle (no window, no table);
-below 2^-57 `sin x = x` and `cos x = 1`.  CORE-MATH has no `sinq`/`cosq`
-yet, so both are gated on a home-grown corpus carrying MPFR answers
-(`examples/gen_f128_trig_cases.rs`: edges, the per-binade convergents of
-`2^(e−111)/π` for both parities of the multiple, an MPFR near-midpoint scan)
-plus CORE-MATH's f64 `sin`/`cos` as an oracle-free cross-check to 2^1024,
-and the bench baseline is GCC's libquadmath (faithful-only) until upstream
-binds them — do not add them to `FUNCS128` before then.
+below 2^-57 `sin x = x` and `cos x = 1`.
+
+`tanq` rides the same reduction, bands, and squares (`trig.rs` exports them
+`pub(super)`), then diverges: `tan θ = θ·(1 + u·P(u))` is one all-positive
+Taylor chain (`TAN_COEF`, exact Bernoulli rationals from
+`tools/gen_trig_f128.py`; eight terms fast, twenty-five accurate) kept in
+`θ`'s floating form, and the addition formula `tan(jπ/256 + θ) =
+(T_j + tan θ)/(1 − T_j·tan θ)` recombines it from a `tan(jπ/256)` table
+(`TAN`, seven integer bits: `T_127 < 2^7`) in a 2^-249 (fast) or 2^-377
+(accurate) frame.  Neither side cancels — `T_1 > tan(π/512)`,
+`T_127·tan(π/512) < ½` — and an odd quadrant swaps them (`−cot A`) by mask,
+not branch.  The quotient is `atan2q`'s `recip_128` of the denominator's top
+limb plus one Newton step *on the quotient* (exact residual against the full
+denominator, times the same reciprocal): within 2^-127 on the fast leg, and
+two such steps reach 2^-377 at 384 bits, every iterate held below the ratio
+so the unsigned residuals never wrap (`quotient`, `quotient_384`, `refine`).
+`j = 0` is the relative band — `tan θ` outright, or `1/tan θ` a quadrant on.
+
+CORE-MATH has no `sinq`/`cosq`/`tanq` yet, so all three are gated on a
+home-grown corpus carrying MPFR answers (`examples/gen_f128_trig_cases.rs`:
+edges, the per-binade convergents of `2^(e−111)/π` for both parities of the
+multiple, an MPFR near-midpoint scan) plus CORE-MATH's f64 `sin`/`cos`/`tan`
+as an oracle-free cross-check to 2^1024, and the bench baseline is GCC's
+libquadmath (faithful-only) until upstream binds them — do not add them to
+`FUNCS128` before then.
 
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic

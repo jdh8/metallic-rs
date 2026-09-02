@@ -18,6 +18,7 @@ mod misc;
 pub mod mpfr;
 mod roots;
 mod rsqrt_tables;
+mod tan;
 mod trig;
 mod trig_tables;
 #[allow(dead_code)]
@@ -29,6 +30,7 @@ pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
 pub use log::logq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
+pub use tan::tanq;
 pub use trig::{cosq, sinq};
 
 // Internal binary128 primitives shared by the function implementations.

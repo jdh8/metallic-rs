@@ -487,3 +487,8 @@ required-features = ["f128"]
 name = "cosq"
 harness = false
 required-features = ["f128"]
+
+[[bench]]
+name = "tanq"
+harness = false
+required-features = ["f128"]

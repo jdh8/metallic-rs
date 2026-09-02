@@ -163,9 +163,9 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq` have no CORE-MATH binding yet: their strict gate replays a
-  home-grown corpus that carries its MPFR answers, and CORE-MATH's `f64`
-  `sin`/`cos` cross-check every magnitude up to 2^1024.
+  `sinq`/`cosq`/`tanq` have no CORE-MATH binding yet: their strict gate
+  replays a home-grown corpus that carries its MPFR answers, and CORE-MATH's
+  `f64` `sin`/`cos`/`tan` cross-check every magnitude up to 2^1024.
 - **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
   or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
   --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
@@ -187,6 +187,7 @@ Each function is done when both gates hold:
 | `rsqrtq` | ✅ | 0.76× |
 | `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than libquadmath's faithful `sinq` |
 | `sqrtq`  | ✅ | 0.87× |
+| `tanq`   | ✅ | n/a — CORE-MATH has no `tanq`; 8.5× faster than libquadmath's faithful `tanq` |
 
 `atanq` rides `atan2q` — `atan2(x, 1)` is exactly `atan(x)` — but folds the
 unit operand through its own reduction: the sector is an integer shift
@@ -212,12 +213,22 @@ rejoining `atan2q`'s legs, tables, and certified Ziv gate.
 starts at the limb the exponent points to, everything above the units bit but
 its two low bits is a multiple of 4 and drops, and the product with the
 significand leaves the quadrant and a fraction — 192 bits on the fast leg,
-448 on the accurate one.  The fraction rounds to `n = round(512·x/π)`, a
+448 on the accurate one.  The fraction rounds to `n = round(256·x/π)`, a
 quadrant and a breakpoint `j·π/256`, and the residual `|g| ≤ 1/256`
 normalizes into a floating fraction at its own exponent, so `θ = g·π/2`
 keeps full relative precision however close `x` sits to a multiple of π/2.
 Six Taylor terms in `θ²` (eighteen on the accurate leg) and a 128-entry
 `sin`/`cos(j·π/256)` table recombine in `atan2q`'s frames; below 2^-8 the
 argument is its own reduced angle, below 2^-57 the results are `x` and 1.
+
+`tanq` shares that reduction and evaluates `tan θ` by one Taylor chain (eight
+terms, twenty-five on the accurate leg; the coefficients are exact Bernoulli
+rationals), then recombines by the addition formula `tan(j·π/256 + θ) =
+(T_j + tan θ)/(1 − T_j·tan θ)` from a table of `tan(j·π/256)`: numerator and
+denominator never cancel, and an odd quadrant just swaps them (`−cot`).  The
+quotient is `atan2q`'s hardware-seeded Newton reciprocal of the denominator's
+top limb plus one Newton step on the quotient itself against the full
+denominator (two at 384 bits on the accurate leg), every iterate held below
+the ratio so no residual goes negative.
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex

@@ -1,11 +1,13 @@
 #![feature(f128)]
-//! Generate `tests/cases/sinq.wc` and `tests/cases/cosq.wc`: the hard-to-round
-//! corpora for [`metallic::sinq`] and [`metallic::cosq`], each input with its
-//! correctly rounded answer.
+//! Generate `tests/cases/sinq.wc`, `tests/cases/cosq.wc`, and
+//! `tests/cases/tanq.wc`: the hard-to-round corpora for [`metallic::sinq`],
+//! [`metallic::cosq`], and [`metallic::tanq`], each input with its correctly
+//! rounded answer.
 //!
-//! CORE-MATH has no binary128 sine or cosine yet (only their corpora), so MPFR
-//! is the oracle and the answers travel with the inputs; the strict gate then
-//! replays under plain `--features f128` with no oracle at all.  Three layers:
+//! CORE-MATH has no binary128 sine, cosine, or tangent yet (only the first
+//! two's corpora), so MPFR is the oracle and the answers travel with the
+//! inputs; the strict gate then replays under plain `--features f128` with no
+//! oracle at all.  Three layers:
 //!
 //! 1. **Edges.** Specials, the tiny and direct band boundaries, the multiples
 //!    of π/2 and the breakpoints `j·π/256` as binary128 rounds them, each with
@@ -13,7 +15,8 @@
 //! 2. **The Diophantine family.** Per binade `e ∈ [0, 16383]`, the significand
 //!    `q < 2^113` whose `q·2^(e−112)` lands nearest a multiple `p·π/2`: the
 //!    convergents of `2^(e−111)/π`, kept for each parity of `p` — odd puts
-//!    the sine near ±1, even the cosine — the same construction as CORE-MATH's
+//!    the sine near ±1 and the tangent near a pole, even the cosine near ±1
+//!    and the tangent near zero — the same construction as CORE-MATH's
 //!    `sin.sage`/`cos.sage`.  These reach within 2^-124 of a multiple of π/2,
 //!    which is what the accurate leg's 448-bit residual is sized for.
 //! 3. **Regression scan.** An MPFR near-midpoint scan over the reduction and
@@ -96,6 +99,10 @@ fn sin(x: f128) -> f128 {
 
 fn cos(x: f128) -> f128 {
     cr_unop(x, |y| y.cos_round(Round::Nearest))
+}
+
+fn tan(x: f128) -> f128 {
+    cr_unop(x, |y| y.tan_round(Round::Nearest))
 }
 
 /// Normalized distance from `y` to the nearest binary128 midpoint.
@@ -264,10 +271,12 @@ fn main() {
     let wide: Vec<f128> = (0..WIDE).map(|i| sample(i, -16382..=16383)).collect();
     let sin_scan = scan(|y| y.sin_round(Round::Nearest), "sin scan");
     let cos_scan = scan(|y| y.cos_round(Round::Nearest), "cos scan");
+    let tan_scan = scan(|y| y.tan_round(Round::Nearest), "tan scan");
     eprintln!(
-        "{} sin and {} cos near-midpoints",
+        "{} sin, {} cos, and {} tan near-midpoints",
         sin_scan.len(),
-        cos_scan.len()
+        cos_scan.len(),
+        tan_scan.len()
     );
 
     write(
@@ -303,5 +312,22 @@ fn main() {
             ),
         ],
         cos,
+    );
+    write(
+        "tests/cases/tanq.wc",
+        "tanq",
+        &[
+            ("special values, band edges, and window edges", &edges),
+            (
+                "nearest a multiple of pi/2 per binade, both parities",
+                &family,
+            ),
+            ("random over the whole finite range", &wide),
+            (
+                "near a rounding midpoint, from an MPFR scan over [2^-57, 2^20)",
+                &tan_scan,
+            ),
+        ],
+        tan,
     );
 }

@@ -9,7 +9,7 @@
 //!    Everything above the units bit but its two low bits is a multiple of 4
 //!    and drops; what is left is the quadrant and a fraction, 192 bits wide on
 //!    the fast leg and 448 on the accurate one.
-//! 2. **Split.** Quadrant and fraction round to `n = round(512·x/π) mod 512`
+//! 2. **Split.** Quadrant and fraction round to `n = round(256·x/π) mod 512`
 //!    — the quadrant `n >> 7` and a breakpoint `j = n & 127` — leaving a
 //!    signed residual `g` with `|g| ≤ 1/256`, so `θ = g·π/2` stays within
 //!    `π/512 < 2^-7.35`.  `|g|` normalizes into a floating fraction at its
@@ -36,6 +36,9 @@
 //! exactly, and the series alone is the fast leg.  Below 2^-57 ([`TINY`]) the
 //! cubic and quadratic terms sit under half an ulp, so `sin x = x` and
 //! `cos x = 1` outright, subnormals and zero included.
+//!
+//! [`tanq`](super::tan::tanq) shares the reduction, the bands, and the
+//! squares; the items below are `pub(super)` for it.
 
 use super::atan2::{add_signed_256, place_256, round_384, round_fast, shr_round, top_256};
 use super::trig_tables::{COS_COEF, FRAC_2_PI, PIO2_128, PIO2_384, SIN_COEF, SINCOS};
@@ -48,10 +51,10 @@ use super::{BIAS, EXP_MASK, EXP_SHIFT, QUIET_BIT, SIGN_MASK, split};
 /// Below 2^-57 the sine rounds to `x` and the cosine to 1: `x³/6 < 2^-170.6`
 /// sits under the half ulp 2^-171 of `x`, and `x²/2 < 2^-115` under the half
 /// ulp 2^-114 below 1.
-const TINY: u128 = ((BIAS - 57) as u128) << EXP_SHIFT;
+pub(super) const TINY: u128 = ((BIAS - 57) as u128) << EXP_SHIFT;
 
 /// Below 2^-8 the argument is its own reduced angle: no window, no table.
-const DIRECT: i32 = -8;
+pub(super) const DIRECT: i32 = -8;
 
 /// Leading zeros of the fast leg's 192-bit residual past which it gives up:
 /// 136 bits are left at the limit, against a relative need of about 130.
@@ -91,7 +94,7 @@ fn trig(x: f128, cosine: bool) -> f128 {
 /// Infinite or NaN: the former is a domain error, the latter passes through.
 #[cold]
 #[inline(never)]
-fn edge(bits: u128, ax: u128) -> f128 {
+pub(super) fn edge(bits: u128, ax: u128) -> f128 {
     if ax > EXP_MASK {
         f128::from_bits(bits | QUIET_BIT)
     } else {
@@ -121,11 +124,12 @@ fn window<const W: usize>(e: i32) -> (&'static [u64; W], i32) {
     (window, shift)
 }
 
-/// `m·win` as `N = W + 2` little-endian 64-bit limbs, for a window `win` of
-/// `W` limbs most significant first.
+/// `m·win` as `N = W + 3` little-endian 64-bit limbs, for a window `win` of
+/// `W` limbs most significant first: the product fills `W + 2` of them, and
+/// the spare top limb stays zero so the funnels' last read is in range.
 #[inline]
 fn product<const W: usize, const N: usize>(m: u128, window: &[u64; W]) -> [u64; N] {
-    debug_assert!(N == W + 2);
+    debug_assert!(N == W + 3);
     let low = m & u128::from(u64::MAX);
     let high = m >> 64;
     let limb = |i: usize| {
@@ -149,20 +153,20 @@ fn product<const W: usize, const N: usize>(m: u128, window: &[u64; W]) -> [u64; 
 
 /// The reduced angle `θ = |g|·π/2` as a floating fraction `t1·2^(et−128)`
 /// and the breakpoint index it belongs to.
-struct Residual {
-    /// `round(512·x/π) mod 512`: quadrant in the top two bits, breakpoint
+pub(super) struct Residual {
+    /// `round(256·x/π) mod 512`: quadrant in the top two bits, breakpoint
     /// `j = n & 127` below.
-    n: usize,
+    pub(super) n: usize,
     /// `g < 0`: the angle sits below its breakpoint.
-    negative: bool,
-    t1: u128,
-    et: i32,
+    pub(super) negative: bool,
+    pub(super) t1: u128,
+    pub(super) et: i32,
 }
 
 /// Payne–Hanek on five limbs of 2/π: `None` when the residual keeps fewer
 /// than 136 of the fraction's 192 bits.
 #[inline]
-fn reduce(m: u128, e: i32) -> Option<Residual> {
+pub(super) fn reduce(m: u128, e: i32) -> Option<Residual> {
     let (window, shift) = window::<5>(e);
     let p: [u64; 8] = product(m, window);
     // The fraction is the 192 bits below the units bit, the quadrant the two
@@ -176,7 +180,7 @@ fn reduce(m: u128, e: i32) -> Option<Residual> {
     let f2 = funnel_down(p[i + 2], p[i + 3], bits);
     let quadrant = funnel_down(p[i + 3], p[i + 4], bits) & 3;
 
-    // `n = round(512·x/π)`; the residual's top limb becomes signed.
+    // `n = round(256·x/π)`; the residual's top limb becomes signed.
     let top = (u128::from(quadrant) << 64) | u128::from(f2);
     let n = ((top + (1 << 56)) >> 57) as usize & 511;
     let f2 = f2.wrapping_sub((n as u64) << 57);
@@ -209,7 +213,7 @@ fn reduce(m: u128, e: i32) -> Option<Residual> {
 /// `(u, v, u1)`: `θ²` rounded into a 2^-128 word, `θ⁴` likewise, and the
 /// unshifted `θ² = u1·2^(2·et−128)` the cosine's correction rides on.
 #[inline]
-const fn squares(t1: u128, et: i32) -> (u128, u128, u128) {
+pub(super) const fn squares(t1: u128, et: i32) -> (u128, u128, u128) {
     let u1 = mhi_approx(t1, t1);
     let u = shr_round(u1, (-2 * et) as u32);
 
@@ -289,7 +293,7 @@ fn fast(m: u128, e: i32, cosine: bool) -> Option<(u128, i32, u128)> {
 
 /// [`reduce`] on nine limbs of 2/π and a 448-bit fraction, the residual as a
 /// normalized 384-bit fraction `t·2^(et−384)`.
-fn reduce_wide(m: u128, e: i32) -> (usize, bool, [u128; 3], i32) {
+pub(super) fn reduce_wide(m: u128, e: i32) -> (usize, bool, [u128; 3], i32) {
     let (window, shift) = window::<9>(e);
     let p: [u64; 12] = product(m, window);
     let base = (126 - shift) as u32;
