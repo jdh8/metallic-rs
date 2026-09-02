@@ -472,6 +472,11 @@ harness = false
 required-features = ["f128"]
 
 [[bench]]
+name = "log1pq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
 name = "atan2q"
 harness = false
 required-features = ["f128"]

@@ -20,7 +20,7 @@ const SAMPLE_COUNT: u64 = 200_000;
 #[cfg(feature = "mpfr")]
 fn positive(i: u64) -> f128 {
     let bits = common128::mix128(i);
-    let exponent = (bits >> 120) % 0x7fff;
+    let exponent = (bits >> 112 & 0x7fff) % 0x7fff;
 
     f128::from_bits(exponent << 112 | (bits & (1 << 112) - 1))
 }

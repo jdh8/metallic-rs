@@ -30,7 +30,7 @@ pub use asin::{acosq, asinq};
 pub use atan2::{atan2q, atanq};
 pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
-pub use log::{log2q, log10q, logq};
+pub use log::{log1pq, log2q, log10q, logq};
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 pub use tan::tanq;
 pub use trig::{cosq, sinq};

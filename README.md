@@ -48,6 +48,7 @@ assert_eq!(metallic::exp2q(10.0_f128), 1024.0);
 assert_eq!(metallic::logq(1.0_f128), 0.0);
 assert_eq!(metallic::log2q(1024.0_f128), 10.0);
 assert_eq!(metallic::log10q(1000.0_f128), 3.0);
+assert_eq!(metallic::log1pq(1.0_f128), core::f128::consts::LN_2);
 ```
 
 Run its tests with `cargo +nightly test --features f128`. `sqrtq`, `rsqrtq`
@@ -65,7 +66,9 @@ correction rides on top of the exact input significand, so subtracting 1 from
 log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
 significand is exact, so the logarithms to add back are the only table the sum
 needs; `log2q` and `log10q` are the same engine with base-2 and base-10
-tables, exact at every power of two and every representable power of ten.
+tables, exact at every power of two and every representable power of ten, and
+`log1pq` is the natural one behind an exact 256-bit `1 + x` (its argument is
+its own reduction below 2<sup>&minus;18</sup>).
 `atan2q` reduces on dyadic breakpoints: one float divide picks
 `i ≈ round(64·min/max)`, the 6-bit dyadic `i/64` makes both sides of
 tan(θ &minus; atan(i/64)) exact 128-bit integers, and one hardware 128-by-64
@@ -167,10 +170,10 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq`/`tanq`/`log2q`/`log10q` have no CORE-MATH binding yet: their
-  strict gate replays a home-grown corpus that carries its MPFR answers, and
-  CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10` cross-check them
-  oracle-free.
+  `sinq`/`cosq`/`tanq`/`log2q`/`log10q`/`log1pq` have no CORE-MATH binding
+  yet: their strict gate replays a home-grown corpus that carries its MPFR
+  answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/`log1p`
+  cross-check them oracle-free.
 - **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
   or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
   --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
@@ -190,6 +193,7 @@ Each function is done when both gates hold:
 | `hypotq` | ✅ | 1.01× |
 | `log2q`  | ✅ | n/a — CORE-MATH has no `log2q`; 15× faster than libquadmath's faithful `log2q` |
 | `log10q` | ✅ | n/a — CORE-MATH has no `log10q`; 15× faster than libquadmath's faithful `log10q` |
+| `log1pq` | ✅ | n/a — CORE-MATH has no `log1pq`; 20× faster than libquadmath's faithful `log1pq` |
 | `logq`   | ✅ | 1.00× |
 | `rsqrtq` | ✅ | 0.76× |
 | `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than libquadmath's faithful `sinq` |

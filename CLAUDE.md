@@ -102,6 +102,30 @@ reciprocal, so the frame carries `k` plus the tables' and polynomial's slip
 (under 2^-139 fast, 2^-245 accurate, against a half-ulp of at least 2^-113)
 and the rounder returns `k` by margin, not by construction.
 
+`log1pq` is the natural logarithm behind a different front end, sharing the
+fast leg, gate (`finish`) and 384-bit accurate leg unchanged.  Below
+`|x| = 2^-18` the argument *is* the reduced `z`, exact, and the Taylor ratio
+`log(1+z)/z` (`ratio`, the fast leg's own polynomial at 2^127; `log1p_wide`
+at 256 bits on the accurate leg) multiplies the input significand in floating
+form — full relative accuracy down to `|x| = 2^-113`, below which `x` is the
+answer (at `±2^-113` the square is a quarter ulp; at `±2^-112` it is exactly
+half and the cube breaks the tie).  Its gate is separate (`SMALL_GATE`, on
+the 128-bit discarded field; ziv 0.2237).  Above 2^-18, `1 + x` is formed
+*exactly* in a 256-bit significand (`one_plus`: `113 − e` bits below 1,
+`max(113, e + 1)` above, so only `x ≥ 2^256` drops its 1 — a relative slip
+under 2^-256, inside the accurate leg's own 2^-251), and its 384-bit product
+with the 93-bit reciprocal carries `z` to 2^-333 for the accurate leg —
+`accurate` takes `z` at 2^333 for every base, which for `logq` is its exact
+2^-205 pair one limb up, no shift at all (widening it eagerly to a third
+limb spilled the fast leg: 41 → 54 ns).  The general leg's floor is 2^67
+(never crossed: `|log(1+x)| > 2^-19` there); its ziv is `logq`'s 0.1166.
+Gated like `log2q`/`log10q` (`gen_f128_log_cases.rs -- 1p`: the seams
+`±2^-113`, `±2^-112`, `±2^-18`, `1 + x` a power of two, every position of
+the 1 under the significand through 2^256, `round(e^z − 1)` for 114-bit
+midpoints `z` down to result binade 2^-113, MPFR scans of the domain, of
+`−1 + 2^-113..2^-1`, and of the floating band; CORE-MATH's f64 `log1p`
+cross-check).
+
 `asinq`/`acosq` split at `|x| = 2^-3` (`BAND`).  Below it the arc sine is its
 own reduced argument: no square root is formed and the fast leg is the bare
 Taylor series `asin(x)/x = Σ A_k·x^(2k)` (exact rational coefficients, the
@@ -205,7 +229,7 @@ edges, the per-binade convergents of `2^(e−111)/π` for both parities of the
 multiple, an MPFR near-midpoint scan) plus CORE-MATH's f64 `sin`/`cos`/`tan`
 as an oracle-free cross-check to 2^1024, and the bench baseline is GCC's
 libquadmath (faithful-only) until upstream binds them — do not add them to
-`FUNCS128` before then.  `log2q` and `log10q` are gated the same way
+`FUNCS128` before then.  `log2q`, `log10q` and `log1pq` are gated the same way
 (`examples/gen_f128_log_cases.rs -- <base>`: every power of two with sparse
 neighbours, base 10's exact `10^k`, the inverse family `round(b^z)` for
 114-bit midpoints `z`, MPFR scans over the domain and the neighbourhood of 1;

@@ -1,11 +1,14 @@
 #![feature(f128)]
-//! Generate `tests/cases/log2q.wc` or `tests/cases/log10q.wc`: the
-//! hard-to-round corpus for [`metallic::log2q`] or [`metallic::log10q`], each
+//! Generate `tests/cases/log2q.wc`, `tests/cases/log10q.wc` or
+//! `tests/cases/log1pq.wc`: the hard-to-round corpus for
+//! [`metallic::log2q`], [`metallic::log10q`] or [`metallic::log1pq`], each
 //! input with its correctly rounded answer.
 //!
-//! CORE-MATH has no binary128 `log2` or `log10` yet, so MPFR is the oracle
-//! and the answers travel with the inputs; the strict gate then replays under
-//! plain `--features f128` with no oracle at all.  Three layers:
+//! CORE-MATH has no binary128 `log2`, `log10` or `log1p` yet, so MPFR is the
+//! oracle and the answers travel with the inputs; the strict gate then
+//! replays under plain `--features f128` with no oracle at all.  Three
+//! layers (`log1p` has its own edges and neighbourhoods, listed at
+//! [`edges_1p`]):
 //!
 //! 1. **Edges.** Specials, the neighbours of 1, the fast leg's floor
 //!    `|log_b x| = 2^-16`, every power of two (base 2's exact cases,
@@ -22,7 +25,7 @@
 //!    binade and bit-uniform over the neighbourhood of 1 where the accurate
 //!    leg decides alone, plus a plain random sample of the whole domain.
 //!
-//! Run with the base (2 or 10) as the argument:
+//! Run with the base (2 or 10), or `1p`, as the argument:
 //! ```text
 //! CC=clang cargo +nightly run --release --features "f128 mpfr" --example gen_f128_log_cases -- 10
 //! ```
@@ -77,6 +80,33 @@ fn positive(i: u64) -> f128 {
     f128::from_bits(exponent << 112 | bits & MANTISSA)
 }
 
+/// [`positive`] with a sign, negative only above −1: `log1p`'s domain.
+fn domain(i: u64) -> f128 {
+    let bits = mix128(i);
+    let span = if bits & SIGN == 0 { 0x7fff } else { 0x3fff };
+    let exponent = (bits >> 112 & 0x7fff) % span;
+
+    f128::from_bits(bits & SIGN | exponent << 112 | bits & MANTISSA)
+}
+
+/// `−1 + t` for `t` log-uniform over `[2^-113, 2^-1)`: `1 + x` small and
+/// exact, where `log1p`'s reduction cancels.
+fn near_minus_one(i: u64) -> f128 {
+    let bits = mix128(i);
+    let exponent = 16383 - 113 + (bits >> 112 & 0x7fff) % 113;
+
+    -1.0 + f128::from_bits(exponent << 112 | bits & MANTISSA)
+}
+
+/// A random sign and significand, the exponent uniform over `[−113, −19]`:
+/// the band where `log1p`'s argument is its own reduction.
+fn band(i: u64) -> f128 {
+    let bits = mix128(i);
+    let exponent = 16383 - 113 + (bits >> 112 & 0x7fff) % 95;
+
+    f128::from_bits(bits & SIGN | exponent << 112 | bits & MANTISSA)
+}
+
 /// `1 ± t` for `t` log-uniform over `[2^-114, 2^-1)`: the accurate leg's own
 /// neighbourhood, where the reduction cancels.
 fn near_one(i: u64) -> f128 {
@@ -103,18 +133,19 @@ fn hex(x: f128) -> String {
     }
 }
 
-/// `log_b y` in place, to nearest, for `b` 2 or 10.
-fn round_log(base: u32, y: &mut Float) -> std::cmp::Ordering {
-    match base {
-        2 => y.log2_round(Round::Nearest),
-        10 => y.log10_round(Round::Nearest),
+/// `log_b y` in place, to nearest, for `b` 2 or 10 — or `log(1 + y)`.
+fn round_log(target: &str, y: &mut Float) -> std::cmp::Ordering {
+    match target {
+        "2" => y.log2_round(Round::Nearest),
+        "10" => y.log10_round(Round::Nearest),
+        "1p" => y.ln_1p_round(Round::Nearest),
         _ => unreachable!(),
     }
 }
 
-/// `log_b x`, correctly rounded.
-fn logb(base: u32, x: f128) -> f128 {
-    cr_unop(x, |y| round_log(base, y))
+/// The target function of `x`, correctly rounded.
+fn logb(target: &str, x: f128) -> f128 {
+    cr_unop(x, |y| round_log(target, y))
 }
 
 /// Normalized distance from `y` to the nearest binary128 midpoint.
@@ -152,9 +183,74 @@ fn power(k: i32) -> f128 {
     }
 }
 
+/// One bit pattern away, `k` times: away from zero for `k > 0`.
+fn step(x: f128, k: i128) -> f128 {
+    f128::from_bits((x.to_bits() as i128 + k) as u128)
+}
+
+/// Layer 1 for `log1p`: specials; the seams, both signs — 2^-113, below
+/// which the answer is `x`, 2^-112, where `x²/2` is exactly half an ulp, and
+/// 2^-18, where the floating leg hands over to the reduction; `1 + x` a
+/// power of two (`x = 2^±k − 1`), where the reduction is exactly zero; every
+/// power of two, both signs below 1, with the neighbours of a sparse subset
+/// and of every position the 1 can take under the significand up to where it
+/// is dropped (2^256); and `1 + x` within a few ulps of a table reciprocal.
+fn edges_1p() -> Vec<f128> {
+    let mut out = vec![
+        0.0,
+        -0.0,
+        f128::INFINITY,
+        f128::NEG_INFINITY,
+        f128::NAN,
+        -1.0,
+        -2.0,
+        f128::MAX,
+        f128::MIN_POSITIVE,
+        -f128::MIN_POSITIVE,
+        f128::from_bits(1),
+        -f128::from_bits(1),
+    ];
+
+    for k in [-113, -112, -18] {
+        for x in [power(k), -power(k)] {
+            out.extend((-4..=4).map(|d| step(x, d)));
+        }
+    }
+    for k in 1..=113 {
+        for x in [power(k) - 1.0, power(-k) - 1.0, (2.0 - power(-k)) - 1.0] {
+            out.extend((-2..=2).map(|d| step(x, d)));
+        }
+    }
+    for k in -16494..=16383 {
+        let x = power(k);
+        out.push(x);
+        if k < 0 {
+            out.push(-x);
+        }
+        if k % 32 == 0
+            || (111..=115).contains(&k)
+            || (253..=257).contains(&k)
+            || [-16494, -16493, -16383, -16382, -16381, 16382, 16383].contains(&k)
+        {
+            out.extend([step(x, -1), step(x, 1)]);
+            if k < 0 {
+                out.extend([step(-x, -1), step(-x, 1)]);
+            }
+        }
+    }
+    for i in 0..512_u64 {
+        let bits = mix128(i);
+        let j = (bits & 0x3ffff) as u32;
+        let e = ((bits >> 64) % 60) as i32 - 17;
+        let y: Float = (Float::with_val(PREC, j) / 262_144_u32 + e).exp2();
+        let x = (y - 1_u32).to_f128_round(Round::Nearest);
+        out.extend((-3..=3).map(|d| step(x, d)));
+    }
+    out
+}
+
 /// Layer 1: the edges.
 fn edges(base: u32) -> Vec<f128> {
-    let step = |x: f128, k: i128| f128::from_bits((x.to_bits() as i128 + k) as u128);
     let mut out = vec![
         0.0,
         -0.0,
@@ -210,20 +306,25 @@ fn edges(base: u32) -> Vec<f128> {
 }
 
 /// Layer 2: per result binade and sign, `x = round(b^z)` for a 114-bit
-/// midpoint `z`, so that `log_b x` sits within `2^-113·log_b e` of it.
-fn inverse(base: u32) -> Vec<f128> {
+/// midpoint `z`, so that `log_b x` sits within `2^-113·log_b e` of it — or
+/// `x = round(e^z − 1)` for `log1p`, whose result binades reach down to
+/// 2^-113.
+fn inverse(target: &str) -> Vec<f128> {
     let mut out = Vec::new();
+    let floor = if target == "1p" { -113 } else { -20 };
 
-    for exponent in -20..=14_i32 {
+    for exponent in floor..=14_i32 {
         for sign in [1_i32, -1] {
             for i in 0..INVERSE {
                 let odd = mix128((exponent as u64) << 40 | i << 8 | u64::from(sign < 0)) >> 15 | 1;
                 let z: Float = Float::with_val(PREC, odd)
                     * sign
                     * Float::with_val(PREC, 2).pow(exponent - 113);
-                let x = Float::with_val(PREC, base)
-                    .pow(z)
-                    .to_f128_round(Round::Nearest);
+                let x = match target.parse::<u32>() {
+                    Ok(base) => Float::with_val(PREC, base).pow(z),
+                    Err(_) => z.exp_m1(),
+                }
+                .to_f128_round(Round::Nearest);
 
                 // Base 10 overflows above `z ≈ 4932` and underflows to zero
                 // below `z ≈ −4966`: those binades have no input to give.
@@ -238,7 +339,7 @@ fn inverse(base: u32) -> Vec<f128> {
 
 /// Layer 3: the near-midpoint scan of `sampler`'s first `count` draws, in
 /// parallel.
-fn scan(base: u32, sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f128> {
+fn scan(target: &str, sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f128> {
     let done = AtomicU64::new(0);
     let mut survivors = std::thread::scope(|s| {
         let workers: Vec<_> = (0..THREADS)
@@ -249,7 +350,7 @@ fn scan(base: u32, sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f12
                     for i in (t..count).step_by(THREADS as usize) {
                         let x = sampler(i);
                         let mut y = Float::with_val(PREC, x);
-                        round_log(base, &mut y);
+                        round_log(target, &mut y);
                         if midpoint_frac(&y) < THRESHOLD {
                             kept.push(x);
                         }
@@ -272,58 +373,85 @@ fn scan(base: u32, sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f12
 }
 
 fn main() {
-    let base: u32 = std::env::args()
+    let target = std::env::args()
         .nth(1)
-        .and_then(|s| s.parse().ok())
-        .filter(|b| [2, 10].contains(b))
-        .expect("usage: gen_f128_log_cases <2|10>");
-    let edges = edges(base);
-    let family = inverse(base);
-    let wide: Vec<f128> = (0..WIDE).map(positive).collect();
-    let domain = scan(base, positive, SCAN, "domain scan");
-    let unit = scan(base, near_one, SCAN_NEAR_ONE, "near-1 scan");
+        .filter(|s| ["2", "10", "1p"].contains(&s.as_str()))
+        .expect("usage: gen_f128_log_cases <2|10|1p>");
+    let target = target.as_str();
+    let base = target.parse::<u32>().ok();
+    let family = inverse(target);
+    let (edges, wide, scans) = match base {
+        Some(base) => (
+            edges(base),
+            (0..WIDE).map(positive).collect::<Vec<f128>>(),
+            vec![
+                (
+                    "near a rounding midpoint, from an MPFR scan over every binade",
+                    scan(target, positive, SCAN, "domain scan"),
+                ),
+                (
+                    "near a rounding midpoint, from an MPFR scan of 1 ± 2^-114..2^-1",
+                    scan(target, near_one, SCAN_NEAR_ONE, "near-1 scan"),
+                ),
+            ],
+        ),
+        None => (
+            edges_1p(),
+            (0..WIDE).map(domain).collect(),
+            vec![
+                (
+                    "near a rounding midpoint, from an MPFR scan over every binade, both signs",
+                    scan(target, domain, SCAN, "domain scan"),
+                ),
+                (
+                    "near a rounding midpoint, from an MPFR scan of -1 + 2^-113..2^-1",
+                    scan(target, near_minus_one, SCAN_NEAR_ONE, "near -1 scan"),
+                ),
+                (
+                    "near a rounding midpoint, from an MPFR scan of ±2^-113..2^-18",
+                    scan(target, band, SCAN_NEAR_ONE, "band scan"),
+                ),
+            ],
+        ),
+    };
     eprintln!(
-        "{} edges, {} inverse, {} + {} near-midpoints",
+        "{} edges, {} inverse, {:?} near-midpoints",
         edges.len(),
         family.len(),
-        domain.len(),
-        unit.len()
+        scans.iter().map(|(_, s)| s.len()).collect::<Vec<_>>()
     );
 
-    let exact = if base == 10 {
-        "powers of two and ten"
-    } else {
-        "powers of two"
+    let (edge_title, family_title) = match base {
+        Some(10) => (
+            "special values, neighbours of 1 and of the fast floor, powers of two and ten",
+            "round(10^z) for a 114-bit midpoint z, per result binade and sign",
+        ),
+        Some(_) => (
+            "special values, neighbours of 1 and of the fast floor, powers of two",
+            "round(2^z) for a 114-bit midpoint z, per result binade and sign",
+        ),
+        None => (
+            "special values, the seams, 1 + x a power of two, powers of two, near a table reciprocal",
+            "round(e^z - 1) for a 114-bit midpoint z, per result binade and sign",
+        ),
     };
     let mut text = format!(
-        "# Hard-to-round cases for metallic::log{base}q(x), with their correctly rounded answers (MPFR).\n\
-         # Generated by `CC=clang cargo +nightly run --release --features \"f128 mpfr\" --example gen_f128_log_cases -- {base}`.\n",
+        "# Hard-to-round cases for metallic::log{target}q(x), with their correctly rounded answers (MPFR).\n\
+         # Generated by `CC=clang cargo +nightly run --release --features \"f128 mpfr\" --example gen_f128_log_cases -- {target}`.\n",
     );
-    for (title, inputs) in [
-        (
-            format!("special values, neighbours of 1 and of the fast floor, {exact}"),
-            &edges,
-        ),
-        (
-            format!("round({base}^z) for a 114-bit midpoint z, per result binade and sign"),
-            &family,
-        ),
-        ("random over the whole domain".to_owned(), &wide),
-        (
-            "near a rounding midpoint, from an MPFR scan over every binade".to_owned(),
-            &domain,
-        ),
-        (
-            "near a rounding midpoint, from an MPFR scan of 1 ± 2^-114..2^-1".to_owned(),
-            &unit,
-        ),
-    ] {
+    let mut sections = vec![
+        (edge_title, &edges),
+        (family_title, &family),
+        ("random over the whole domain", &wide),
+    ];
+    sections.extend(scans.iter().map(|(title, cases)| (*title, cases)));
+    for (title, inputs) in sections {
         writeln!(text, "#\n# {title}\n#").unwrap();
         for &x in inputs {
-            writeln!(text, "{} {}", hex(x), hex(logb(base, x))).unwrap();
+            writeln!(text, "{} {}", hex(x), hex(logb(target, x))).unwrap();
         }
     }
-    let path = format!("tests/cases/log{base}q.wc");
+    let path = format!("tests/cases/log{target}q.wc");
     std::fs::write(&path, text).expect("write corpus");
     eprintln!("wrote {path}");
 }
