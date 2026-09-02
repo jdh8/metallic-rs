@@ -181,7 +181,7 @@ skill cross-references these rungs instead of repeating "only where needed":
 7. **Verify against an oracle.** For `f32`, each function's test sweeps **all
    2³² bit patterns** against the `core-math` oracle (`common::test_all_f32`) —
    a clean sweep *proves* correct rounding. For `f64`, the per-function
-   `tests/<fn>.rs` gates (CORE-MATH worst-case corpus, MPFR sweep) are the
+   `tests/all/f64_/<fn>.rs` gates (CORE-MATH worst-case corpus, MPFR sweep) are the
    proof; if you added or changed a Ziv fast leg or gate, its in-source
    `ziv_soundness` certification ships **in the same commit**. See
    [reference/correct-rounding.md](reference/correct-rounding.md). For `f128`,

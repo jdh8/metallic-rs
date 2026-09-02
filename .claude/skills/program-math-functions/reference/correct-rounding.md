@@ -74,17 +74,17 @@ requirement. FMA is free here too (`crate::fma`/`crate::fmaf`); see
 ## How you *prove* a function is correctly rounded
 
 **`f32` (binary32): exhaustive — and the harness already exists.** Only 2³² bit
-patterns exist. Each f32 function has a per-function test file (`tests/sinf.rs`,
-`tests/expf.rs`, …) whose core is one line: `common::test_all_f32(metallic::sinf,
+patterns exist. Each f32 function has a per-function test file (`tests/all/f32_/sinf.rs`,
+`tests/all/f32_/expf.rs`, …) whose core is one line: `common::test_all_f32(metallic::sinf,
 core_math::sinf)` — it loops **every** `f32` and compares against the `core-math`
-oracle via the `Identity` trait in `tests/common/mod.rs` (bit-equal, NaNs equal).
+oracle via the `Identity` trait in `tests/all/common.rs` (bit-equal, NaNs equal).
 A clean sweep is a *proof* of correct rounding and is the CI gate; it runs
 natively in minutes. Bivariate functions use `common::test_bivariate_cases`;
 `common::truncate_errors` caps the report at 250 mismatches so a regression fails
 fast.
 
 **`f64` (binary64): cannot brute-force** (2⁶⁴ inputs) — so the repo reproduces
-CORE-MATH's own per-function check discipline. Each `tests/<fn>.rs` carries:
+CORE-MATH's own per-function check discipline. Each `tests/all/f64_/<fn>.rs` carries:
 
 - **`test_<fn>_worst_cases`** — the strict correct-rounding gate: bit-exact vs
   the `core-math` oracle on CORE-MATH's hard-to-round corpus
@@ -101,7 +101,7 @@ CORE-MATH's own per-function check discipline. Each `tests/<fn>.rs` carries:
   broad sweep against MPFR ground truth, guarding against a bug shared with
   CORE-MATH. Run with `cargo test --release --features mpfr`.
 
-Shared helpers live in `tests/common/mod.rs` (`test_worst_univariate`,
+Shared helpers live in `tests/all/common.rs` (`test_worst_univariate`,
 `test_worst_bivariate`, `mpfr_sweep_univariate`, `parse_case_file`, …).
 
 **`f128` (binary128): no proof-grade corpus exists anywhere — CORE-MATH
@@ -131,7 +131,7 @@ CORE-MATH lacks in five steps:
 1. **Oracle: MPFR at precision 113** — `metallic::f128_mpfr::cr_unop` /
    `cr_binop` (ternary-aware subnormalization) under `--features "f128 mpfr"`.
    Done when `test_<fn>q` sweeps mantissa-uniform inputs over every binade
-   *plus* the function's own danger windows (`tests/asinq.rs` at `9b50018`:
+   *plus* the function's own danger windows (`tests/all/f128_/asinq.rs` at `9b50018`:
    `breakpoints()`, `near_one()`) and `test_<fn>q_special` pins every edge.
 2. **Corpus: generate it, with answers.** `tests/cases/<fn>q.wc` in the
    `f64_tgamma.wc` shape — `x, f(x)` per line, generator command in the

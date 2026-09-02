@@ -25,8 +25,8 @@ jobs:
       id: tests
       shell: bash
       run: |
-        list=$(basename -a -s .rs tests/*.rs | jq -R -s -c 'split("\n")[:-1]')
-        f128=$(basename -a -s .rs tests/*q.rs | jq -R -s -c 'split("\n")[:-1]')
+        list=$(basename -a -s .rs tests/all/f32_/*.rs tests/all/f64_/*.rs | jq -R -s -c 'split("\n")[:-1]')
+        f128=$(basename -a -s .rs tests/all/f128_/*.rs | jq -R -s -c 'split("\n")[:-1]')
         echo "list=$list" >> "$GITHUB_OUTPUT"
         echo "f128=$f128" >> "$GITHUB_OUTPUT"
 
@@ -108,7 +108,7 @@ jobs:
         shared-key: test-${{ hashFiles('**/Cargo.lock') }}
         save-if: false
     - name: Run tests
-      run: cargo test --test ${{ matrix.test }} --verbose
+      run: cargo test --test all --verbose -- '::${{ matrix.test }}::'
 
   test-lib:
     needs: build
@@ -145,7 +145,7 @@ jobs:
         shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
         save-if: false
     - name: Run binary128 tests
-      run: cargo +nightly test --test ${{ matrix.test }} --features f128 --verbose
+      run: cargo +nightly test --test all --features f128 --verbose -- '::${{ matrix.test }}::'
 
   test-f128-lib:
     needs: build-f128
@@ -182,7 +182,7 @@ jobs:
         shared-key: test-nofma-${{ hashFiles('**/Cargo.lock') }}
         save-if: false
     - name: Run tests forcing no-FMA fallback
-      run: cargo test --test ${{ matrix.test }} --features _no_fma --verbose
+      run: cargo test --test all --features _no_fma --verbose -- '::${{ matrix.test }}::'
 
   test-lib-nofma:
     needs: build-nofma

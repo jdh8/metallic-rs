@@ -231,7 +231,7 @@ faithful-only comparisons.
 
 Every f64 function reproduces CORE-MATH's per-function check discipline, in
 **round-to-nearest only** (metallic's functions are pure RNDN; directed rounding
-is out of scope).  Each `tests/<fn>.rs` carries, beyond its dense + full-range
+is out of scope).  Each `tests/all/f64_/<fn>.rs` carries, beyond its dense + full-range
 bit-stepping sweep:
 
 - `test_<fn>_worst_cases` — CORE-MATH's `--worst` step: bit-exact vs the
@@ -241,7 +241,7 @@ bit-stepping sweep:
   cross-check CORE-MATH itself uses, guarding against a shared CORE-MATH bug.
   Run with `cargo test --release --features mpfr`.
 
-Shared helpers live in `tests/common/mod.rs` (`test_worst_univariate`,
+Shared helpers live in `tests/all/common.rs` (`test_worst_univariate`,
 `test_worst_bivariate`, `test_worst_faithful`, `mpfr_sweep_univariate`, …).
 
 **Corpora.** `tests/cases/*.wc` are CORE-MATH's worst-case files, committed to
