@@ -10,6 +10,7 @@ mod exp;
 mod exp_tables;
 mod hypot;
 mod log;
+mod log2_tables;
 mod log_tables;
 #[allow(dead_code)]
 mod misc;
@@ -28,7 +29,7 @@ pub use asin::{acosq, asinq};
 pub use atan2::{atan2q, atanq};
 pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
-pub use log::logq;
+pub use log::{log2q, logq};
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 pub use tan::tanq;
 pub use trig::{cosq, sinq};

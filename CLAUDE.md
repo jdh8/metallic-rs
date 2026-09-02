@@ -84,6 +84,17 @@ former being the top limbs of the latter's tables. Its constants come from
 is left with `log(1+z)` alone and an exact `z`, and it takes that whole
 neighbourhood (`|log x| < 2^-16`) on its own.
 
+`log2q` is that engine with the base folded into the constants: `log.rs` is
+generic over a `Base` trait supplying `log_b 2` (the per-exponent term), the
+`-log_b` tables of the *same* rounded reciprocals, the Taylor coefficients
+`log_b(e)/(k+1)`, and the Ziv gate (one bit wider for base 2, since `log2 e`
+scales the slip).  `tools/gen_log_f128.py --base 2` emits `log2_tables.rs`;
+the reciprocals and the crude fit stay shared.  Every power of two is exact by
+construction — `m = 1` estimates `j = 0`, every table term and `z` vanish, and
+`k·2^214` has nothing below its round bit — and `LOG0[64]` is exactly `2^342`,
+so the `e = −1` cancellation is exact too.  A future `log10q` is one more
+`Base`, but its exact cases `log10(10^k)` are *not* free the way base 2's are.
+
 `asinq`/`acosq` split at `|x| = 2^-3` (`BAND`).  Below it the arc sine is its
 own reduced argument: no square root is formed and the fast leg is the bare
 Taylor series `asin(x)/x = Σ A_k·x^(2k)` (exact rational coefficients, the
@@ -187,7 +198,11 @@ edges, the per-binade convergents of `2^(e−111)/π` for both parities of the
 multiple, an MPFR near-midpoint scan) plus CORE-MATH's f64 `sin`/`cos`/`tan`
 as an oracle-free cross-check to 2^1024, and the bench baseline is GCC's
 libquadmath (faithful-only) until upstream binds them — do not add them to
-`FUNCS128` before then.
+`FUNCS128` before then.  `log2q` is gated the same way
+(`examples/gen_f128_log2_cases.rs`: every power of two with sparse
+neighbours, the inverse family `round(2^z)` for 114-bit midpoints `z`, MPFR
+scans over the domain and the neighbourhood of 1; CORE-MATH's f64 `log2` as
+the oracle-free cross-check).
 
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic

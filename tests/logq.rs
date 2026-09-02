@@ -43,6 +43,21 @@ fn dense() -> impl Iterator<Item = f128> {
     (1..=SAMPLE_COUNT).map(|i| 2.0 * i as f128 / SAMPLE_COUNT as f128)
 }
 
+/// Significands within a few ulps of the reduction's table reciprocals
+/// `2^(j/2^18)`, at random exponents: the reduced `z` is then tiny, which
+/// once wrapped the fast leg's `narrow²`.  `exp2q` is correctly rounded, so
+/// `round(2^(j/2^18))` needs no oracle.
+fn near_reciprocals() -> impl Iterator<Item = f128> {
+    (0..4096_u64).flat_map(|i| {
+        let bits = common128::mix128(i);
+        let j = (bits & 0x3ffff) as u32;
+        let exponent = (bits >> 64) % 0x7ffe + 1;
+        let m = metallic::exp2q(f128::from(j) / 262_144.0).to_bits() & (1 << 112) - 1;
+        let x = exponent << 112 | m;
+        (-4..=4_i128).map(move |d| f128::from_bits((x as i128 + d) as u128))
+    })
+}
+
 #[test]
 fn test_logq() {
     common::test_univariate_cases(
@@ -50,6 +65,7 @@ fn test_logq() {
         core_math::logq,
         dense()
             .chain(near_one())
+            .chain(near_reciprocals())
             .chain((0..SAMPLE_COUNT).map(positive)),
     );
 }

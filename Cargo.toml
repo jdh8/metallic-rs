@@ -68,6 +68,10 @@ required-features = ["mpfr"]
 name = "gen_f128_trig_cases"
 required-features = ["f128", "mpfr"]
 
+[[example]]
+name = "gen_f128_log2_cases"
+required-features = ["f128", "mpfr"]
+
 [[bench]]
 name = "acosf"
 harness = false
@@ -454,6 +458,11 @@ required-features = ["f128"]
 
 [[bench]]
 name = "logq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "log2q"
 harness = false
 required-features = ["f128"]
 

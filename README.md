@@ -46,6 +46,7 @@ assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
 assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
 assert_eq!(metallic::exp2q(10.0_f128), 1024.0);
 assert_eq!(metallic::logq(1.0_f128), 0.0);
+assert_eq!(metallic::log2q(1024.0_f128), 10.0);
 ```
 
 Run its tests with `cargo +nightly test --features f128`. `sqrtq`, `rsqrtq`
@@ -62,7 +63,8 @@ correction rides on top of the exact input significand, so subtracting 1 from
 `logq` reduces in log space instead: an 18-bit estimate of
 log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
 significand is exact, so the logarithms to add back are the only table the sum
-needs.  `atan2q` reduces on dyadic breakpoints: one float divide picks
+needs; `log2q` is the same engine with base-2 tables, exact at every power of
+two.  `atan2q` reduces on dyadic breakpoints: one float divide picks
 `i ≈ round(64·min/max)`, the 6-bit dyadic `i/64` makes both sides of
 tan(θ &minus; atan(i/64)) exact 128-bit integers, and one hardware 128-by-64
 divide seeds the Newton reciprocal that divides them to 128 or 384 bits before
@@ -163,9 +165,9 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq`/`tanq` have no CORE-MATH binding yet: their strict gate
-  replays a home-grown corpus that carries its MPFR answers, and CORE-MATH's
-  `f64` `sin`/`cos`/`tan` cross-check every magnitude up to 2^1024.
+  `sinq`/`cosq`/`tanq`/`log2q` have no CORE-MATH binding yet: their strict
+  gate replays a home-grown corpus that carries its MPFR answers, and
+  CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2` cross-check them oracle-free.
 - **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
   or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
   --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
@@ -183,6 +185,7 @@ Each function is done when both gates hold:
 | `expm1q` | ✅ | 0.94× |
 | `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ | 1.01× |
+| `log2q`  | ✅ | n/a — CORE-MATH has no `log2q`; 15× faster than libquadmath's faithful `log2q` |
 | `logq`   | ✅ | 1.00× |
 | `rsqrtq` | ✅ | 0.76× |
 | `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than libquadmath's faithful `sinq` |

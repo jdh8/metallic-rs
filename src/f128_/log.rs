@@ -1,7 +1,11 @@
-//! The binary128 natural logarithm.
+//! The binary128 logarithms: natural and base 2.
 //!
 //! The reduction is done in *log space*, so the table of logarithms to add back
-//! is the only table the sum needs:
+//! is the only table the sum needs — and the only thing that knows the base.
+//! One engine serves every base through [`Base`]: the estimate, the exact
+//! reduction, and both frames are shared, while the per-exponent constant
+//! (`log_b 2`), the logarithms of the rounded reciprocals, and the Taylor
+//! coefficients `log_b(e)/(k+1)` come from the base's tables.
 //!
 //! 1. **Estimate.** A linear fit per 2<sup>-8</sup> bucket of the significand
 //!    gives `j ≈ 2^18·log2(m)` to within nine tenths of a unit — enough to pick
@@ -29,27 +33,74 @@
 //! by construction.  A result far below the terms that make it needs `x` near 1,
 //! which forces the estimate to either `j = 0` and `e = 0`, where every table
 //! term is exactly zero, or `j = 2^18` and `e = −1`, where `LOG0[64]` is the
-//! *same rounded constant* as [`LN2`] and cancels it exactly.  Both leave
-//! `log(1 + z)` alone in the frame with `z` exact, so the accurate leg keeps its
-//! full relative accuracy however close `x` comes to 1.
+//! *same rounded constant* as `log_b 2` (for base 2, exactly one) and cancels
+//! it exactly.  Both leave `log(1 + z)` alone in the frame with `z` exact, so
+//! the accurate leg keeps its full relative accuracy however close `x` comes
+//! to 1.
+//!
+//! Base 2 adds exact cases the natural logarithm never has: `log2(2^k) = k`
+//! for every exponent, which the frame delivers by construction — `m = 1`
+//! estimates `j = 0`, every table term and `z` are zero, and `k·2^214` is an
+//! exact frame value with nothing below its round bit.
 
-use super::log_tables::{COEF, CRUDE, LN2, LOG0, LOG1, LOG2, RECIP0, RECIP1, RECIP2};
+use super::log_tables::{CRUDE, RECIP0, RECIP1, RECIP2};
 use super::uint::{
     add_256, add_384, any_below, extract_u128, funnel, funnel_down, leading_zeros_256,
     leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
+use super::{log_tables, log2_tables};
 
-/// Half-width of the rounding-tie window the fast leg refuses to decide, in
-/// units of its frame's 2^-214.
-///
-/// The leg's slip is absolute, not relative: `z` is cut at 2^-145, the
-/// polynomial answers at the same width, and its [`mhi_approx`] products each
-/// fall up to two units short, for under six units of 2^-143 — 2^73.5 of the
-/// frame.  Twice that still costs nothing (a normal result's tie window is
-/// 2^86 wide at the very floor, 2^112 at the typical magnitude) and leaves the
-/// margin certified in [`ziv_soundness`].
-const ZIV_GATE: u128 = 1 << 75;
+/// What a logarithm's base contributes: the constants of the add-back and
+/// the polynomial, all in the frames of [`log_tables`].
+trait Base {
+    /// `log_b 2`, scaled by 2^342: what each unit of the exponent adds.
+    const PER_EXPONENT: [u128; 3];
+    /// `-log_b(RECIP0[j]/2^31)`, scaled by 2^342.
+    const LOG0: &'static [[u128; 3]; 65];
+    /// `-log_b(RECIP1[j]/2^31)`, scaled by 2^342.
+    const LOG1: &'static [[u128; 3]; 64];
+    /// `-log_b(RECIP2[j]/2^31)`, scaled by 2^342.
+    const LOG2: &'static [[u128; 3]; 64];
+    /// `log_b(e)/(k+1)`, scaled by 2^255: `log_b(1+z)/z = Σ (−1)^k COEF[k] z^k`.
+    const COEF: &'static [[u128; 2]; 14];
+    /// Half-width of the rounding-tie window the fast leg refuses to decide,
+    /// in units of its frame's 2^-214.
+    ///
+    /// The leg's slip is absolute, not relative: `z` is cut at 2^-145, the
+    /// polynomial answers at the same width, and its [`mhi_approx`] products
+    /// each fall up to two units short, for under six units of 2^-143 —
+    /// 2^73.5 of the frame — times `log_b e`.  Twice that still costs nothing
+    /// (a normal result's tie window is 2^86 wide at the very floor, 2^112 at
+    /// the typical magnitude) and leaves the margin certified in
+    /// [`ziv_soundness`].
+    const ZIV_GATE: u128;
+}
+
+/// The natural logarithm's constants.
+struct Natural;
+
+impl Base for Natural {
+    const PER_EXPONENT: [u128; 3] = log_tables::LN2;
+    const LOG0: &'static [[u128; 3]; 65] = &log_tables::LOG0;
+    const LOG1: &'static [[u128; 3]; 64] = &log_tables::LOG1;
+    const LOG2: &'static [[u128; 3]; 64] = &log_tables::LOG2;
+    const COEF: &'static [[u128; 2]; 14] = &log_tables::COEF;
+    const ZIV_GATE: u128 = 1 << 75;
+}
+
+/// The base-2 logarithm's constants: `log2 e ≈ 1.44` scales the slip, so
+/// the gate is one bit wider.
+struct Binary;
+
+impl Base for Binary {
+    const PER_EXPONENT: [u128; 3] = log2_tables::ONE;
+    const LOG0: &'static [[u128; 3]; 65] = &log2_tables::LOG0;
+    const LOG1: &'static [[u128; 3]; 64] = &log2_tables::LOG1;
+    const LOG2: &'static [[u128; 3]; 64] = &log2_tables::LOG2;
+    const COEF: &'static [[u128; 2]; 14] = &log2_tables::COEF;
+    const ZIV_GATE: u128 = 1 << 76;
+}
 
 /// The fast leg's floor, as a bound on the frame's high limb: below
 /// `|log x| = 2^-16` its absolute slip is worth fewer than fifteen guard bits,
@@ -65,6 +116,21 @@ const FRAME_EXP: u32 = (BIAS + 41) as u32;
 /// The natural logarithm.
 #[must_use]
 pub fn logq(x: f128) -> f128 {
+    log::<Natural>(x)
+}
+
+/// The base-2 logarithm.
+///
+/// Exact at every power of two, `log2(2^k) = k`, down through the subnormals.
+#[must_use]
+pub fn log2q(x: f128) -> f128 {
+    log::<Binary>(x)
+}
+
+/// `log_b x` for the base `B`: the shared fast leg, its gate, and the
+/// hand-over to [`accurate`].
+#[inline]
+fn log<B: Base>(x: f128) -> f128 {
     let bits = x.to_bits();
 
     // Everything but a positive finite nonzero argument.
@@ -77,16 +143,17 @@ pub fn logq(x: f128) -> f128 {
 
     // `m·2^(-j/2^18) = 1 + z` scaled by 2^205, exactly, in two's complement.
     let d = [low, high.wrapping_sub(1 << 77)];
-    let s = fast(e, j, ((d[1] << 68) | (low >> 60)) as i128);
+    let s = fast::<B>(e, j, ((d[1] << 68) | (low >> 60)) as i128);
     let negative = s[1] >> 127 != 0;
     let magnitude = negate_if(s, negative);
 
     if magnitude[1] < FAST_FLOOR {
-        return accurate(e, j, d);
+        return accurate::<B>(e, j, d);
     }
-    // `2^70 ≤ magnitude[1] < 2^100`, so its top limb is nonzero and `leading`
-    // lands in [29, 57]: every variable shift below stays under 64 bits, one
-    // funnel each instead of a `u128` shift pair and its `cmov` guard.
+    // `2^70 ≤ magnitude[1] < 2^101` (`|log2 x| < 2^14.01`), so its top limb is
+    // nonzero and `leading` lands in [27, 57]: every variable shift below
+    // stays under 64 bits, one funnel each instead of a `u128` shift pair and
+    // its `cmov` guard.
     let leading = ((magnitude[1] >> 64) as u64).leading_zeros();
     let shift = 79 - leading;
     let window = leading - 15;
@@ -99,10 +166,10 @@ pub fn logq(x: f128) -> f128 {
         window,
     )) << 64)
         | u128::from((magnitude[0] as u64) << window);
-    let bound = u128::from(((ZIV_GATE >> 64) as u64) << window) << 64;
+    let bound = u128::from(((B::ZIV_GATE >> 64) as u64) << window) << 64;
 
     if (v ^ (1 << 127)).wrapping_add(bound) <= bound << 1 {
-        return accurate(e, j, d);
+        return accurate::<B>(e, j, d);
     }
     // The gate has already ruled out a tie, so the round bit decides.
     let mantissa = (u128::from(funnel_down(
@@ -178,15 +245,15 @@ fn reciprocal(j: u32) -> u128 {
     u128::from(u64::from(RECIP0[j0]) * u64::from(RECIP1[j1])) * u128::from(RECIP2[j2])
 }
 
-/// `log(x)` in the fast leg's frame: 256 bits scaled by 2^-214, two's
+/// `log_b(x)` in the fast leg's frame: 256 bits scaled by 2^-214, two's
 /// complement.
 #[inline]
-fn fast(e: i32, j: u32, z: i128) -> [u128; 2] {
+fn fast<B: Base>(e: i32, j: u32, z: i128) -> [u128; 2] {
     let (j0, j1, j2) = index(j);
-    let l = log1p(z);
-    let mut s = scale(e, [LN2[1], LN2[2]]);
+    let l = log1p::<B>(z);
+    let mut s = scale(e, [B::PER_EXPONENT[1], B::PER_EXPONENT[2]]);
 
-    for t in [&LOG0[j0], &LOG1[j1], &LOG2[j2]] {
+    for t in [&B::LOG0[j0], &B::LOG1[j1], &B::LOG2[j2]] {
         s = add_256(s, [t[1], t[2]]);
     }
     add_256(s, [(l as u128) << 69, (l >> 59) as u128])
@@ -201,7 +268,7 @@ fn scale(e: i32, l: [u128; 2]) -> [u128; 2] {
     negate_if([low, high.wrapping_add(a.wrapping_mul(l[1]))], e < 0)
 }
 
-/// `log(1 + z)` scaled by 2^145, from `z` at the same scale.
+/// `log_b(1 + z)` scaled by 2^145, from `z` at the same scale.
 ///
 /// Only the last product needs all of `z`: a polynomial step answers a
 /// correction under 2^-18.7, so the narrower `z·2^128` lands its truncation
@@ -210,20 +277,20 @@ fn scale(e: i32, l: [u128; 2]) -> [u128; 2] {
 /// the multiplier work of the 128-bit steps, which start where that no longer
 /// suffices.
 #[inline]
-fn log1p(z: i128) -> i128 {
+fn log1p<B: Base>(z: i128) -> i128 {
     let narrow = z >> 17;
     let short = (z >> 81) as i64;
-    let mut tail = coefficient(6);
+    let mut tail = coefficient::<B>(6);
 
     for k in (4..6).rev() {
-        tail = coefficient(k) - mul_hi_i64(short, tail);
+        tail = coefficient::<B>(k) - mul_hi_i64(short, tail);
     }
     // Balanced instead of Horner: both leaves and the powers of `narrow`
     // overlap each other and the 64-bit tail, so the serial chain is two
     // products shorter.  `n⁴ < 2^-74` at scale 2^128 fits one limb, making
     // the tail's join a single 64-bit product.
-    let a = COEF[0][1].wrapping_sub(mul_hi_i128(narrow, COEF[1][1]) as u128);
-    let b = COEF[2][1].wrapping_sub(mul_hi_i128(narrow, COEF[3][1]) as u128);
+    let a = B::COEF[0][1].wrapping_sub(mul_hi_i128(narrow, B::COEF[1][1]) as u128);
+    let b = B::COEF[2][1].wrapping_sub(mul_hi_i128(narrow, B::COEF[3][1]) as u128);
     let nn = sqr_hi(narrow);
     let n4 = mhi_approx(nn, nn);
     let q = a
@@ -234,17 +301,24 @@ fn log1p(z: i128) -> i128 {
 }
 
 /// High half of `x²` for a signed `x`, up to two units short.
+///
+/// Squared through `|x|`, not by a two's complement correction: with `|x| <
+/// 2^64` the true high half is nearly zero, and a correction of a product
+/// that already fell short would wrap to `2^128 − δ` — which once fed the
+/// Horner chain a whole extra `b` term for any `m` within 2^-63 of a table
+/// reciprocal (`m = 2 − 2^-77`, say).  `mhi_approx` only ever drops partial
+/// products, so on `|x|` it stays nonnegative.
 #[inline]
 fn sqr_hi(x: i128) -> u128 {
-    mhi_approx(x as u128, x as u128).wrapping_sub((((x >> 127) as u128) & (x as u128)) << 1)
+    mhi_approx(x.unsigned_abs(), x.unsigned_abs())
 }
 
 /// The `k`-th Taylor coefficient truncated to 64 bits, scaled by 2^-63.
 ///
-/// Only `k ≥ 1` fits: `1/1` would fill the sign bit.
+/// Only `k ≥ 1` fits: `log2 e` would fill the sign bit, and so would `1/1`.
 #[inline]
-const fn coefficient(k: usize) -> i64 {
-    (COEF[k][1] >> 64) as i64
+const fn coefficient<B: Base>(k: usize) -> i64 {
+    (B::COEF[k][1] >> 64) as i64
 }
 
 /// High half of a signed 64×64-bit product.
@@ -264,7 +338,7 @@ fn mul_hi_i128(x: i128, y: u128) -> i128 {
     mhi_approx(x as u128, y).wrapping_sub(((x >> 127) as u128) & y) as i128
 }
 
-/// [`logq`] at 384 bits, from the exact reduction the fast leg started from.
+/// [`log`] at 384 bits, from the exact reduction the fast leg started from.
 ///
 /// The frame's 2^-342 and the tables' own rounding leave the polynomial as the
 /// only real error: 2^-254 relative on `log(1 + z)`, which the worst
@@ -272,14 +346,14 @@ fn mul_hi_i128(x: i128, y: u128) -> i128 {
 /// from `j = 0.15` — widens to 2^-251, still 137 bits past binary128.
 #[cold]
 #[inline(never)]
-fn accurate(e: i32, j: u32, d: [u128; 2]) -> f128 {
+fn accurate<B: Base>(e: i32, j: u32, d: [u128; 2]) -> f128 {
     let (j0, j1, j2) = index(j);
-    let mut s = scale_384(e, LN2);
+    let mut s = scale_384(e, B::PER_EXPONENT);
 
-    for t in [&LOG0[j0], &LOG1[j1], &LOG2[j2]] {
+    for t in [&B::LOG0[j0], &B::LOG1[j1], &B::LOG2[j2]] {
         s = add_384(s, *t);
     }
-    round(add_384(s, log1p_wide(d)))
+    round(add_384(s, log1p_wide::<B>(d)))
 }
 
 /// [`scale`] at 384 bits.
@@ -298,17 +372,17 @@ fn scale_384(e: i32, l: [u128; 3]) -> [u128; 3] {
     if e < 0 { neg_384(product) } else { product }
 }
 
-/// `log(1 + z)` in the accurate frame, from the exact `z·2^205`.
+/// `log_b(1 + z)` in the accurate frame, from the exact `z·2^205`.
 ///
 /// Normalizing `|z|` *before* the product is what keeps the accuracy relative
 /// rather than absolute: the frame's own 2^-342 would otherwise be all that is
 /// left of an `x` a hair from 1, where the rest of the sum is exactly zero.
-fn log1p_wide(d: [u128; 2]) -> [u128; 3] {
+fn log1p_wide<B: Base>(d: [u128; 2]) -> [u128; 3] {
     let negative = d[1] >> 127 != 0;
     let z = shl_256(d, 68);
-    let mut q = COEF[13];
+    let mut q = B::COEF[13];
 
-    for c in COEF[..13].iter().rev() {
+    for c in B::COEF[..13].iter().rev() {
         q = sub_256(*c, shift_right(product(z, q, negative), 17));
     }
     let magnitude = if negative { sub_256([0, 0], d) } else { d };
@@ -350,7 +424,8 @@ fn round(s: [u128; 3]) -> f128 {
     let negative = s[2] >> 127 != 0;
     let magnitude = if negative { neg_384(s) } else { s };
 
-    // `log(1) = +0` is the only exact case, and the only zero frame.
+    // `log_b(1) = +0` is the only zero frame; base 2's other exact cases,
+    // `log2(2^k) = k`, are integers with nothing below the round bit.
     if magnitude == [0; 3] {
         return 0.0;
     }
@@ -412,6 +487,59 @@ mod tests {
             0xbf8f_0000_0000_0000_0000_0000_0000_0001
         );
     }
+
+    /// `m` within 2^-63 of a table reciprocal, where the fast leg's `narrow²`
+    /// high limb is nearly zero and must not wrap: `m = 2 − 2^-78` (`j =
+    /// 2^18`, `z = −2^-79`), and the subnormal `(2^78 − 1)·2^-16494`.
+    #[test]
+    fn near_reciprocal() {
+        let m = (1_u128 << 112) - (1 << 34);
+
+        assert_eq!(
+            logq(f128::from_bits(16383 << 112 | m)).to_bits(),
+            0x3ffe_62e4_2fef_a39e_f357_93c3_6730_07e6
+        );
+        assert_eq!(
+            log2q(f128::from_bits(16383 << 112 | m)).to_bits(),
+            0x3ffe_ffff_ffff_ffff_ffff_fffa_3aae_26b5
+        );
+        assert_eq!(
+            log2q(f128::from_bits((1 << 78) - 1)).to_bits(),
+            0xc00d_0080_0000_0000_0000_0000_0017_1547
+        );
+    }
+
+    #[test]
+    fn log2_exact_and_special() {
+        assert_eq!(log2q(1.0).to_bits(), 0.0_f128.to_bits());
+        assert_eq!(log2q(0.0).to_bits(), f128::NEG_INFINITY.to_bits());
+        assert_eq!(log2q(f128::INFINITY).to_bits(), f128::INFINITY.to_bits());
+        assert!(log2q(-1.0).is_nan());
+        assert!(log2q(f128::NAN).is_nan());
+        // Every power of two, subnormals included, is exact.
+        for k in -16494..=16383_i32 {
+            let x = super::super::ldexp(1.0, k);
+            assert_eq!(log2q(x).to_bits(), (k as f128).to_bits(), "log2(2^{k})");
+        }
+    }
+
+    #[test]
+    fn log2_known_values() {
+        // log2(10), log2(e), and one ulp either side of 1.
+        assert_eq!(log2q(10.0).to_bits(), core::f128::consts::LOG2_10.to_bits());
+        assert_eq!(
+            log2q(core::f128::consts::E).to_bits(),
+            0x3fff_7154_7652_b82f_e177_7d0f_fda0_d23a
+        );
+        assert_eq!(
+            log2q(1.0 + f128::EPSILON).to_bits(),
+            0x3f8f_7154_7652_b82f_e177_7d0f_fda0_d23a
+        );
+        assert_eq!(
+            log2q(1.0 - f128::EPSILON).to_bits(),
+            0xbf8f_7154_7652_b82f_e177_7d0f_fda0_d23b
+        );
+    }
 }
 
 /// MPFR certification that [`ZIV_GATE`] covers the fast leg's true error with
@@ -434,22 +562,29 @@ mod ziv_soundness {
     }
 
     /// A random positive significand at an exponent uniform over every binade,
-    /// subnormals included.
+    /// subnormals included — or, every eighth draw, a significand a few ulps
+    /// from a table reciprocal `2^(j/2^18)`, where the reduced `z` is tiny.
     fn sample(i: u64) -> f128 {
         let bits = u128::from(mix(i)) | u128::from(mix(i ^ 0x9E37_79B9)) << 64;
         let exponent = (bits >> 120) % 0x7fff;
 
+        if i % 8 == 7 {
+            let j = (bits & 0x3ffff) as u32;
+            let m = super::super::exp2q(f128::from(j) / 262_144.0).to_bits() & MANTISSA_MASK;
+            let d = ((bits >> 20) % 9) as i128 - 4;
+            return f128::from_bits(((exponent.max(1) << EXP_SHIFT | m) as i128 + d) as u128);
+        }
         f128::from_bits(exponent << EXP_SHIFT | bits & MANTISSA_MASK)
     }
 
-    /// The fast leg's frame value, as [`logq`] sees it.
-    fn leg(x: f128) -> [u128; 2] {
+    /// The fast leg's frame value, as [`log`] sees it.
+    fn leg<B: Base>(x: f128) -> [u128; 2] {
         let (m, e) = split(x.to_bits());
         let j = crude_log2(m);
         let (high, low) = wmul(m, reciprocal(j));
         let d = [low, high.wrapping_sub(1 << 77)];
 
-        fast(e, j, ((d[1] << 68) | (low >> 60)) as i128)
+        fast::<B>(e, j, ((d[1] << 68) | (low >> 60)) as i128)
     }
 
     /// A two's complement frame value as an exact MPFR integer.
@@ -463,17 +598,16 @@ mod ziv_soundness {
         if negative { -sum } else { sum }
     }
 
-    /// Worst `|leg − log x| / ZIV_GATE` over the sample, in frame units — which
-    /// is exactly what the gate compares, the slip being absolute.
-    #[test]
-    fn fast_leg_is_sound() {
+    /// Worst `|leg − log_b x| / ZIV_GATE` over the sample, in frame units —
+    /// which is exactly what the gate compares, the slip being absolute.
+    fn certify<B: Base>(name: &str, truth: fn(Float) -> Float) {
         let unit: Float = Float::with_val(PRECISION, 2).pow(-214);
         let mut worst = 0.0;
         let mut worst_x = 0.0;
 
         for i in 0..SAMPLES {
             let x = sample(i);
-            let s = leg(x);
+            let s = leg::<B>(x);
             let negative = s[1] >> 127 != 0;
             let magnitude = if negative { sub_256([0, 0], s) } else { s };
 
@@ -482,20 +616,30 @@ mod ziv_soundness {
             if x == 0.0 || magnitude[1] < FAST_FLOOR {
                 continue;
             }
-            let truth = Float::with_val(PRECISION, x).ln() / unit.clone();
+            let truth = truth(Float::with_val(PRECISION, x)) / unit.clone();
             let ratio =
-                Float::with_val(PRECISION, truth - value(s)).abs().to_f64() / ZIV_GATE as f64;
+                Float::with_val(PRECISION, truth - value(s)).abs().to_f64() / B::ZIV_GATE as f64;
 
             if ratio > worst {
                 worst = ratio;
                 worst_x = x;
             }
         }
-        println!("logq fast leg: worst |err|/gate = {worst:.4} at x={worst_x:?}");
+        println!("{name} fast leg: worst |err|/gate = {worst:.4} at x={worst_x:?}");
         assert!(
             worst < 0.5,
-            "logq gate covers only {:.2}× the slip at x={worst_x:?}",
+            "{name} gate covers only {:.2}× the slip at x={worst_x:?}",
             1.0 / worst
         );
+    }
+
+    #[test]
+    fn fast_leg_is_sound() {
+        certify::<Natural>("logq", Float::ln);
+    }
+
+    #[test]
+    fn log2_fast_leg_is_sound() {
+        certify::<Binary>("log2q", Float::log2);
     }
 }
