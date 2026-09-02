@@ -126,6 +126,41 @@ midpoints `z` down to result binade 2^-113, MPFR scans of the domain, of
 `−1 + 2^-113..2^-1`, and of the floating band; CORE-MATH's f64 `log1p`
 cross-check).
 
+`powq` is `2^(y·log2 x)` on both engines, in three tiers.  The fast leg
+takes `log2 x` from `log.rs`'s 256-bit fast frame (`fast::<Binary>`, absolute
+slip under 2^-140 — `pub(super)` now, with `crude_log2`/`reciprocal`/`z_fast`),
+multiplies the exact significand of `y` in (`wmul_128x256`), cuts the
+`(⌊y·log2 x⌋, fraction)` window out of the product with the two's-complement
+floor trick (`¬W` when bits were dropped), and hands it to `exp.rs::fast`;
+the logarithm's slip is magnified by `|y|`, so the gate is
+`exp::ZIV_GATE + ⌈|y|·2^-11⌉` (free below `|y| = 2^11`, saturated at 2^25 —
+above that every draw falls back).  The accurate leg is `log::wide::<Binary>`
+— the 384-bit frame in *floating* form, taking the polynomial's `|log2(1+z)|`
+at its own scale when the table terms cancel, so relative accuracy stays
+2^-251 arbitrarily close to 1 — times `y` (`wmul_128x384`) into the 256-bit
+frame of `exp::exp2_frame`, gated at `ACCURATE_GATE = 2^20` units of 2^-255
+(`|y·log2 x| ≤ 2^14` makes the worst error 2^17.5).  What that refuses goes to
+`exact` first: `x^y` is a dyadic rational only for a power-of-two base with
+integer `E·y`, an integer `y ≤ 71` with `M^y < 2^114`, or `y = N/2^k` (`k ≤ 6`)
+with the odd part of `x` a perfect 2^k-th power — the integer value is rounded
+directly (an odd 114-bit integer is an exact midpoint), which is what no
+precision can do.  Everything else reaches a table-free 640-bit tier
+(`wide`): `2^f = (e^(f·ln2/2^16))^(2^16)` by Taylor series and sixteen
+squarings on `[u64; 10]` limbs, `log2 x` as one Newton step on the accurate
+leg's value through that exponential (`log2(1+ε) = log2 e·(ε − ε²/2)`), relative
+error under 2^-490 — the *policy* precision for a 2^254-pair domain (Ziv's
+heuristic: ~2^-123 expected misses), the same bar CORE-MATH's 384-bit
+`superaccurate` phases set for their univariate functions.  Constants:
+`tools/gen_pow_f128.py` (ln 2, log2 e at 640 bits).  Gated like the other
+unbound `q` functions: `examples/gen_f128_pow_cases.rs` (Annex F specials,
+powers of two down to the subnormal midpoint `2^-16495`, the exact/midpoint
+family at 113 and 114 bits with neighbours, the 1/∞/subnormal thresholds, the
+`|y| = 2^25` hand-over, `round(z^(1/y))` for 114-bit midpoints `z` under small
+dyadic `y`, MPFR scans of the domain, the neighbourhood of 1, integer
+exponents on either sign, and the bench band), CORE-MATH's f64 `pow` as the
+oracle-free cross-check, MPFR sweeps; bench baseline libquadmath `powq` —
+do not add `pow` to `FUNCS128` until upstream binds it.
+
 `asinq`/`acosq` split at `|x| = 2^-3` (`BAND`).  Below it the arc sine is its
 own reduced argument: no square root is formed and the fast leg is the bare
 Taylor series `asin(x)/x = Σ A_k·x^(2k)` (exact rational coefficients, the

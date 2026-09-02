@@ -72,7 +72,7 @@ use super::{log_tables, log2_tables, log10_tables};
 
 /// What a logarithm's base contributes: the constants of the add-back and
 /// the polynomial, all in the frames of [`log_tables`].
-trait Base {
+pub(super) trait Base {
     /// `log_b 2`, scaled by 2^342: what each unit of the exponent adds.
     const PER_EXPONENT: [u128; 3];
     /// `-log_b(RECIP0[j]/2^31)`, scaled by 2^342.
@@ -110,7 +110,7 @@ impl Base for Natural {
 
 /// The base-2 logarithm's constants: `log2 e ≈ 1.44` scales the slip, so
 /// the gate is one bit wider.
-struct Binary;
+pub(super) struct Binary;
 
 impl Base for Binary {
     const PER_EXPONENT: [u128; 3] = log2_tables::ONE;
@@ -277,14 +277,14 @@ fn finish<B: Base>(e: i32, j: u32, d: [u128; 3], floor: u128) -> f128 {
 
 /// The fast leg's `z` at 2^145 from the frame's at 2^333.
 #[inline]
-const fn z_fast(d: [u128; 3]) -> i128 {
+pub(super) const fn z_fast(d: [u128; 3]) -> i128 {
     ((d[2] << 68) | (d[1] >> 60)) as i128
 }
 
 /// `s` or `−s` by a coin-flip sign, in two's complement through an xor mask
 /// and a carry-in — never a data-dependent branch.
 #[inline]
-fn negate_if(s: [u128; 2], negative: bool) -> [u128; 2] {
+pub(super) fn negate_if(s: [u128; 2], negative: bool) -> [u128; 2] {
     let mask = 0_u128.wrapping_sub(u128::from(negative));
     let (low, carry) = (s[0] ^ mask).overflowing_add(mask & 1);
 
@@ -475,7 +475,7 @@ fn small_accurate(m: u128, e: i32, negative: bool) -> f128 {
 
 /// `⌊2^18·log2(m) + ½⌋` to within one unit, for a significand `m·2^-112`.
 #[inline]
-const fn crude_log2(m: u128) -> u32 {
+pub(super) const fn crude_log2(m: u128) -> u32 {
     crude_log2_top((m >> 49) as u64)
 }
 
@@ -500,7 +500,7 @@ const fn index(j: u32) -> (usize, usize, usize) {
 
 /// `2^(-j/2^18)` scaled by 2^93, as the product of the three rounded levels.
 #[inline]
-fn reciprocal(j: u32) -> u128 {
+pub(super) fn reciprocal(j: u32) -> u128 {
     let (j0, j1, j2) = index(j);
 
     u128::from(u64::from(RECIP0[j0]) * u64::from(RECIP1[j1])) * u128::from(RECIP2[j2])
@@ -509,7 +509,7 @@ fn reciprocal(j: u32) -> u128 {
 /// `log_b(x)` in the fast leg's frame: 256 bits scaled by 2^-214, two's
 /// complement.
 #[inline]
-fn fast<B: Base>(e: i32, j: u32, z: i128) -> [u128; 2] {
+pub(super) fn fast<B: Base>(e: i32, j: u32, z: i128) -> [u128; 2] {
     let (j0, j1, j2) = index(j);
     let l = log1p::<B>(z);
     let mut s = scale(e, [B::PER_EXPONENT[1], B::PER_EXPONENT[2]]);
@@ -614,6 +614,26 @@ fn mul_hi_i128(x: i128, y: u128) -> i128 {
 #[cold]
 #[inline(never)]
 fn accurate<B: Base>(e: i32, j: u32, d: [u128; 3]) -> f128 {
+    let (s, tail) = terms::<B>(e, j, d);
+    let Some((w, leading, negative)) = tail else {
+        return round(s);
+    };
+
+    // `w` is `|log_b(1 + z)|` at 2^(204 + leading); the frame is at 2^342.
+    let frame = if leading <= 138 {
+        shl_384([w[0], w[1], 0], 138 - leading)
+    } else {
+        let [low, high] = shr_256_sat(w, leading - 138);
+        [low, high, 0]
+    };
+    round(add_384(s, if negative { neg_384(frame) } else { frame }))
+}
+
+/// The two parts of the accurate leg's sum: the table terms `e·log_b 2 +
+/// ΣLOG_k[j_k]` in the 2^-342 frame, and `|log_b(1 + z)|` at 2^(204 +
+/// leading) with the leading zeros of `|z|` at 2^333 and its sign — `None`
+/// when `z` is exactly zero.
+fn terms<B: Base>(e: i32, j: u32, d: [u128; 3]) -> ([u128; 3], Option<([u128; 2], u32, bool)>) {
     let (j0, j1, j2) = index(j);
     let mut s = scale_384(e, B::PER_EXPONENT);
 
@@ -624,7 +644,7 @@ fn accurate<B: Base>(e: i32, j: u32, d: [u128; 3]) -> f128 {
     let magnitude = if negative { neg_384(d) } else { d };
 
     if magnitude == [0; 3] {
-        return round(s);
+        return (s, None);
     }
     // Normalizing `|z|` *before* the product is what keeps the accuracy
     // relative rather than absolute: the frame's own 2^-342 would otherwise be
@@ -633,16 +653,51 @@ fn accurate<B: Base>(e: i32, j: u32, d: [u128; 3]) -> f128 {
     let leading = leading_zeros_384(magnitude);
     let top = shl_384(magnitude, leading);
     let z = [(d[0] >> 60) | (d[1] << 68), (d[1] >> 60) | (d[2] << 68)];
-    let w = log1p_wide::<B>(z, [top[1], top[2]], negative);
 
-    // `w` is `|log_b(1 + z)|` at 2^(204 + leading); the frame is at 2^342.
-    let frame = if leading <= 138 {
-        shl_384([w[0], w[1], 0], 138 - leading)
-    } else {
-        let [low, high] = shr_256_sat(w, leading - 138);
-        [low, high, 0]
+    (
+        s,
+        Some((
+            log1p_wide::<B>(z, [top[1], top[2]], negative),
+            leading,
+            negative,
+        )),
+    )
+}
+
+/// `log_b x` at 384 bits in floating form, for [`powq`](super::powq): the
+/// sign, the magnitude normalized to `[2^383, 2^384)`, and the exponent `k`
+/// of `|log_b x| = magnitude·2^(k − 383)`.
+///
+/// Where the table terms cancel to exactly zero (`x` within 2^-18 of 1) the
+/// polynomial's `|log_b(1 + z)|` is taken at its own scale, so the relative
+/// accuracy stays the polynomial's 2^-251 however close `x` comes to 1;
+/// elsewhere `|log_b x| ≥ 2^-21` and the frame's 2^-342 grain is finer than
+/// that already.
+pub(super) fn wide<B: Base>(e: i32, j: u32, d: [u128; 3]) -> (bool, [u128; 3], i32) {
+    let (s, tail) = terms::<B>(e, j, d);
+
+    if let (true, Some((w, leading, negative))) = (s == [0; 3], tail) {
+        let shift = leading_zeros_256(w);
+        let m = shl_384([0, w[0], w[1]], shift);
+        return (negative, m, 51 - leading as i32 - shift as i32);
+    }
+    let frame = match tail {
+        Some((w, leading, negative)) => {
+            let frame = if leading <= 138 {
+                shl_384([w[0], w[1], 0], 138 - leading)
+            } else {
+                let [low, high] = shr_256_sat(w, leading - 138);
+                [low, high, 0]
+            };
+            add_384(s, if negative { neg_384(frame) } else { frame })
+        }
+        None => s,
     };
-    round(add_384(s, if negative { neg_384(frame) } else { frame }))
+    let negative = frame[2] >> 127 != 0;
+    let magnitude = if negative { neg_384(frame) } else { frame };
+    let shift = leading_zeros_384(magnitude);
+
+    (negative, shl_384(magnitude, shift), 41 - shift as i32)
 }
 
 /// [`scale`] at 384 bits.

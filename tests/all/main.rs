@@ -125,6 +125,7 @@ mod f128_ {
     mod log1pq;
     mod log2q;
     mod logq;
+    mod powq;
     mod rsqrtq;
     mod sinq;
     mod sqrtq;

@@ -49,6 +49,7 @@ assert_eq!(metallic::logq(1.0_f128), 0.0);
 assert_eq!(metallic::log2q(1024.0_f128), 10.0);
 assert_eq!(metallic::log10q(1000.0_f128), 3.0);
 assert_eq!(metallic::log1pq(1.0_f128), core::f128::consts::LN_2);
+assert_eq!(metallic::powq(2.0_f128, 0.5), core::f128::consts::SQRT_2);
 ```
 
 Run its tests with `cargo +nightly test --features f128`. `sqrtq`, `rsqrtq`
@@ -69,6 +70,12 @@ needs; `log2q` and `log10q` are the same engine with base-2 and base-10
 tables, exact at every power of two and every representable power of ten, and
 `log1pq` is the natural one behind an exact 256-bit `1 + x` (its argument is
 its own reduction below 2<sup>&minus;18</sup>).
+`powq` is 2<sup>y·log<sub>2</sub>x</sup> on both engines: the logarithm's
+frame times the exact significand of `y` feeds the exponential's, with the
+Ziv gate widened by `|y|`; a 384-by-256-bit accurate leg decides what the fast
+one refuses, an exact-case detector rounds the dyadic-rational powers
+(`x^y = m^N·2^k`, the only midpoints there are) from their integer value, and a
+table-free 640-bit tier settles the rest.
 `atan2q` reduces on dyadic breakpoints: one float divide picks
 `i ≈ round(64·min/max)`, the 6-bit dyadic `i/64` makes both sides of
 tan(θ &minus; atan(i/64)) exact 128-bit integers, and one hardware 128-by-64
@@ -170,10 +177,10 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq`/`tanq`/`log2q`/`log10q`/`log1pq` have no CORE-MATH binding
-  yet: their strict gate replays a home-grown corpus that carries its MPFR
-  answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/`log1p`
-  cross-check them oracle-free.
+  `sinq`/`cosq`/`tanq`/`log2q`/`log10q`/`log1pq`/`powq` have no CORE-MATH
+  binding yet: their strict gate replays a home-grown corpus that carries its
+  MPFR answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/
+  `log1p`/`pow` cross-check them oracle-free.
 - **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
   or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
   --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
@@ -195,6 +202,7 @@ Each function is done when both gates hold:
 | `log10q` | ✅ | n/a — CORE-MATH has no `log10q`; 15× faster than libquadmath's faithful `log10q` |
 | `log1pq` | ✅ | n/a — CORE-MATH has no `log1pq`; 20× faster than libquadmath's faithful `log1pq` |
 | `logq`   | ✅ | 1.00× |
+| `powq`   | ✅ | n/a — CORE-MATH has no `powq`; 17× faster than libquadmath's faithful `powq` |
 | `rsqrtq` | ✅ | 0.76× |
 | `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than libquadmath's faithful `sinq` |
 | `sqrtq`  | ✅ | 0.87× |

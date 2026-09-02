@@ -184,14 +184,23 @@ pub const fn shr_256_sat(x: [u128; 2], shift: u32) -> [u128; 2] {
 #[must_use]
 #[inline]
 pub fn shr_384_sat(x: [u128; 3], shift: u32) -> [u128; 3] {
-    if shift >= 384 {
-        return [0; 3];
+    shr_sat(x, shift)
+}
+
+/// `x >> shift` on an `N`-limb little-endian value, saturating to zero past
+/// the window.
+#[must_use]
+#[inline]
+pub fn shr_sat<const N: usize>(x: [u128; N], shift: u32) -> [u128; N] {
+    let mut result = [0; N];
+
+    if shift >= 128 * N as u32 {
+        return result;
     }
     let word = (shift / 128) as usize;
     let bits = shift % 128;
-    let mut result = [0; 3];
 
-    for i in word..x.len() {
+    for i in word..N {
         let carry = match x.get(i + 1) {
             Some(&next) if bits != 0 => next << (128 - bits),
             _ => 0,
@@ -201,10 +210,11 @@ pub fn shr_384_sat(x: [u128; 3], shift: u32) -> [u128; 3] {
     result
 }
 
-/// Whether any of the low `n` bits of a 384-bit value is set.
+/// Whether any of the low `n` bits of an `N`-limb little-endian value is set,
+/// for `n ≤ 128·N`.
 #[must_use]
 #[inline]
-pub fn any_below(x: [u128; 3], n: u32) -> bool {
+pub fn any_below<const N: usize>(x: [u128; N], n: u32) -> bool {
     let word = (n / 128) as usize;
     let bits = n % 128;
 

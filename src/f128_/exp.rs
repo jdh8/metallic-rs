@@ -37,13 +37,13 @@ use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split
 /// The fast leg's significand carries at most eight units of 2^-128 of error
 /// (three table roundings, three truncated products, and the polynomial), so 32
 /// units leave the 2× soundness margin certified in [`ziv_soundness`].
-const ZIV_GATE: u128 = 32;
+pub(super) const ZIV_GATE: u128 = 32;
 
 /// The bits a normal result discards — the fast leg's 128 less binary128's 113
 /// — with the mask and the tie of the rounding they decide.
-const GUARD: u32 = 15;
-const GUARD_MASK: u128 = (1 << GUARD) - 1;
-const GUARD_HALF: u128 = 1 << (GUARD - 1);
+pub(super) const GUARD: u32 = 15;
+pub(super) const GUARD_MASK: u128 = (1 << GUARD) - 1;
+pub(super) const GUARD_HALF: u128 = 1 << (GUARD - 1);
 
 /// `|x| ≥ 2^15` overflows or underflows every member of the family.
 const SATURATE: u128 = ((BIAS + 15) as u128) << EXP_SHIFT;
@@ -243,7 +243,7 @@ fn correction(m: u128, e: i32, tail: u128) -> u128 {
 
 /// 2<sup>f</sup> to 128 bits, as `(exponent bump, significand scaled by 2^127)`.
 #[inline]
-fn fast(n: i32, f: u128) -> (i32, u128) {
+pub(super) fn fast(n: i32, f: u128) -> (i32, u128) {
     let (i0, i1, i2, t) = index(f);
 
     // The last three terms ride on `t^4 < 2^-72`, so 64-bit coefficients and a
@@ -287,7 +287,17 @@ fn accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {
 /// 2^255)`.
 fn wide(m: u128, e: i32, negative: bool, l: &Reduction) -> (i32, [u128; 2]) {
     let y = reduce(m, e, l.head);
-    let y = signed(add_384(y, [correction(m, e, l.tail), 0, 0]), negative);
+
+    exp2_frame(signed(
+        add_384(y, [correction(m, e, l.tail), 0, 0]),
+        negative,
+    ))
+}
+
+/// 2<sup>y</sup> to 256 bits from the reduced `y` itself: `[fraction low,
+/// fraction high, integer part]`, the fraction scaled by 2^-256, as
+/// `(exponent bump, significand scaled by 2^255)`.
+pub(super) fn exp2_frame(y: [u128; 3]) -> (i32, [u128; 2]) {
     let (i0, i1, i2, t) = index(y[1]);
     let t = [y[0], t];
     let mut q = COEF[12];
@@ -355,7 +365,7 @@ fn discarded(n: i32) -> u32 {
 /// `gate` is the half-width of the refused window, widened by callers whose
 /// frame magnified the fast leg's error.
 #[inline]
-fn undecided(n: i32, r: u128, gate: u128) -> bool {
+pub(super) fn undecided(n: i32, r: u128, gate: u128) -> bool {
     let shift = discarded(n);
 
     // Saturating results carry no significand bits to decide.
@@ -367,7 +377,7 @@ fn undecided(n: i32, r: u128, gate: u128) -> bool {
 
 /// Round `(high + low·2^-128)·2^(n − 127)` to binary128, ties to even.
 #[inline]
-fn round(n: i32, high: u128, low: u128) -> f128 {
+pub(super) fn round(n: i32, high: u128, low: u128) -> f128 {
     if n > f128::MAX_EXP - 1 {
         return f128::INFINITY;
     }

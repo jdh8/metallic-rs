@@ -104,6 +104,15 @@ pub fn parse_f128_pair(s: &str) -> Result<[f128; 2], ParseF128Error> {
     Ok([x, y])
 }
 
+/// Parse a whitespace-separated `f128` triple: two arguments and the answer.
+pub fn parse_f128_triple(s: &str) -> Result<[f128; 3], ParseF128Error> {
+    let mut fields = s.split_ascii_whitespace();
+    let x = parse_f128(fields.next().ok_or(ParseF128Error)?)?;
+    let y = parse_f128(fields.next().ok_or(ParseF128Error)?)?;
+    let z = parse_f128(fields.next().ok_or(ParseF128Error)?)?;
+    Ok([x, y, z])
+}
+
 /// Parse the decimal integers, specials, and hexadecimal floats used by
 /// CORE-MATH's binary128 corpora, with round-to-nearest-even conversion.
 pub fn parse_f128(s: &str) -> Result<f128, ParseF128Error> {

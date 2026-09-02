@@ -22,6 +22,7 @@ generator — regenerate with the script, never edit the table by hand.
 | `gen_log2_exact_f64.py` | exact-`z` cells for the native base-2 `log2` fast leg | `src/f64_/log.rs` |
 | `gen_log_f128.py` | binary128 `log`: reciprocal + logarithm tables, `ln(2)` limbs, `1/(k+1)`, crude-log2 fit; `--base 2` or `--base 10` emits `log2`'s or `log10`'s tables and `log_b(e)/(k+1)` | `src/f128_/log_tables.rs`, `src/f128_/log2_tables.rs`, `src/f128_/log10_tables.rs` |
 | `gen_log_f64.py` | accurate-tier constants for the log family | `src/f64_/log.rs` |
+| `gen_pow_f128.py` | binary128 `pow` third tier: ln(2) and log2(e) at 640 bits | `src/f128_/pow_tables.rs` |
 | `gen_pow_tables.py` | verbatim `Dint`/`Qint` literals from CORE-MATH `dint.h`/`qint.h` | `src/f64_/pow_consts.rs` |
 | `gen_trig_f128.py` | binary128 `sin`/`cos`: 2/π limbs, π/2, `sin`/`cos(jπ/256)` table, `1/(2k+1)!`, `1/(2k+2)!` | `src/f128_/trig_tables.rs` |
 | `gen_trig_f64.py` | sin/cos/tan kernels, Cody–Waite π/2 words, Payne–Hanek 2/π | `src/f64_/trig.rs` |
