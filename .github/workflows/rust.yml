@@ -8,68 +8,42 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Enable FMA + AVX2 across the workflow so the "FMA" job matrix exercises the
-  # real fast path. `x86-64-v3` is portable across all GitHub-hosted Ubuntu
-  # runners, so a binary built in one job runs in every matrix shard.
+  # Enable FMA + AVX2 so the default build exercises the real fast path.
+  # TARGET_CPU pins core-math-sys's C build to the same ISA level.
   RUSTFLAGS: -Ctarget-cpu=x86-64-v3
+  TARGET_CPU: x86-64-v3
 
 jobs:
-  prepare:
+  # `tests/all` links every integration test into one binary, so libtest
+  # already runs them in parallel on the runner's cores; one job per feature
+  # set replaces the old per-function shard matrix.
+  test:
     runs-on: ubuntu-latest
-    outputs:
-      tests: ${{ steps.tests.outputs.list }}
-      tests_f128: ${{ steps.tests.outputs.f128 }}
-    steps:
-    - uses: actions/checkout@v6
-    - name: Discover test targets
-      id: tests
-      shell: bash
-      run: |
-        list=$(basename -a -s .rs tests/all/f32_/*.rs tests/all/f64_/*.rs | jq -R -s -c 'split("\n")[:-1]')
-        f128=$(basename -a -s .rs tests/all/f128_/*.rs | jq -R -s -c 'split("\n")[:-1]')
-        echo "list=$list" >> "$GITHUB_OUTPUT"
-        echo "f128=$f128" >> "$GITHUB_OUTPUT"
-
-  build:
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-${{ hashFiles('**/Cargo.lock') }}
-    - name: Build test binaries
-      run: cargo test --no-run --verbose
-
-  build-nofma:
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-nofma-${{ hashFiles('**/Cargo.lock') }}
-    - name: Build test binaries forcing no-FMA fallback
-      run: cargo test --no-run --features _no_fma --verbose
-
-  build-f128:
-    needs: prepare
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - features: ""
+          toolchain: stable
+        - features: _no_fma
+          toolchain: stable
+        - features: f128
+          toolchain: nightly
+    name: test (${{ matrix.features || 'default' }})
     env:
+      # CORE-MATH's hypotq.c needs clang (__builtin_addcl); harmless elsewhere.
       CC: clang
-      TARGET_CPU: x86-64-v3
     steps:
     - uses: actions/checkout@v6
-    - name: Install nightly Rust
-      uses: dtolnay/rust-toolchain@nightly
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.toolchain }}
     - name: Restore Rust cache
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
-    - name: Build binary128 test binaries
-      run: cargo +nightly test --no-run --features f128 --verbose
+        shared-key: test${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
+    - name: Run tests
+      run: cargo test --features "${{ matrix.features }}" --verbose
 
   msrv:
     runs-on: ubuntu-latest
@@ -90,112 +64,6 @@ jobs:
       run: cargo build --lib --verbose
     - name: Build library on MSRV forcing no-FMA fallback
       run: cargo build --lib --features _no_fma --verbose
-
-  test:
-    needs:
-    - prepare
-    - build
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        test: ${{ fromJson(needs.prepare.outputs.tests) }}
-    steps:
-    - uses: actions/checkout@v6
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-${{ hashFiles('**/Cargo.lock') }}
-        save-if: false
-    - name: Run tests
-      run: cargo test --test all --verbose -- '::${{ matrix.test }}::'
-
-  test-lib:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-${{ hashFiles('**/Cargo.lock') }}
-        save-if: false
-    - name: Run lib tests
-      run: cargo test --lib --verbose
-
-  test-f128:
-    needs:
-    - prepare
-    - build-f128
-    runs-on: ubuntu-24.04
-    env:
-      CC: clang
-      TARGET_CPU: x86-64-v3
-    strategy:
-      fail-fast: false
-      matrix:
-        test: ${{ fromJson(needs.prepare.outputs.tests_f128) }}
-    steps:
-    - uses: actions/checkout@v6
-    - name: Install nightly Rust
-      uses: dtolnay/rust-toolchain@nightly
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
-        save-if: false
-    - name: Run binary128 tests
-      run: cargo +nightly test --test all --features f128 --verbose -- '::${{ matrix.test }}::'
-
-  test-f128-lib:
-    needs: build-f128
-    runs-on: ubuntu-24.04
-    env:
-      CC: clang
-      TARGET_CPU: x86-64-v3
-    steps:
-    - uses: actions/checkout@v6
-    - name: Install nightly Rust
-      uses: dtolnay/rust-toolchain@nightly
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-f128-${{ hashFiles('**/Cargo.lock') }}
-        save-if: false
-    - name: Run binary128 lib tests
-      run: cargo +nightly test --lib --features f128 --verbose
-
-  test-nofma:
-    needs:
-    - prepare
-    - build-nofma
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        test: ${{ fromJson(needs.prepare.outputs.tests) }}
-    steps:
-    - uses: actions/checkout@v6
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-nofma-${{ hashFiles('**/Cargo.lock') }}
-        save-if: false
-    - name: Run tests forcing no-FMA fallback
-      run: cargo test --test all --features _no_fma --verbose -- '::${{ matrix.test }}::'
-
-  test-lib-nofma:
-    needs: build-nofma
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-    - name: Restore Rust cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: test-nofma-${{ hashFiles('**/Cargo.lock') }}
-        save-if: false
-    - name: Run lib tests forcing no-FMA fallback
-      run: cargo test --lib --features _no_fma --verbose
 
   format:
     runs-on: ubuntu-latest
