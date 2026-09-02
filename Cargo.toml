@@ -69,7 +69,7 @@ name = "gen_f128_trig_cases"
 required-features = ["f128", "mpfr"]
 
 [[example]]
-name = "gen_f128_log2_cases"
+name = "gen_f128_log_cases"
 required-features = ["f128", "mpfr"]
 
 [[bench]]
@@ -463,6 +463,11 @@ required-features = ["f128"]
 
 [[bench]]
 name = "log2q"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "log10q"
 harness = false
 required-features = ["f128"]
 

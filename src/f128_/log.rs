@@ -1,4 +1,4 @@
-//! The binary128 logarithms: natural and base 2.
+//! The binary128 logarithms: natural, base 2, and base 10.
 //!
 //! The reduction is done in *log space*, so the table of logarithms to add back
 //! is the only table the sum needs — and the only thing that knows the base.
@@ -42,6 +42,14 @@
 //! for every exponent, which the frame delivers by construction — `m = 1`
 //! estimates `j = 0`, every table term and `z` are zero, and `k·2^214` is an
 //! exact frame value with nothing below its round bit.
+//!
+//! Base 10's exact cases, `log10(10^k) = k` for `0 ≤ k ≤ 48` (`5^48 < 2^112`
+//! keeps `10^k` representable that far), are *not* free: `10^k` is no table
+//! reciprocal, so the frame holds `k` plus whatever the tables and the
+//! polynomial slipped — under 2^-139 on the fast leg, 2^-245 on the accurate
+//! one, against a half-ulp of at least 2^-113 — and the rounder returns `k`
+//! by margin rather than by construction.  The fast leg's gate sees those
+//! cases at the far ends of the discarded field, nowhere near its tie.
 
 use super::log_tables::{CRUDE, RECIP0, RECIP1, RECIP2};
 use super::uint::{
@@ -49,7 +57,7 @@ use super::uint::{
     leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_256, neg_384, shl_256, shl_384, sub_256, wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
-use super::{log_tables, log2_tables};
+use super::{log_tables, log2_tables, log10_tables};
 
 /// What a logarithm's base contributes: the constants of the add-back and
 /// the polynomial, all in the frames of [`log_tables`].
@@ -70,10 +78,10 @@ trait Base {
     /// The leg's slip is absolute, not relative: `z` is cut at 2^-145, the
     /// polynomial answers at the same width, and its [`mhi_approx`] products
     /// each fall up to two units short, for under six units of 2^-143 —
-    /// 2^73.5 of the frame — times `log_b e`.  Twice that still costs nothing
-    /// (a normal result's tie window is 2^86 wide at the very floor, 2^112 at
-    /// the typical magnitude) and leaves the margin certified in
-    /// [`ziv_soundness`].
+    /// 2^73.5 of the frame — of which only `z`'s cut scales with `log_b e`.
+    /// Twice that still costs nothing (a normal result's tie window is 2^86
+    /// wide at the very floor, 2^112 at the typical magnitude) and leaves the
+    /// margin certified in [`ziv_soundness`].
     const ZIV_GATE: u128;
 }
 
@@ -102,6 +110,20 @@ impl Base for Binary {
     const ZIV_GATE: u128 = 1 << 76;
 }
 
+/// The base-10 logarithm's constants: `log10 e ≈ 0.43` shrinks only the
+/// slip from `z`'s cut — the products' truncations are absolute — so the
+/// gate is the natural logarithm's.
+struct Decimal;
+
+impl Base for Decimal {
+    const PER_EXPONENT: [u128; 3] = log10_tables::LOG10_2;
+    const LOG0: &'static [[u128; 3]; 65] = &log10_tables::LOG0;
+    const LOG1: &'static [[u128; 3]; 64] = &log10_tables::LOG1;
+    const LOG2: &'static [[u128; 3]; 64] = &log10_tables::LOG2;
+    const COEF: &'static [[u128; 2]; 14] = &log10_tables::COEF;
+    const ZIV_GATE: u128 = 1 << 75;
+}
+
 /// The fast leg's floor, as a bound on the frame's high limb: below
 /// `|log x| = 2^-16` its absolute slip is worth fewer than fifteen guard bits,
 /// so [`accurate`] takes the whole neighbourhood of 1 on its own.
@@ -125,6 +147,15 @@ pub fn logq(x: f128) -> f128 {
 #[must_use]
 pub fn log2q(x: f128) -> f128 {
     log::<Binary>(x)
+}
+
+/// The base-10 logarithm.
+///
+/// Exact at every representable power of ten: `log10(10^k) = k` for
+/// `0 ≤ k ≤ 48`.
+#[must_use]
+pub fn log10q(x: f128) -> f128 {
+    log::<Decimal>(x)
 }
 
 /// `log_b x` for the base `B`: the shared fast leg, its gate, and the
@@ -425,7 +456,8 @@ fn round(s: [u128; 3]) -> f128 {
     let magnitude = if negative { neg_384(s) } else { s };
 
     // `log_b(1) = +0` is the only zero frame; base 2's other exact cases,
-    // `log2(2^k) = k`, are integers with nothing below the round bit.
+    // `log2(2^k) = k`, are integers with nothing below the round bit, and
+    // base 10's, `log10(10^k) = k`, carry only the tables' slip there.
     if magnitude == [0; 3] {
         return 0.0;
     }
@@ -507,6 +539,14 @@ mod tests {
             log2q(f128::from_bits((1 << 78) - 1)).to_bits(),
             0xc00d_0080_0000_0000_0000_0000_0017_1547
         );
+        assert_eq!(
+            log10q(f128::from_bits(16383 << 112 | m)).to_bits(),
+            0x3ffd_3441_3509_f79f_ef31_1f0f_39e8_b454
+        );
+        assert_eq!(
+            log10q(f128::from_bits((1 << 78) - 1)).to_bits(),
+            0xc00b_34db_55a4_7c9b_bf28_b7a2_3ccd_8e80
+        );
     }
 
     #[test]
@@ -538,6 +578,48 @@ mod tests {
         assert_eq!(
             log2q(1.0 - f128::EPSILON).to_bits(),
             0xbf8f_7154_7652_b82f_e177_7d0f_fda0_d23b
+        );
+    }
+
+    #[test]
+    fn log10_exact_and_special() {
+        assert_eq!(log10q(1.0).to_bits(), 0.0_f128.to_bits());
+        assert_eq!(log10q(0.0).to_bits(), f128::NEG_INFINITY.to_bits());
+        assert_eq!(log10q(f128::INFINITY).to_bits(), f128::INFINITY.to_bits());
+        assert!(log10q(-1.0).is_nan());
+        assert!(log10q(f128::NAN).is_nan());
+        // Every representable power of ten is exact: `5^48 < 2^112 < 5^49`.
+        let mut x = 1.0_f128;
+        for k in 0..=48 {
+            assert_eq!(log10q(x).to_bits(), (k as f128).to_bits(), "log10(10^{k})");
+            x *= 10.0;
+        }
+    }
+
+    #[test]
+    fn log10_known_values() {
+        // log10(2), log10(e), the extremes of the range, and one ulp either
+        // side of 1.
+        assert_eq!(log10q(2.0).to_bits(), core::f128::consts::LOG10_2.to_bits());
+        assert_eq!(
+            log10q(core::f128::consts::E).to_bits(),
+            0x3ffd_bcb7_b152_6e50_e32a_6ab7_555f_5a67
+        );
+        assert_eq!(
+            log10q(f128::from_bits(1)).to_bits(),
+            0xc00b_3653_051d_20c1_8a14_3b80_1b7c_5661
+        );
+        assert_eq!(
+            log10q(f128::MAX).to_bits(),
+            0x400b_3441_3509_f79f_ef31_1f12_b358_16f9
+        );
+        assert_eq!(
+            log10q(1.0 + f128::EPSILON).to_bits(),
+            0x3f8d_bcb7_b152_6e50_e32a_6ab7_555f_5a67
+        );
+        assert_eq!(
+            log10q(1.0 - f128::EPSILON).to_bits(),
+            0xbf8d_bcb7_b152_6e50_e32a_6ab7_555f_5a69
         );
     }
 }
@@ -641,5 +723,10 @@ mod ziv_soundness {
     #[test]
     fn log2_fast_leg_is_sound() {
         certify::<Binary>("log2q", Float::log2);
+    }
+
+    #[test]
+    fn log10_fast_leg_is_sound() {
+        certify::<Decimal>("log10q", Float::log10);
     }
 }

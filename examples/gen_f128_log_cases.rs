@@ -1,27 +1,30 @@
 #![feature(f128)]
-//! Generate `tests/cases/log2q.wc`: the hard-to-round corpus for
-//! [`metallic::log2q`], each input with its correctly rounded answer.
+//! Generate `tests/cases/log2q.wc` or `tests/cases/log10q.wc`: the
+//! hard-to-round corpus for [`metallic::log2q`] or [`metallic::log10q`], each
+//! input with its correctly rounded answer.
 //!
-//! CORE-MATH has no binary128 `log2` yet, so MPFR is the oracle and the answers
-//! travel with the inputs; the strict gate then replays under plain
-//! `--features f128` with no oracle at all.  Three layers:
+//! CORE-MATH has no binary128 `log2` or `log10` yet, so MPFR is the oracle
+//! and the answers travel with the inputs; the strict gate then replays under
+//! plain `--features f128` with no oracle at all.  Three layers:
 //!
 //! 1. **Edges.** Specials, the neighbours of 1, the fast leg's floor
-//!    `|log2 x| = 2^-16`, every power of two (the exact cases, subnormals
-//!    included) and the neighbours of every 32nd one, where the frame's
-//!    integer part swamps a 2^-112 fraction; and significands within a few
-//!    ulps of the reduction's table reciprocals `2^(j/2^18)`, where the
+//!    `|log_b x| = 2^-16`, every power of two (base 2's exact cases,
+//!    subnormals included; for base 10 the `j = 0` family, where the sum is
+//!    `e·log10 2` alone) and the neighbours of every 32nd one, where the
+//!    frame's integer part swamps a 2^-112 fraction; base 10's exact cases
+//!    `10^k` for `0 ≤ k ≤ 48` with their neighbours; and significands within
+//!    a few ulps of the reduction's table reciprocals `2^(j/2^18)`, where the
 //!    reduced `z` is tiny.
 //! 2. **The inverse family** (ARITH 2022 § IIB): a hard *output* first — a
-//!    114-bit midpoint `z` per result binade and sign — then `x = round(2^z)`,
-//!    whose `log2` lands within `2^-113·log2 e` of that midpoint.
+//!    114-bit midpoint `z` per result binade and sign — then `x = round(b^z)`,
+//!    whose `log_b` lands within `2^-113·log_b e` of that midpoint.
 //! 3. **Regression scan.** An MPFR near-midpoint scan, log-uniform over every
 //!    binade and bit-uniform over the neighbourhood of 1 where the accurate
 //!    leg decides alone, plus a plain random sample of the whole domain.
 //!
-//! Run with:
+//! Run with the base (2 or 10) as the argument:
 //! ```text
-//! CC=clang cargo +nightly run --release --features "f128 mpfr" --example gen_f128_log2_cases
+//! CC=clang cargo +nightly run --release --features "f128 mpfr" --example gen_f128_log_cases -- 10
 //! ```
 
 use metallic::f128_mpfr::cr_unop;
@@ -100,8 +103,18 @@ fn hex(x: f128) -> String {
     }
 }
 
-fn log2(x: f128) -> f128 {
-    cr_unop(x, |y| y.log2_round(Round::Nearest))
+/// `log_b y` in place, to nearest, for `b` 2 or 10.
+fn round_log(base: u32, y: &mut Float) -> std::cmp::Ordering {
+    match base {
+        2 => y.log2_round(Round::Nearest),
+        10 => y.log10_round(Round::Nearest),
+        _ => unreachable!(),
+    }
+}
+
+/// `log_b x`, correctly rounded.
+fn logb(base: u32, x: f128) -> f128 {
+    cr_unop(x, |y| round_log(base, y))
 }
 
 /// Normalized distance from `y` to the nearest binary128 midpoint.
@@ -140,7 +153,7 @@ fn power(k: i32) -> f128 {
 }
 
 /// Layer 1: the edges.
-fn edges() -> Vec<f128> {
+fn edges(base: u32) -> Vec<f128> {
     let step = |x: f128, k: i128| f128::from_bits((x.to_bits() as i128 + k) as u128);
     let mut out = vec![
         0.0,
@@ -151,22 +164,30 @@ fn edges() -> Vec<f128> {
         -1.0,
     ];
 
-    // The neighbours of 1, and of the fast leg's floor `|log2 x| = 2^-16`.
+    // The neighbours of 1, and of the fast leg's floor `|log_b x| = 2^-16`.
     out.extend((-4..=4).map(|d| step(1.0, d)));
-    for floor in [
-        Float::with_val(PREC, 2).pow(-16_i32).exp2(),
-        (-Float::with_val(PREC, 2).pow(-16_i32)).exp2(),
-    ] {
+    for sign in [1_i32, -1] {
+        let t: Float = Float::with_val(PREC, 2).pow(-16_i32) * sign;
+        let floor: Float = Float::with_val(PREC, base).pow(t);
         let x = floor.to_f128_round(Round::Nearest);
         out.extend((-2..=2).map(|d| step(x, d)));
     }
-    // Every power of two is exact; the neighbours of a sparse subset add a
-    // 2^-112 fraction under an integer part as large as 2^14.
+    // Every power of two is exact in base 2, and in base 10 leaves the sum
+    // `e·log10 2` alone; the neighbours of a sparse subset add a 2^-112
+    // fraction under an integer part as large as 2^14.
     for k in -16494..=16383 {
         let x = power(k);
         out.push(x);
         if k % 32 == 0 || [-16494, -16493, -16383, -16382, -16381, 16382, 16383].contains(&k) {
             out.extend([step(x, -1), step(x, 1)]);
+        }
+    }
+    // Base 10's exact cases, `10^k` for `5^k < 2^113`, and their neighbours.
+    if base == 10 {
+        let mut x = 1.0_f128;
+        for _ in 0..=48 {
+            out.extend((-2..=2).map(|d| step(x, d)));
+            x *= 10.0;
         }
     }
     // Significands a few ulps from a table reciprocal `2^(j/2^18)`, so the
@@ -188,9 +209,9 @@ fn edges() -> Vec<f128> {
     out
 }
 
-/// Layer 2: per result binade and sign, `x = round(2^z)` for a 114-bit
-/// midpoint `z`, so that `log2 x` sits within `2^-113·log2 e` of it.
-fn inverse() -> Vec<f128> {
+/// Layer 2: per result binade and sign, `x = round(b^z)` for a 114-bit
+/// midpoint `z`, so that `log_b x` sits within `2^-113·log_b e` of it.
+fn inverse(base: u32) -> Vec<f128> {
     let mut out = Vec::new();
 
     for exponent in -20..=14_i32 {
@@ -200,7 +221,15 @@ fn inverse() -> Vec<f128> {
                 let z: Float = Float::with_val(PREC, odd)
                     * sign
                     * Float::with_val(PREC, 2).pow(exponent - 113);
-                out.push(z.exp2().to_f128_round(Round::Nearest));
+                let x = Float::with_val(PREC, base)
+                    .pow(z)
+                    .to_f128_round(Round::Nearest);
+
+                // Base 10 overflows above `z ≈ 4932` and underflows to zero
+                // below `z ≈ −4966`: those binades have no input to give.
+                if x.is_finite() && x != 0.0 {
+                    out.push(x);
+                }
             }
         }
     }
@@ -209,7 +238,7 @@ fn inverse() -> Vec<f128> {
 
 /// Layer 3: the near-midpoint scan of `sampler`'s first `count` draws, in
 /// parallel.
-fn scan(sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f128> {
+fn scan(base: u32, sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f128> {
     let done = AtomicU64::new(0);
     let mut survivors = std::thread::scope(|s| {
         let workers: Vec<_> = (0..THREADS)
@@ -220,7 +249,7 @@ fn scan(sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f128> {
                     for i in (t..count).step_by(THREADS as usize) {
                         let x = sampler(i);
                         let mut y = Float::with_val(PREC, x);
-                        y.log2_round(Round::Nearest);
+                        round_log(base, &mut y);
                         if midpoint_frac(&y) < THRESHOLD {
                             kept.push(x);
                         }
@@ -243,11 +272,16 @@ fn scan(sampler: fn(u64) -> f128, count: u64, label: &str) -> Vec<f128> {
 }
 
 fn main() {
-    let edges = edges();
-    let family = inverse();
+    let base: u32 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .filter(|b| [2, 10].contains(b))
+        .expect("usage: gen_f128_log_cases <2|10>");
+    let edges = edges(base);
+    let family = inverse(base);
     let wide: Vec<f128> = (0..WIDE).map(positive).collect();
-    let domain = scan(positive, SCAN, "domain scan");
-    let unit = scan(near_one, SCAN_NEAR_ONE, "near-1 scan");
+    let domain = scan(base, positive, SCAN, "domain scan");
+    let unit = scan(base, near_one, SCAN_NEAR_ONE, "near-1 scan");
     eprintln!(
         "{} edges, {} inverse, {} + {} near-midpoints",
         edges.len(),
@@ -256,34 +290,40 @@ fn main() {
         unit.len()
     );
 
-    let mut text = String::from(
-        "# Hard-to-round cases for metallic::log2q(x), with their correctly rounded answers (MPFR).\n\
-         # Generated by `CC=clang cargo +nightly run --release --features \"f128 mpfr\" --example gen_f128_log2_cases`.\n",
+    let exact = if base == 10 {
+        "powers of two and ten"
+    } else {
+        "powers of two"
+    };
+    let mut text = format!(
+        "# Hard-to-round cases for metallic::log{base}q(x), with their correctly rounded answers (MPFR).\n\
+         # Generated by `CC=clang cargo +nightly run --release --features \"f128 mpfr\" --example gen_f128_log_cases -- {base}`.\n",
     );
     for (title, inputs) in [
         (
-            "special values, neighbours of 1 and of the fast floor, powers of two",
+            format!("special values, neighbours of 1 and of the fast floor, {exact}"),
             &edges,
         ),
         (
-            "round(2^z) for a 114-bit midpoint z, per result binade and sign",
+            format!("round({base}^z) for a 114-bit midpoint z, per result binade and sign"),
             &family,
         ),
-        ("random over the whole domain", &wide),
+        ("random over the whole domain".to_owned(), &wide),
         (
-            "near a rounding midpoint, from an MPFR scan over every binade",
+            "near a rounding midpoint, from an MPFR scan over every binade".to_owned(),
             &domain,
         ),
         (
-            "near a rounding midpoint, from an MPFR scan of 1 ± 2^-114..2^-1",
+            "near a rounding midpoint, from an MPFR scan of 1 ± 2^-114..2^-1".to_owned(),
             &unit,
         ),
     ] {
         writeln!(text, "#\n# {title}\n#").unwrap();
         for &x in inputs {
-            writeln!(text, "{} {}", hex(x), hex(log2(x))).unwrap();
+            writeln!(text, "{} {}", hex(x), hex(logb(base, x))).unwrap();
         }
     }
-    std::fs::write("tests/cases/log2q.wc", text).expect("write corpus");
-    eprintln!("wrote tests/cases/log2q.wc");
+    let path = format!("tests/cases/log{base}q.wc");
+    std::fs::write(&path, text).expect("write corpus");
+    eprintln!("wrote {path}");
 }

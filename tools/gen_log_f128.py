@@ -12,8 +12,9 @@ library.
 Usage:
     python3 tools/gen_log_f128.py > src/f128_/log_tables.rs
     python3 tools/gen_log_f128.py --base 2 > src/f128_/log2_tables.rs
+    python3 tools/gen_log_f128.py --base 10 > src/f128_/log10_tables.rs
 
-`--base 2` emits only what changes with the base: the per-exponent constant
+`--base b` emits only what changes with the base: the per-exponent constant
 (`log_b(2)`), the logarithm tables of the shared reciprocals, and the Taylor
 coefficients `log_b(e)/(k+1)`; the reciprocals and the crude fit are the
 natural tables' and are reused.
@@ -25,8 +26,11 @@ mp.prec = 2000
 
 LN2 = log(2)
 
-BASE = 2 if sys.argv[1:] == ["--base", "2"] else None
-assert BASE or not sys.argv[1:], f"usage: {sys.argv[0]} [--base 2]"
+BASE = None
+if sys.argv[1:]:
+    assert sys.argv[1:2] == ["--base"] and sys.argv[2:] in (["2"], ["10"]), \
+        f"usage: {sys.argv[0]} [--base 2|10]"
+    BASE = int(sys.argv[2])
 
 
 def logb(x):
@@ -181,8 +185,10 @@ else:
 //! crude fit are shared with `log_tables`.
 #![allow(clippy::unreadable_literal)]""".replace("// Generated", "//! Generated"))
 
-    print(f"\n/// log{BASE}(2), scaled by 2^{FRAME}: exactly 2^{FRAME}.")
-    print(f"pub const ONE: [u128; 3] = {limbs(int(nint(logb(2) * mpf(2) ** FRAME)), 3)};")
+    name = "ONE" if BASE == 2 else f"LOG{BASE}_2"
+    exact = f": exactly 2^{FRAME}" if BASE == 2 else ""
+    print(f"\n/// log{BASE}(2), scaled by 2^{FRAME}{exact}.")
+    print(f"pub const {name}: [u128; 3] = {limbs(int(nint(logb(2) * mpf(2) ** FRAME)), 3)};")
     name, unit = f"log{BASE}", f"log{BASE}(e)/(k+1)"
 
 for level, (step, count) in enumerate(LEVELS):

@@ -92,8 +92,15 @@ scales the slip).  `tools/gen_log_f128.py --base 2` emits `log2_tables.rs`;
 the reciprocals and the crude fit stay shared.  Every power of two is exact by
 construction — `m = 1` estimates `j = 0`, every table term and `z` vanish, and
 `k·2^214` has nothing below its round bit — and `LOG0[64]` is exactly `2^342`,
-so the `e = −1` cancellation is exact too.  A future `log10q` is one more
-`Base`, but its exact cases `log10(10^k)` are *not* free the way base 2's are.
+so the `e = −1` cancellation is exact too.  `log10q` is one more `Base`
+(`--base 10` emits `log10_tables.rs`) on the natural logarithm's gate —
+`log10 e < 1` shrinks only `z`'s cut, the products' truncations being
+absolute, so its certified slip (0.1025 of the gate) sits just under `logq`'s
+(0.1166); its exact cases `log10(10^k) = k` (`0 ≤ k ≤ 48`, as far as
+`5^k < 2^113`) are *not* free the way base 2's are — `10^k` is no table
+reciprocal, so the frame carries `k` plus the tables' and polynomial's slip
+(under 2^-139 fast, 2^-245 accurate, against a half-ulp of at least 2^-113)
+and the rounder returns `k` by margin, not by construction.
 
 `asinq`/`acosq` split at `|x| = 2^-3` (`BAND`).  Below it the arc sine is its
 own reduced argument: no square root is formed and the fast leg is the bare
@@ -198,11 +205,11 @@ edges, the per-binade convergents of `2^(e−111)/π` for both parities of the
 multiple, an MPFR near-midpoint scan) plus CORE-MATH's f64 `sin`/`cos`/`tan`
 as an oracle-free cross-check to 2^1024, and the bench baseline is GCC's
 libquadmath (faithful-only) until upstream binds them — do not add them to
-`FUNCS128` before then.  `log2q` is gated the same way
-(`examples/gen_f128_log2_cases.rs`: every power of two with sparse
-neighbours, the inverse family `round(2^z)` for 114-bit midpoints `z`, MPFR
-scans over the domain and the neighbourhood of 1; CORE-MATH's f64 `log2` as
-the oracle-free cross-check).
+`FUNCS128` before then.  `log2q` and `log10q` are gated the same way
+(`examples/gen_f128_log_cases.rs -- <base>`: every power of two with sparse
+neighbours, base 10's exact `10^k`, the inverse family `round(b^z)` for
+114-bit midpoints `z`, MPFR scans over the domain and the neighbourhood of 1;
+CORE-MATH's f64 `log2`/`log10` as the oracle-free cross-check).
 
 There is no feasible exhaustive binary128 sweep. The correctness gates are
 bit-exact checks against `core_math::*q` on `tests/cases/*q.wc`, deterministic
