@@ -163,6 +163,9 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
+  `sinq`/`cosq` have no CORE-MATH binding yet: their strict gate replays a
+  home-grown corpus that carries its MPFR answers, and CORE-MATH's `f64`
+  `sin`/`cos` cross-check every magnitude up to 2^1024.
 - **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
   or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
   --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
@@ -174,6 +177,7 @@ Each function is done when both gates hold:
 | `atanq`  | ✅ | 1.02× |
 | `atan2q` | ✅ | 1.01× |
 | `cbrtq`  | ✅ | 0.89× |
+| `cosq`   | ✅ | n/a — CORE-MATH has no `cosq`; 8× faster than libquadmath's faithful `cosq` |
 | `exp10q` | ✅ | 0.93× |
 | `exp2q`  | ✅ | 0.94× |
 | `expm1q` | ✅ | 0.94× |
@@ -181,6 +185,7 @@ Each function is done when both gates hold:
 | `hypotq` | ✅ | 1.01× |
 | `logq`   | ✅ | 1.00× |
 | `rsqrtq` | ✅ | 0.76× |
+| `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than libquadmath's faithful `sinq` |
 | `sqrtq`  | ✅ | 0.87× |
 
 `atanq` rides `atan2q` — `atan2(x, 1)` is exactly `atan(x)` — but folds the
@@ -202,5 +207,17 @@ needed them.  Above the band both are the `atan2q` pipeline fed a wide
 `1 − x²` is exact in fixed point, the root reaches 2^-207 (fast leg) and
 2^-305 (accurate leg), and the reduction runs in 256/384-bit limbs before
 rejoining `atan2q`'s legs, tables, and certified Ziv gate.
+
+`sinq` and `cosq` reduce by Payne–Hanek on 64-bit limbs of 2/π: the window
+starts at the limb the exponent points to, everything above the units bit but
+its two low bits is a multiple of 4 and drops, and the product with the
+significand leaves the quadrant and a fraction — 192 bits on the fast leg,
+448 on the accurate one.  The fraction rounds to `n = round(512·x/π)`, a
+quadrant and a breakpoint `j·π/256`, and the residual `|g| ≤ 1/256`
+normalizes into a floating fraction at its own exponent, so `θ = g·π/2`
+keeps full relative precision however close `x` sits to a multiple of π/2.
+Six Taylor terms in `θ²` (eighteen on the accurate leg) and a 128-entry
+`sin`/`cos(j·π/256)` table recombine in `atan2q`'s frames; below 2^-8 the
+argument is its own reduced angle, below 2^-57 the results are `x` and 1.
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex

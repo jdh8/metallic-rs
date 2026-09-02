@@ -64,6 +64,10 @@ required-features = ["mpfr"]
 name = "gen_f64_lgamma_cases"
 required-features = ["mpfr"]
 
+[[example]]
+name = "gen_f128_trig_cases"
+required-features = ["f128", "mpfr"]
+
 [[bench]]
 name = "acosf"
 harness = false
@@ -471,5 +475,15 @@ required-features = ["f128"]
 
 [[bench]]
 name = "acosq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "sinq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "cosq"
 harness = false
 required-features = ["f128"]

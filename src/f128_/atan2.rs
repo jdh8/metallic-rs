@@ -515,7 +515,7 @@ pub(super) const fn shr_round(x: u128, shift: u32) -> u128 {
 /// `f << shift` in the 2^-253 frame, for `shift < 128`: the window starts in
 /// limb 0 or 1, picked without shifting, and four funnels cut it out.
 #[inline]
-const fn place_256(f: u128, shift: u32) -> [u128; 2] {
+pub(super) const fn place_256(f: u128, shift: u32) -> [u128; 2] {
     debug_assert!(shift < 128);
     let bits = shift & 63;
     let [a, b, c] = if shift < 64 {
@@ -533,7 +533,7 @@ const fn place_256(f: u128, shift: u32) -> [u128; 2] {
 /// The top 128 bits of `s << shift`, for `shift < 64`: all a normalization
 /// ever keeps, so the low limb never needs shifting at all.
 #[inline]
-const fn top_256(s: [u128; 2], shift: u32) -> u128 {
+pub(super) const fn top_256(s: [u128; 2], shift: u32) -> u128 {
     let low = (s[0] >> 64) as u64;
     let middle = s[1] as u64;
     let high = (s[1] >> 64) as u64;
@@ -544,7 +544,7 @@ const fn top_256(s: [u128; 2], shift: u32) -> u128 {
 /// `a + b` or `a − b` without a data-dependent branch: the subtrahend enters
 /// in two's complement through an xor mask and a carry-in.
 #[inline]
-fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u128; 2] {
+pub(super) fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u128; 2] {
     let mask = 0u128.wrapping_sub(u128::from(negative));
 
     add_256(

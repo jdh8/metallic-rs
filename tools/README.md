@@ -23,5 +23,6 @@ generator — regenerate with the script, never edit the table by hand.
 | `gen_log_f128.py` | binary128 `log`: reciprocal + logarithm tables, `ln(2)` limbs, `1/(k+1)`, crude-log2 fit | `src/f128_/log_tables.rs` |
 | `gen_log_f64.py` | accurate-tier constants for the log family | `src/f64_/log.rs` |
 | `gen_pow_tables.py` | verbatim `Dint`/`Qint` literals from CORE-MATH `dint.h`/`qint.h` | `src/f64_/pow_consts.rs` |
+| `gen_trig_f128.py` | binary128 `sin`/`cos`: 2/π limbs, π/2, `sin`/`cos(jπ/256)` table, `1/(2k+1)!`, `1/(2k+2)!` | `src/f128_/trig_tables.rs` |
 | `gen_trig_f64.py` | sin/cos/tan kernels, Cody–Waite π/2 words, Payne–Hanek 2/π | `src/f64_/trig.rs` |
 | `sync-worst-cases.sh` | refreshes `tests/cases/*.wc` from a `core-math-sys` checkout (`CORE_MATH_SYS` env) | `tests/*.rs` worst-case gates |
