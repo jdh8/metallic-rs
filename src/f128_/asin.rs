@@ -849,7 +849,8 @@ mod frame_residual {
             z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
             let bits =
                 u128::from(z ^ (z >> 31)) << 64 | u128::from(i.wrapping_mul(0x9E37_79B9_7F4A_7C15));
-            let exponent = 1 + (bits >> 112) % 0x3fff;
+            // Biased 1..=0x3ffe: every `|x| < 1`, the only inputs `asinq` hands `wide_sqrt`.
+            let exponent = 1 + (bits >> 112) % 0x3ffe;
             let (m, e) = split(exponent << EXP_SHIFT | bits & MANTISSA_MASK);
             let sq = wide_sqrt(m, e);
             let square = square_top(sq.frame);
