@@ -141,7 +141,11 @@ const fn u128_sign_bit(sign: Sign) -> u128 {
     }
 }
 
-/// Correctly rounded fused multiply-add for binary128.
+/// Fused multiply-add for binary128, correctly rounded where `long double` is
+/// binary128 — this is glibc's `fmaf128`.  On a target whose `long double` is
+/// narrower (Apple arm64, x86 f80) LLVM lowers it to `fmal` and the result is
+/// the *narrow* function of the low half of each argument, so keep this off
+/// any path that has to be right everywhere.
 #[must_use]
 #[allow(clippy::disallowed_methods)]
 #[inline]

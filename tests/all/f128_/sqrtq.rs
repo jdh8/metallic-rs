@@ -61,7 +61,7 @@ fn test_parser() {
 fn test_sqrtq() {
     common::test_univariate_cases(
         metallic::sqrtq,
-        f128::sqrt,
+        core_math::sqrtq,
         dense_band().chain(full_range()),
     );
 }

@@ -306,6 +306,31 @@ Rust's code. libquadmath is a mechanical 2018 copy of glibc's `ldbl-128`
 sources, so outside `sqrt` and `hypot` the two lanes are the same algorithm —
 agreement between them is shared ancestry, not confirmation.
 
+All of that holds on `*-linux-gnu` only, and **no `f128::` method is an oracle
+anywhere**.  LLVM's `RuntimeLibcalls` defaults every `*_F128` math libcall to
+the *long double* name and only the GNU-gated `X86_F128_Libcalls`/XCore and
+PowerPC system libraries override it, so on `aarch64-apple-darwin` — where
+`long double` is `double` and `sinl` is literally `sin` — `f128::sin`, `exp`,
+`ln`, `powf`, `mul_add`, `%` and `sqrt` lower to `_sinl`/`_expl`/`_logl`/
+`_powl`/`_fmal`/`_fmodl`/`_sqrtl`.  AAPCS64 passes the `fp128` in `q0` and the
+`double` callee reads `d0`, so each one computes the f64 function of the *low
+64 bits* and returns it in the low half with register residue above: garbage
+that links, runs, and is fast (one f64 libm call), and that a "high half is
+zero" check does not catch — `f128::sin(1.0)` is exactly `1.0` there.  The
+`sqrt` exception above is x86-64-specific; on Darwin it is `_sqrtl` like the
+rest.  The `std::sys::cmath` half (`tan`, `cbrt`, `hypot`, `asin`, `atan2`,
+`exp_m1`, `ln_1p`, the hyperbolics) is the honest failure: those `<fn>f128`
+symbols do not exist on Darwin and the link fails.  Fixed in LLVM main
+([llvm#214944]), not yet in rustc's branch; rustc already computes
+`target_has_reliable_f128_math = false` for the target and gates nothing but
+doctests on it.  None of this is reachable from `cargo test`/`cargo bench`
+regardless — CORE-MATH's `binary128/` sources need `__float128`, which clang
+refuses for *every* Darwin target, so `core-math-sys` (a dev-dependency of
+every f128 test and bench) fails to build there.  Run the f128 side on
+x86-64 GNU/Linux.
+
+[llvm#214944]: https://github.com/llvm/llvm-project/pull/214944
+
 `examples/f128_ulp_survey.rs` (`--features "f128 mpfr"`) is the accuracy side
 of that comparison: max ulp of metallic / glibc / libquadmath against MPFR at
 300 bits, over the benches' own bands. The metallic column is the harness'
