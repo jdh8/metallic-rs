@@ -76,6 +76,10 @@ required-features = ["f128", "mpfr"]
 name = "gen_f128_pow_cases"
 required-features = ["f128", "mpfr"]
 
+[[example]]
+name = "f128_ulp_survey"
+required-features = ["f128", "mpfr"]
+
 [[bench]]
 name = "acosf"
 harness = false

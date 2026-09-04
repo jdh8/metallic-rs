@@ -19,6 +19,12 @@ bench!(
     bench::Exponents(-12..=12),
     bench::Exponents(-12..=12)
 );
+bench!(
+    bench_std,
+    f128::hypot,
+    bench::Exponents(-12..=12),
+    bench::Exponents(-12..=12)
+);
 
-criterion::criterion_group!(benches, bench_metallic, bench_core_math);
+criterion::criterion_group!(benches, bench_metallic, bench_core_math, bench_std);
 criterion::criterion_main!(benches);

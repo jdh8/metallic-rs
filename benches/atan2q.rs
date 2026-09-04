@@ -19,6 +19,12 @@ bench!(
     bench::Exponents(-20..=20),
     bench::Exponents(-20..=20)
 );
+bench!(
+    bench_std,
+    f128::atan2,
+    bench::Exponents(-20..=20),
+    bench::Exponents(-20..=20)
+);
 
-criterion::criterion_group!(benches, bench_metallic, bench_core_math);
+criterion::criterion_group!(benches, bench_metallic, bench_core_math, bench_std);
 criterion::criterion_main!(benches);

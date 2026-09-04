@@ -12,6 +12,7 @@ bench!(
     core_math::asinq,
     bench::Exponents(-20..=-1)
 );
+bench!(bench_std, f128::asin, bench::Exponents(-20..=-1));
 
-criterion::criterion_group!(benches, bench_metallic, bench_core_math);
+criterion::criterion_group!(benches, bench_metallic, bench_core_math, bench_std);
 criterion::criterion_main!(benches);

@@ -184,6 +184,9 @@ Each function is done when both gates hold:
 - **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
   or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
   --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
+  Each bench also carries a `f128::` lane (nightly `std`) and, where CORE-MATH
+  has no binding, a `quadmath::` one; both are faithful-only, so they are
+  context rather than the headline — see [Baselines](#baselines).
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
@@ -192,21 +195,21 @@ Each function is done when both gates hold:
 | `atanq`  | ✅ | 1.02× |
 | `atan2q` | ✅ | 1.01× |
 | `cbrtq`  | ✅ | 0.89× |
-| `cosq`   | ✅ | n/a — CORE-MATH has no `cosq`; 8× faster than libquadmath's faithful `cosq` |
+| `cosq`   | ✅ | n/a — CORE-MATH has no `cosq`; 8× faster than glibc's and libquadmath's faithful `cosq` |
 | `exp10q` | ✅ | 0.93× |
 | `exp2q`  | ✅ | 0.94× |
 | `expm1q` | ✅ | 0.94× |
 | `expq`   | ✅ | 0.96× |
 | `hypotq` | ✅ | 1.01× |
-| `log2q`  | ✅ | n/a — CORE-MATH has no `log2q`; 15× faster than libquadmath's faithful `log2q` |
-| `log10q` | ✅ | n/a — CORE-MATH has no `log10q`; 15× faster than libquadmath's faithful `log10q` |
-| `log1pq` | ✅ | n/a — CORE-MATH has no `log1pq`; 20× faster than libquadmath's faithful `log1pq` |
+| `log2q`  | ✅ | n/a — CORE-MATH has no `log2q`; 15× faster than glibc's and libquadmath's faithful `log2q` |
+| `log10q` | ✅ | n/a — CORE-MATH has no `log10q`; 15× faster than glibc's and libquadmath's faithful `log10q` |
+| `log1pq` | ✅ | n/a — CORE-MATH has no `log1pq`; 20× faster than glibc's and libquadmath's faithful `log1pq` |
 | `logq`   | ✅ | 1.00× |
-| `powq`   | ✅ | n/a — CORE-MATH has no `powq`; 17× faster than libquadmath's faithful `powq` |
+| `powq`   | ✅ | n/a — CORE-MATH has no `powq`; 17× faster than glibc's and libquadmath's faithful `powq` |
 | `rsqrtq` | ✅ | 0.76× |
-| `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than libquadmath's faithful `sinq` |
+| `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than glibc's and libquadmath's faithful `sinq` |
 | `sqrtq`  | ✅ | 0.87× |
-| `tanq`   | ✅ | n/a — CORE-MATH has no `tanq`; 8.5× faster than libquadmath's faithful `tanq` |
+| `tanq`   | ✅ | n/a — CORE-MATH has no `tanq`; 8.5× faster than glibc's and libquadmath's faithful `tanq` |
 
 `atanq` rides `atan2q` — `atan2(x, 1)` is exactly `atan(x)` — but folds the
 unit operand through its own reduction: the sector is an integer shift
@@ -249,5 +252,78 @@ quotient is `atan2q`'s hardware-seeded Newton reciprocal of the denominator's
 top limb plus one Newton step on the quotient itself against the full
 denominator (two at 384 bits on the accurate leg), every iterate held below
 the ratio so no residual goes negative.
+
+#### Baselines
+
+Three other binary128 implementations are within reach on a GNU/Linux box, and
+they are not interchangeable:
+
+- **[CORE-MATH]** shares metallic's ≤ 0.5 ulp contract, so it is the only fair
+  performance baseline — it is the only one doing the same work.  It binds
+  thirteen of the twenty functions above.
+- **nightly Rust** adds no binary128 math of its own.  `f128::sin`,
+  `f128::powf` and the rest are `extern "C"` calls into **glibc**'s
+  `_Float128` libm (`sinf128`, `powf128`, …), and `std` documents their
+  precision as "non-deterministic … varies by platform, Rust version, and can
+  even differ within the same execution".  `f128::sqrt` is the one method with
+  a contract (IEEE 754 `squareRoot`), and on x86-64 it does not reach glibc at
+  all: the static linker binds it to `compiler_builtins`' own `sqrtf128`,
+  which is why it is the one `f128::` lane within 2× of metallic instead of
+  10× off.
+- **libquadmath** is GCC's `__float128` runtime: a mechanical 2018 copy of
+  glibc's `ldbl-128` sources (fdlibm and Moshier's Cephes) that GCC documents
+  no accuracy for whatsoever.  Where it and glibc agree — bit for bit on every
+  function here but `sqrt` and `hypot` — that is shared ancestry, not
+  independent confirmation, and the two time within a few percent of each
+  other.
+
+`examples/f128_ulp_survey.rs` measures all three against MPFR at 300 bits:
+
+```console
+$ cargo +nightly run --release --features "f128 mpfr" --example f128_ulp_survey -- 50000
+```
+
+Maximum error in ulps over 50 000 draws per function, taken from the benches'
+own bands so the accuracy population is the timed one — except `asinq`/`acosq`,
+whose bench band never leaves `|x| < ½`, so the survey draws all of `[−1, 1]`
+and crowds the endpoints where the reflection cancels.  Correct rounding is
+`≤ 0.5`; anything above it is a wrong last bit.
+
+| function | metallic | glibc 2.35 | libquadmath 12.3 |
+|----------|:--------:|:----------:|:----------------:|
+| `acosq`   | **0.500** | 1.055 | 1.055 |
+| `asinq`   | **0.500** | 0.875 | 0.875 |
+| `atanq`   | **0.500** | 1.068 | 1.068 |
+| `atan2q`  | **0.500** | 1.541 | 1.541 |
+| `cbrtq`   | **0.500** | 0.721 | 0.721 |
+| `cosq`    | **0.500** | 1.387 | 1.387 |
+| `exp10q`  | **0.500** | 1.712 | n/a |
+| `exp2q`   | **0.500** | 0.961 | 0.961 |
+| `expm1q`  | **0.500** | 1.356 | 1.356 |
+| `expq`    | **0.500** | **0.500** | **0.500** |
+| `hypotq`  | **0.500** | 0.533 | 1.082 |
+| `log2q`   | **0.500** | 0.623 | 0.623 |
+| `log10q`  | **0.500** | 0.613 | 0.613 |
+| `log1pq`  | **0.500** | 2.327 | 2.327 |
+| `logq`    | **0.500** | 0.501 | 0.501 |
+| `powq`    | **0.500** | 0.765 | 0.765 |
+| `rsqrtq`  | **0.500** | n/a | n/a |
+| `sinq`    | **0.500** | 1.095 | 1.095 |
+| `sqrtq`   | **0.500** | **0.500** | 0.750 |
+| `tanq`    | **0.500** | 0.804 | 0.804 |
+
+The share of draws whose last bit comes out wrong spans four orders of
+magnitude: 0.006% for glibc's `logq`, ~1% for the exponentials and the sine,
+3% for `tanq`, 6% for `powq` and the arc functions, 9% for `cbrtq`, 14% for
+`atanq`, 17% for `exp10q`, 19% for `atan2q`, and 25% for libquadmath's `sqrtq`
+and `hypotq` — neither of which is correctly rounded, while glibc's `sqrtf128`
+is (IEEE mandates it) and its `hypotf128` nearly so.  These are maxima over a
+random band, not a search: the adversarial lower bounds in Gladman, Innocente,
+Mather and Zimmermann's [*Accuracy of Mathematical Functions*][accuracy] —
+which glibc's manual now cites in place of its own deleted ulp table — are
+larger still for the same glibc functions (3.51 for `log1p`, 30.3 for `pow`),
+and every number above sits under them.
+
+[accuracy]: https://inria.hal.science/hal-03141101
 
 [complex]: https://en.cppreference.com/w/c/numeric/complex

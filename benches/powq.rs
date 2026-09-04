@@ -29,6 +29,12 @@ bench!(
     bench::Exponents(-16..=16),
     bench::Exponents(-16..=8)
 );
+bench!(
+    bench_std,
+    f128::powf,
+    bench::Exponents(-16..=16),
+    bench::Exponents(-16..=8)
+);
 
-criterion::criterion_group!(benches, bench_metallic, bench_quadmath);
+criterion::criterion_group!(benches, bench_metallic, bench_quadmath, bench_std);
 criterion::criterion_main!(benches);

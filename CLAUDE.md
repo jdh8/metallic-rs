@@ -293,6 +293,26 @@ headline is the same-run `metallic::*q / core_math::*q` ratio. The std
 `f128::sqrt` lane has the same correct-rounding contract; other std lanes are
 faithful-only comparisons.
 
+Those std lanes are **glibc**: nightly's `f128` methods are `extern "C"` calls
+into `sinf128`, `powf128`, … (`std::sys::cmath`, plus LLVM intrinsics that
+lower to the same symbols), and `std` documents their precision as
+unspecified. `f128::sqrt` is the exception in two ways — it is the one method
+with an IEEE contract, and it is the one that does *not* reach glibc: a plain
+`extern "C" fn sqrtf128` binds to `compiler_builtins`' own `LOCAL HIDDEN`
+copy, which the static linker prefers. Anything measuring "glibc" must resolve
+through `dlopen`/`dlsym` on `libm.so.6` and check `dladdr`, as
+`examples/f128_ulp_survey.rs` does; a bare `extern` block silently measures
+Rust's code. libquadmath is a mechanical 2018 copy of glibc's `ldbl-128`
+sources, so outside `sqrt` and `hypot` the two lanes are the same algorithm —
+agreement between them is shared ancestry, not confirmation.
+
+`examples/f128_ulp_survey.rs` (`--features "f128 mpfr"`) is the accuracy side
+of that comparison: max ulp of metallic / glibc / libquadmath against MPFR at
+300 bits, over the benches' own bands. The metallic column is the harness'
+own proof — it must read `≤ 0.5` on every function, and a `self_check` pins
+the ulp scaling against exact midpoints before the survey runs. The table it
+prints is in the README's [Baselines](README.md#baselines) section.
+
 ## Verification (reproducing CORE-MATH's checks)
 
 Every f64 function reproduces CORE-MATH's per-function check discipline, in

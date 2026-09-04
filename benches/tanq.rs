@@ -22,6 +22,7 @@ bench!(
     |x| unsafe { tanq(x) },
     bench::Exponents(-20..=20)
 );
+bench!(bench_std, f128::tan, bench::Exponents(-20..=20));
 
-criterion::criterion_group!(benches, bench_metallic, bench_quadmath);
+criterion::criterion_group!(benches, bench_metallic, bench_quadmath, bench_std);
 criterion::criterion_main!(benches);
