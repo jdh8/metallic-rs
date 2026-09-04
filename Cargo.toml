@@ -109,6 +109,10 @@ name = "atanf"
 harness = false
 
 [[bench]]
+name = "atan2f"
+harness = false
+
+[[bench]]
 name = "atanpif"
 harness = false
 
@@ -137,6 +141,14 @@ name = "coshf"
 harness = false
 
 [[bench]]
+name = "erff"
+harness = false
+
+[[bench]]
+name = "erfcf"
+harness = false
+
+[[bench]]
 name = "expm1f"
 harness = false
 
@@ -162,6 +174,10 @@ harness = false
 
 [[bench]]
 name = "frexpf"
+harness = false
+
+[[bench]]
+name = "fmaf"
 harness = false
 
 [[bench]]
@@ -297,6 +313,10 @@ name = "cbrt"
 harness = false
 
 [[bench]]
+name = "compound"
+harness = false
+
+[[bench]]
 name = "cosh"
 harness = false
 
@@ -334,6 +354,10 @@ harness = false
 
 [[bench]]
 name = "frexp"
+harness = false
+
+[[bench]]
+name = "fma"
 harness = false
 
 [[bench]]

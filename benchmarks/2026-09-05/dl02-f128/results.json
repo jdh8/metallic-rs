@@ -1,0 +1,5260 @@
+{
+  "commands": [
+    {
+      "command": [
+        "cargo",
+        "+nightly",
+        "bench",
+        "--locked",
+        "--no-run",
+        "--message-format=json",
+        "--features",
+        "f128",
+        "--bench",
+        "acosq",
+        "--bench",
+        "asinq",
+        "--bench",
+        "atan2q",
+        "--bench",
+        "atanq",
+        "--bench",
+        "cbrtq",
+        "--bench",
+        "cosq",
+        "--bench",
+        "exp10q",
+        "--bench",
+        "exp2q",
+        "--bench",
+        "expm1q",
+        "--bench",
+        "expq",
+        "--bench",
+        "hypotq",
+        "--bench",
+        "log10q",
+        "--bench",
+        "log1pq",
+        "--bench",
+        "log2q",
+        "--bench",
+        "logq",
+        "--bench",
+        "powq",
+        "--bench",
+        "rsqrtq",
+        "--bench",
+        "sinq",
+        "--bench",
+        "sqrtq",
+        "--bench",
+        "tanq"
+      ],
+      "elapsed_seconds": 4.874749549955595,
+      "end_utc": "2026-09-04T22:46:55+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/build.log",
+      "phase": "build",
+      "start_utc": "2026-09-04T22:46:50+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/eba7d7caa2d264d6/out/acosq-eba7d7caa2d264d6",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.849431830982212,
+      "end_utc": "2026-09-04T22:47:06+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/acosq.log",
+      "phase": "acosq",
+      "start_utc": "2026-09-04T22:46:55+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/9efda417681b6138/out/asinq-9efda417681b6138",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.389214491995517,
+      "end_utc": "2026-09-04T22:47:16+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/asinq.log",
+      "phase": "asinq",
+      "start_utc": "2026-09-04T22:47:06+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/bf5d199b87f8c9e9/out/atan2q-bf5d199b87f8c9e9",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.045867701002862,
+      "end_utc": "2026-09-04T22:47:27+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/atan2q.log",
+      "phase": "atan2q",
+      "start_utc": "2026-09-04T22:47:16+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/c5c66154e3ea8bfc/out/atanq-c5c66154e3ea8bfc",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 9.796961859043222,
+      "end_utc": "2026-09-04T22:47:37+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/atanq.log",
+      "phase": "atanq",
+      "start_utc": "2026-09-04T22:47:27+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/aa40feac10c4eb63/out/cbrtq-aa40feac10c4eb63",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.237620183033869,
+      "end_utc": "2026-09-04T22:47:48+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/cbrtq.log",
+      "phase": "cbrtq",
+      "start_utc": "2026-09-04T22:47:37+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/5fa94f44c0e47b0d/out/cosq-5fa94f44c0e47b0d",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.234487248002551,
+      "end_utc": "2026-09-04T22:47:59+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/cosq.log",
+      "phase": "cosq",
+      "start_utc": "2026-09-04T22:47:48+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/d14f9210b8e55b4c/out/exp10q-d14f9210b8e55b4c",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.392796440050006,
+      "end_utc": "2026-09-04T22:48:10+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/exp10q.log",
+      "phase": "exp10q",
+      "start_utc": "2026-09-04T22:47:59+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/eff410528d69708d/out/exp2q-eff410528d69708d",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.490942781034391,
+      "end_utc": "2026-09-04T22:48:21+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/exp2q.log",
+      "phase": "exp2q",
+      "start_utc": "2026-09-04T22:48:10+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/ec682ebcb54f19e9/out/expm1q-ec682ebcb54f19e9",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.895246584026609,
+      "end_utc": "2026-09-04T22:48:32+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/expm1q.log",
+      "phase": "expm1q",
+      "start_utc": "2026-09-04T22:48:21+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/2d494b9c53f3d3a9/out/expq-2d494b9c53f3d3a9",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.2955645720358,
+      "end_utc": "2026-09-04T22:48:44+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/expq.log",
+      "phase": "expq",
+      "start_utc": "2026-09-04T22:48:32+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/6733e86db65bfc35/out/hypotq-6733e86db65bfc35",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.586353855964262,
+      "end_utc": "2026-09-04T22:48:54+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/hypotq.log",
+      "phase": "hypotq",
+      "start_utc": "2026-09-04T22:48:44+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/a8179dd9cb873757/out/log10q-a8179dd9cb873757",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.591314106015489,
+      "end_utc": "2026-09-04T22:49:06+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/log10q.log",
+      "phase": "log10q",
+      "start_utc": "2026-09-04T22:48:54+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/9e768af06292e618/out/log1pq-9e768af06292e618",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 9.69024291401729,
+      "end_utc": "2026-09-04T22:49:16+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/log1pq.log",
+      "phase": "log1pq",
+      "start_utc": "2026-09-04T22:49:06+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/708be16eaf0688ec/out/log2q-708be16eaf0688ec",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.045822066022083,
+      "end_utc": "2026-09-04T22:49:27+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/log2q.log",
+      "phase": "log2q",
+      "start_utc": "2026-09-04T22:49:16+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/ea9105852d15fc9e/out/logq-ea9105852d15fc9e",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.351819285016973,
+      "end_utc": "2026-09-04T22:49:38+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/logq.log",
+      "phase": "logq",
+      "start_utc": "2026-09-04T22:49:27+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/7a2252e5408d59f6/out/powq-7a2252e5408d59f6",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.338716032041702,
+      "end_utc": "2026-09-04T22:49:49+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/powq.log",
+      "phase": "powq",
+      "start_utc": "2026-09-04T22:49:38+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/8a0408963b1729c3/out/rsqrtq-8a0408963b1729c3",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 6.5386658100178465,
+      "end_utc": "2026-09-04T22:49:55+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/rsqrtq.log",
+      "phase": "rsqrtq",
+      "start_utc": "2026-09-04T22:49:49+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/e6e973df06188c8f/out/sinq-e6e973df06188c8f",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 10.19313897297252,
+      "end_utc": "2026-09-04T22:50:05+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/sinq.log",
+      "phase": "sinq",
+      "start_utc": "2026-09-04T22:49:55+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/d6183517e09b7c93/out/sqrtq-d6183517e09b7c93",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 9.883198482973967,
+      "end_utc": "2026-09-04T22:50:15+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/sqrtq.log",
+      "phase": "sqrtq",
+      "start_utc": "2026-09-04T22:50:05+00:00"
+    },
+    {
+      "command": [
+        "taskset",
+        "--cpu-list",
+        "15",
+        "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/6fa97c6a7ab1ba47/out/tanq-6fa97c6a7ab1ba47",
+        "--bench",
+        "--warm-up-time",
+        "1.0",
+        "--measurement-time",
+        "2.0",
+        "--sample-size",
+        "100",
+        "--nresamples",
+        "10000",
+        "--noplot"
+      ],
+      "elapsed_seconds": 11.043653428961989,
+      "end_utc": "2026-09-04T22:50:26+00:00",
+      "exit_code": 0,
+      "log": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/benchmark-snapshot/tanq.log",
+      "phase": "tanq",
+      "start_utc": "2026-09-04T22:50:15+00:00"
+    }
+  ],
+  "coverage": {
+    "benchmark_targets": 20,
+    "measurement_lanes": 59,
+    "missing": [],
+    "public_functions": 20
+  },
+  "end_utc": "2026-09-04T22:50:26+00:00",
+  "environment": {
+    "CARGO_TARGET_DIR": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128",
+    "CC": "clang",
+    "CRITERION_HOME": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion",
+    "RUSTFLAGS": "-Ctarget-cpu=x86-64-v3",
+    "TARGET_CPU": "x86-64-v3"
+  },
+  "executables": {
+    "acosq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/eba7d7caa2d264d6/out/acosq-eba7d7caa2d264d6",
+    "asinq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/9efda417681b6138/out/asinq-9efda417681b6138",
+    "atan2q": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/bf5d199b87f8c9e9/out/atan2q-bf5d199b87f8c9e9",
+    "atanq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/c5c66154e3ea8bfc/out/atanq-c5c66154e3ea8bfc",
+    "cbrtq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/aa40feac10c4eb63/out/cbrtq-aa40feac10c4eb63",
+    "cosq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/5fa94f44c0e47b0d/out/cosq-5fa94f44c0e47b0d",
+    "exp10q": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/d14f9210b8e55b4c/out/exp10q-d14f9210b8e55b4c",
+    "exp2q": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/eff410528d69708d/out/exp2q-eff410528d69708d",
+    "expm1q": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/ec682ebcb54f19e9/out/expm1q-ec682ebcb54f19e9",
+    "expq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/2d494b9c53f3d3a9/out/expq-2d494b9c53f3d3a9",
+    "hypotq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/6733e86db65bfc35/out/hypotq-6733e86db65bfc35",
+    "log10q": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/a8179dd9cb873757/out/log10q-a8179dd9cb873757",
+    "log1pq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/9e768af06292e618/out/log1pq-9e768af06292e618",
+    "log2q": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/708be16eaf0688ec/out/log2q-708be16eaf0688ec",
+    "logq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/ea9105852d15fc9e/out/logq-ea9105852d15fc9e",
+    "powq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/7a2252e5408d59f6/out/powq-7a2252e5408d59f6",
+    "rsqrtq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/8a0408963b1729c3/out/rsqrtq-8a0408963b1729c3",
+    "sinq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/e6e973df06188c8f/out/sinq-e6e973df06188c8f",
+    "sqrtq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/d6183517e09b7c93/out/sqrtq-d6183517e09b7c93",
+    "tanq": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/release/build/metallic/6fa97c6a7ab1ba47/out/tanq-6fa97c6a7ab1ba47"
+  },
+  "expected_public_functions": [
+    "acosq",
+    "asinq",
+    "atan2q",
+    "atanq",
+    "cbrtq",
+    "cosq",
+    "exp10q",
+    "exp2q",
+    "expm1q",
+    "expq",
+    "hypotq",
+    "log10q",
+    "log1pq",
+    "log2q",
+    "logq",
+    "powq",
+    "rsqrtq",
+    "sinq",
+    "sqrtq",
+    "tanq"
+  ],
+  "machine": {
+    "c_compiler": {
+      "command": [
+        "clang",
+        "--version"
+      ],
+      "exit_code": 0,
+      "output": "Ubuntu clang version 14.0.0-1ubuntu1.1\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin"
+    },
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly",
+        "-V"
+      ],
+      "exit_code": 0,
+      "output": "cargo 1.100.0-nightly (b2e9d5f9d 2026-09-02)"
+    },
+    "frequency_policy": {
+      "energy_performance_preference": "balance_performance",
+      "scaling_driver": "amd-pstate-epp",
+      "scaling_governor": "powersave",
+      "scaling_max_freq": "5759000",
+      "scaling_min_freq": "400000"
+    },
+    "hardware": {
+      "command": [
+        "lscpu"
+      ],
+      "exit_code": 0,
+      "output": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 9 7950X3D 16-Core Processor\nCPU family:                              25\nModel:                                   97\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                2\nCPU max MHz:                             5759.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                8399.75\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc amd_ibpb_ret arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d ibpb_exit_to_user\nVirtualization:                          AMD-V\nL1d cache:                               512 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                16 MiB (16 instances)\nL3 cache:                                128 MiB (2 instances)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; Safe RET\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Vulnerable: Clear CPU buffers attempted, no microcode\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace"
+    },
+    "hostname": "skymizer-DL02",
+    "libc": {
+      "command": [
+        "ldd",
+        "--version"
+      ],
+      "exit_code": 0,
+      "output": "ldd (Ubuntu GLIBC 2.35-0ubuntu3.14) 2.35\nCopyright (C) 2022 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\nWritten by Roland McGrath and Ulrich Drepper."
+    },
+    "logical_cpus": 32,
+    "machine": "x86_64",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "python": "3.10.12 (main, Jul 15 2026, 23:40:17) [GCC 11.4.0]",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "output": "rustc 1.100.0-nightly (a69a63265 2026-09-03)\nbinary: rustc\ncommit-hash: a69a63265cfd9e006d43137f98301b8d274ad4c9\ncommit-date: 2026-09-03\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.1"
+    }
+  },
+  "machine_before_measurement": {
+    "cpu_pressure": "some avg10=12.58 avg60=5.65 avg300=4.31 total=19299776696\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+    "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574640960\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396196",
+    "load_average": [
+      32.884765625,
+      32.529296875,
+      32.84423828125
+    ],
+    "memory_kib": {
+      "Buffers": 379040,
+      "Cached": 23925536,
+      "Dirty": 109848,
+      "MemAvailable": 46558468,
+      "MemFree": 18666884,
+      "MemTotal": 64992384,
+      "SwapFree": 0,
+      "SwapTotal": 0
+    },
+    "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+    "top_cpu": [
+      {
+        "cpu_percent": 2900.0,
+        "executable": "dump-teacher",
+        "memory_percent": 7.1,
+        "pid": 2527927,
+        "rss_kib": 4651192
+      },
+      {
+        "cpu_percent": 2.1,
+        "executable": "k3s-agent",
+        "memory_percent": 0.2,
+        "pid": 7783,
+        "rss_kib": 131568
+      },
+      {
+        "cpu_percent": 1.3,
+        "executable": "2.1.259",
+        "memory_percent": 0.8,
+        "pid": 951510,
+        "rss_kib": 539092
+      },
+      {
+        "cpu_percent": 1.0,
+        "executable": "python3",
+        "memory_percent": 0.0,
+        "pid": 2384338,
+        "rss_kib": 18228
+      },
+      {
+        "cpu_percent": 0.9,
+        "executable": "claude",
+        "memory_percent": 0.6,
+        "pid": 3327270,
+        "rss_kib": 421896
+      }
+    ],
+    "top_memory": [
+      {
+        "cpu_percent": 2900.0,
+        "executable": "dump-teacher",
+        "memory_percent": 7.1,
+        "pid": 2527927,
+        "rss_kib": 4651192
+      },
+      {
+        "cpu_percent": 0.2,
+        "executable": "node",
+        "memory_percent": 1.6,
+        "pid": 1614179,
+        "rss_kib": 1084840
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "node",
+        "memory_percent": 1.5,
+        "pid": 1613529,
+        "rss_kib": 1037136
+      },
+      {
+        "cpu_percent": 0.1,
+        "executable": "node",
+        "memory_percent": 1.1,
+        "pid": 1628740,
+        "rss_kib": 776192
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "clangd.main",
+        "memory_percent": 1.1,
+        "pid": 1628994,
+        "rss_kib": 737800
+      }
+    ],
+    "utc": "2026-09-04T22:46:55+00:00"
+  },
+  "machine_end": {
+    "cpu_pressure": "some avg10=4.49 avg60=5.50 avg300=4.84 total=19311704511\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+    "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574734999\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006402038",
+    "load_average": [
+      33.560546875,
+      33.09521484375,
+      33.01025390625
+    ],
+    "memory_kib": {
+      "Buffers": 403928,
+      "Cached": 24076936,
+      "Dirty": 264,
+      "MemAvailable": 47480568,
+      "MemFree": 19409388,
+      "MemTotal": 64992384,
+      "SwapFree": 0,
+      "SwapTotal": 0
+    },
+    "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+    "top_cpu": [
+      {
+        "cpu_percent": 2903.0,
+        "executable": "dump-teacher",
+        "memory_percent": 7.1,
+        "pid": 2527927,
+        "rss_kib": 4654668
+      },
+      {
+        "cpu_percent": 2.1,
+        "executable": "k3s-agent",
+        "memory_percent": 0.2,
+        "pid": 7783,
+        "rss_kib": 131472
+      },
+      {
+        "cpu_percent": 1.3,
+        "executable": "2.1.259",
+        "memory_percent": 0.8,
+        "pid": 951510,
+        "rss_kib": 541372
+      },
+      {
+        "cpu_percent": 0.9,
+        "executable": "claude",
+        "memory_percent": 0.6,
+        "pid": 3327270,
+        "rss_kib": 421900
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "kcompactd0",
+        "memory_percent": 0.0,
+        "pid": 218,
+        "rss_kib": 0
+      }
+    ],
+    "top_memory": [
+      {
+        "cpu_percent": 2903.0,
+        "executable": "dump-teacher",
+        "memory_percent": 7.1,
+        "pid": 2527927,
+        "rss_kib": 4654668
+      },
+      {
+        "cpu_percent": 0.2,
+        "executable": "node",
+        "memory_percent": 1.6,
+        "pid": 1614179,
+        "rss_kib": 1084840
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "node",
+        "memory_percent": 1.5,
+        "pid": 1613529,
+        "rss_kib": 1037612
+      },
+      {
+        "cpu_percent": 0.1,
+        "executable": "node",
+        "memory_percent": 1.1,
+        "pid": 1628740,
+        "rss_kib": 776192
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "clangd.main",
+        "memory_percent": 1.1,
+        "pid": 1628994,
+        "rss_kib": 737800
+      }
+    ],
+    "utc": "2026-09-04T22:50:26+00:00"
+  },
+  "machine_samples": [
+    {
+      "cpu_pressure": "some avg10=4.15 avg60=4.09 avg300=3.98 total=19298338587\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574639617\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396145",
+      "load_average": [
+        32.87451171875,
+        32.52099609375,
+        32.84326171875
+      ],
+      "memory_kib": {
+        "Buffers": 378688,
+        "Cached": 23925412,
+        "Dirty": 572,
+        "MemAvailable": 47476012,
+        "MemFree": 19584764,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637719\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784440",
+      "phase": "build",
+      "top_cpu": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4659036
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 131568
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 538952
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421892
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4659036
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037136
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:46:50+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=12.58 avg60=5.65 avg300=4.31 total=19299778492\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574640960\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396196",
+      "load_average": [
+        32.884765625,
+        32.529296875,
+        32.84423828125
+      ],
+      "memory_kib": {
+        "Buffers": 379040,
+        "Cached": 23925536,
+        "Dirty": 109864,
+        "MemAvailable": 46557060,
+        "MemFree": 18665476,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "acosq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4651192
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 131568
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539092
+        },
+        {
+          "cpu_percent": 1.0,
+          "executable": "python3",
+          "memory_percent": 0.0,
+          "pid": 2384338,
+          "rss_kib": 18240
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4651192
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037136
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:46:55+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=7.78 avg60=5.67 avg300=4.36 total=19300273363\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574641957\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396219",
+      "load_average": [
+        32.978515625,
+        32.5693359375,
+        32.8525390625
+      ],
+      "memory_kib": {
+        "Buffers": 379120,
+        "Cached": 23926176,
+        "Dirty": 648,
+        "MemAvailable": 47339564,
+        "MemFree": 19447184,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "asinq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4661680
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 131568
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539296
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4661680
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037136
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:47:06+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=5.40 avg60=5.43 avg300=4.36 total=19300728456\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574642762\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396232",
+      "load_average": [
+        33.0625,
+        32.6005859375,
+        32.85986328125
+      ],
+      "memory_kib": {
+        "Buffers": 379148,
+        "Cached": 23926416,
+        "Dirty": 160,
+        "MemAvailable": 47387692,
+        "MemFree": 19495020,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "atan2q",
+      "top_cpu": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4648660
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 131568
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539396
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421904
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4648660
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037136
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:47:16+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.42 avg60=5.15 avg300=4.34 total=19301201171\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574644139\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396232",
+      "load_average": [
+        33.05224609375,
+        32.6142578125,
+        32.86181640625
+      ],
+      "memory_kib": {
+        "Buffers": 379176,
+        "Cached": 23926524,
+        "Dirty": 96,
+        "MemAvailable": 47415300,
+        "MemFree": 19522488,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "atanq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4668452
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.1,
+          "pid": 7783,
+          "rss_kib": 127784
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539540
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421892
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4668452
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037136
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:47:27+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.37 avg60=5.01 avg300=4.33 total=19301662825\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574644628\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396233",
+      "load_average": [
+        33.11767578125,
+        32.64404296875,
+        32.869140625
+      ],
+      "memory_kib": {
+        "Buffers": 379204,
+        "Cached": 23926636,
+        "Dirty": 140,
+        "MemAvailable": 47612232,
+        "MemFree": 19719284,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "cbrtq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4659596
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.1,
+          "pid": 7783,
+          "rss_kib": 129084
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539684
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421892
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2900.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4659596
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037136
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:47:37+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.43 avg60=4.89 avg300=4.33 total=19302215297\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574645798\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396236",
+      "load_average": [
+        33.24658203125,
+        32.68896484375,
+        32.8818359375
+      ],
+      "memory_kib": {
+        "Buffers": 379268,
+        "Cached": 23926800,
+        "Dirty": 268,
+        "MemAvailable": 47433976,
+        "MemFree": 19540712,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "cosq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4684796
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 130504
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539836
+        },
+        {
+          "cpu_percent": 1.2,
+          "executable": "code-6a49527b96",
+          "memory_percent": 0.0,
+          "pid": 2386161,
+          "rss_kib": 23204
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421892
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4684796
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037364
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:47:48+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.19 avg60=4.75 avg300=4.32 total=19302674172\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574647187\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396258",
+      "load_average": [
+        33.2080078125,
+        32.69970703125,
+        32.8837890625
+      ],
+      "memory_kib": {
+        "Buffers": 379312,
+        "Cached": 23927568,
+        "Dirty": 328,
+        "MemAvailable": 47494156,
+        "MemFree": 19600084,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "exp10q",
+      "top_cpu": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4668968
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 130504
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 539984
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4668968
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:47:59+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.39 avg60=4.68 avg300=4.31 total=19303231027\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574647771\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396293",
+      "load_average": [
+        33.17529296875,
+        32.71044921875,
+        32.8857421875
+      ],
+      "memory_kib": {
+        "Buffers": 379360,
+        "Cached": 23927808,
+        "Dirty": 664,
+        "MemAvailable": 47367916,
+        "MemFree": 19473540,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "exp2q",
+      "top_cpu": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4699404
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 131440
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 540132
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2901.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4699404
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:48:10+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.01 avg60=4.52 avg300=4.29 total=19303729967\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574648941\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396322",
+      "load_average": [
+        33.2041015625,
+        32.7412109375,
+        32.89404296875
+      ],
+      "memory_kib": {
+        "Buffers": 379424,
+        "Cached": 23928048,
+        "Dirty": 464,
+        "MemAvailable": 47550972,
+        "MemFree": 19656296,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "expm1q",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4665860
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 132744
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 540280
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421900
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4665860
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:48:21+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=3.99 avg60=4.43 avg300=4.28 total=19304243222\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574650608\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396344",
+      "load_average": [
+        33.17236328125,
+        32.75,
+        32.89599609375
+      ],
+      "memory_kib": {
+        "Buffers": 379488,
+        "Cached": 23928164,
+        "Dirty": 912,
+        "MemAvailable": 47480604,
+        "MemFree": 19585736,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "expq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4657352
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.1,
+          "pid": 7783,
+          "rss_kib": 127548
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 540436
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4657352
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:48:32+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.04 avg60=4.39 avg300=4.28 total=19304798372\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574651960\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396411",
+      "load_average": [
+        33.1455078125,
+        32.7587890625,
+        32.89794921875
+      ],
+      "memory_kib": {
+        "Buffers": 380104,
+        "Cached": 23930760,
+        "Dirty": 552,
+        "MemAvailable": 47552628,
+        "MemFree": 19655028,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "hypotq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4665440
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.1,
+          "pid": 7783,
+          "rss_kib": 128132
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 540580
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4665440
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:48:44+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=5.87 avg60=4.83 avg300=4.38 total=19305587711\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574653119\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396496",
+      "load_average": [
+        33.517578125,
+        32.85009765625,
+        32.9267578125
+      ],
+      "memory_kib": {
+        "Buffers": 380168,
+        "Cached": 23933068,
+        "Dirty": 252,
+        "MemAvailable": 47474060,
+        "MemFree": 19573608,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "log10q",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4653784
+        },
+        {
+          "cpu_percent": 100.0,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.2,
+          "pid": 2386841,
+          "rss_kib": 158480
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.1,
+          "pid": 7783,
+          "rss_kib": 129116
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 540880
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4653784
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:48:54+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=6.44 avg60=5.15 avg300=4.47 total=19306478960\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574654250\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396496",
+      "load_average": [
+        33.69287109375,
+        32.92333984375,
+        32.94970703125
+      ],
+      "memory_kib": {
+        "Buffers": 380232,
+        "Cached": 23933164,
+        "Dirty": 472,
+        "MemAvailable": 47430600,
+        "MemFree": 19530068,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "log1pq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4665988
+        },
+        {
+          "cpu_percent": 98.6,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.2,
+          "pid": 2386841,
+          "rss_kib": 158488
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 130020
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541040
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421896
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4665988
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:49:06+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=6.40 avg60=5.37 avg300=4.54 total=19307193803\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574655714\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396654",
+      "load_average": [
+        33.74072265625,
+        32.958984375,
+        32.96142578125
+      ],
+      "memory_kib": {
+        "Buffers": 380324,
+        "Cached": 23933288,
+        "Dirty": 196,
+        "MemAvailable": 47426220,
+        "MemFree": 19525344,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "log2q",
+      "top_cpu": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4674364
+        },
+        {
+          "cpu_percent": 101.0,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.2,
+          "pid": 2386841,
+          "rss_kib": 158496
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 130708
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541184
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421900
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4674364
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:49:16+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=6.68 avg60=5.63 avg300=4.64 total=19307970036\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574656562\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396693",
+      "load_average": [
+        33.861328125,
+        33.01025390625,
+        32.978515625
+      ],
+      "memory_kib": {
+        "Buffers": 380388,
+        "Cached": 23933564,
+        "Dirty": 52,
+        "MemAvailable": 47461552,
+        "MemFree": 19560316,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "logq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4661812
+        },
+        {
+          "cpu_percent": 101.0,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.2,
+          "pid": 2386841,
+          "rss_kib": 158504
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 130740
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541216
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421892
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4661812
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:49:27+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=7.45 avg60=6.03 avg300=4.77 total=19308896793\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574701391\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006400423",
+      "load_average": [
+        33.8828125,
+        33.04345703125,
+        32.990234375
+      ],
+      "memory_kib": {
+        "Buffers": 398332,
+        "Cached": 24161472,
+        "Dirty": 84228,
+        "MemAvailable": 47063432,
+        "MemFree": 18913524,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "powq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.4,
+          "pid": 2527927,
+          "rss_kib": 4862728
+        },
+        {
+          "cpu_percent": 82.4,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.4,
+          "pid": 2386841,
+          "rss_kib": 261552
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 133404
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541236
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421892
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.4,
+          "pid": 2527927,
+          "rss_kib": 4862728
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:49:38+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=7.37 avg60=6.21 avg300=4.85 total=19309685367\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574725615\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006401280",
+      "load_average": [
+        33.9013671875,
+        33.0751953125,
+        33.001953125
+      ],
+      "memory_kib": {
+        "Buffers": 400192,
+        "Cached": 24247396,
+        "Dirty": 166588,
+        "MemAvailable": 46901164,
+        "MemFree": 18661148,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "rsqrtq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4725024
+        },
+        {
+          "cpu_percent": 71.8,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.4,
+          "pid": 2386841,
+          "rss_kib": 280768
+        },
+        {
+          "cpu_percent": 12.5,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.2,
+          "pid": 2388088,
+          "rss_kib": 185796
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 133428
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541264
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4725024
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:49:49+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=7.08 avg60=6.26 avg300=4.89 total=19310184482\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574732717\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006401618",
+      "load_average": [
+        33.90966796875,
+        33.0908203125,
+        33.00732421875
+      ],
+      "memory_kib": {
+        "Buffers": 403680,
+        "Cached": 24247788,
+        "Dirty": 165592,
+        "MemAvailable": 46987040,
+        "MemFree": 18743012,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "sinq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4732232
+        },
+        {
+          "cpu_percent": 91.0,
+          "executable": "apt-check",
+          "memory_percent": 0.1,
+          "pid": 2388422,
+          "rss_kib": 124660
+        },
+        {
+          "cpu_percent": 66.1,
+          "executable": "unattended-upgr",
+          "memory_percent": 0.4,
+          "pid": 2386841,
+          "rss_kib": 280832
+        },
+        {
+          "cpu_percent": 51.0,
+          "executable": "npm exec ccstat",
+          "memory_percent": 0.1,
+          "pid": 2388386,
+          "rss_kib": 99048
+        },
+        {
+          "cpu_percent": 28.0,
+          "executable": "MainThread",
+          "memory_percent": 0.1,
+          "pid": 2388426,
+          "rss_kib": 99552
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2902.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.2,
+          "pid": 2527927,
+          "rss_kib": 4732232
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:49:55+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=5.65 avg60=6.08 avg300=4.90 total=19310757433\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574733842\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006401659",
+      "load_average": [
+        33.84326171875,
+        33.10400390625,
+        33.01220703125
+      ],
+      "memory_kib": {
+        "Buffers": 403800,
+        "Cached": 24076576,
+        "Dirty": 82448,
+        "MemAvailable": 47535420,
+        "MemFree": 19464740,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "sqrtq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4643024
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 133520
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541336
+        },
+        {
+          "cpu_percent": 0.9,
+          "executable": "claude",
+          "memory_percent": 0.6,
+          "pid": 3327270,
+          "rss_kib": 421900
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "kcompactd0",
+          "memory_percent": 0.0,
+          "pid": 218,
+          "rss_kib": 0
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.1,
+          "pid": 2527927,
+          "rss_kib": 4643024
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:50:05+00:00"
+    },
+    {
+      "cpu_pressure": "some avg10=4.49 avg60=5.76 avg300=4.87 total=19311190797\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574734555\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006402038",
+      "load_average": [
+        33.6328125,
+        33.08349609375,
+        33.005859375
+      ],
+      "memory_kib": {
+        "Buffers": 403864,
+        "Cached": 24076692,
+        "Dirty": 396,
+        "MemAvailable": 46995800,
+        "MemFree": 18924932,
+        "MemTotal": 64992384,
+        "SwapFree": 0,
+        "SwapTotal": 0
+      },
+      "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637720\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784441",
+      "phase": "tanq",
+      "top_cpu": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.3,
+          "pid": 2527927,
+          "rss_kib": 4779604
+        },
+        {
+          "cpu_percent": 52.0,
+          "executable": "npm exec ccstat",
+          "memory_percent": 0.1,
+          "pid": 2388641,
+          "rss_kib": 98784
+        },
+        {
+          "cpu_percent": 27.0,
+          "executable": "MainThread",
+          "memory_percent": 0.1,
+          "pid": 2388653,
+          "rss_kib": 107236
+        },
+        {
+          "cpu_percent": 2.1,
+          "executable": "k3s-agent",
+          "memory_percent": 0.2,
+          "pid": 7783,
+          "rss_kib": 131472
+        },
+        {
+          "cpu_percent": 1.3,
+          "executable": "2.1.259",
+          "memory_percent": 0.8,
+          "pid": 951510,
+          "rss_kib": 541340
+        }
+      ],
+      "top_memory": [
+        {
+          "cpu_percent": 2903.0,
+          "executable": "dump-teacher",
+          "memory_percent": 7.3,
+          "pid": 2527927,
+          "rss_kib": 4779604
+        },
+        {
+          "cpu_percent": 0.2,
+          "executable": "node",
+          "memory_percent": 1.6,
+          "pid": 1614179,
+          "rss_kib": 1084840
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "node",
+          "memory_percent": 1.5,
+          "pid": 1613529,
+          "rss_kib": 1037612
+        },
+        {
+          "cpu_percent": 0.1,
+          "executable": "node",
+          "memory_percent": 1.1,
+          "pid": 1628740,
+          "rss_kib": 776192
+        },
+        {
+          "cpu_percent": 0.7,
+          "executable": "clangd.main",
+          "memory_percent": 1.1,
+          "pid": 1628994,
+          "rss_kib": 737800
+        }
+      ],
+      "utc": "2026-09-04T22:50:15+00:00"
+    }
+  ],
+  "machine_start": {
+    "cpu_pressure": "some avg10=4.15 avg60=4.09 avg300=3.98 total=19298337163\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+    "io_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=5574639617\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4006396145",
+    "load_average": [
+      32.87451171875,
+      32.52099609375,
+      32.84326171875
+    ],
+    "memory_kib": {
+      "Buffers": 378688,
+      "Cached": 23925412,
+      "Dirty": 572,
+      "MemAvailable": 47476236,
+      "MemFree": 19584988,
+      "MemTotal": 64992384,
+      "SwapFree": 0,
+      "SwapTotal": 0
+    },
+    "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=492637719\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=445784440",
+    "top_cpu": [
+      {
+        "cpu_percent": 2901.0,
+        "executable": "dump-teacher",
+        "memory_percent": 7.1,
+        "pid": 2527927,
+        "rss_kib": 4659036
+      },
+      {
+        "cpu_percent": 2.1,
+        "executable": "k3s-agent",
+        "memory_percent": 0.2,
+        "pid": 7783,
+        "rss_kib": 131568
+      },
+      {
+        "cpu_percent": 1.3,
+        "executable": "2.1.259",
+        "memory_percent": 0.8,
+        "pid": 951510,
+        "rss_kib": 538952
+      },
+      {
+        "cpu_percent": 0.9,
+        "executable": "claude",
+        "memory_percent": 0.6,
+        "pid": 3327270,
+        "rss_kib": 421892
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "kcompactd0",
+        "memory_percent": 0.0,
+        "pid": 218,
+        "rss_kib": 0
+      }
+    ],
+    "top_memory": [
+      {
+        "cpu_percent": 2901.0,
+        "executable": "dump-teacher",
+        "memory_percent": 7.1,
+        "pid": 2527927,
+        "rss_kib": 4659036
+      },
+      {
+        "cpu_percent": 0.2,
+        "executable": "node",
+        "memory_percent": 1.6,
+        "pid": 1614179,
+        "rss_kib": 1084840
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "node",
+        "memory_percent": 1.5,
+        "pid": 1613529,
+        "rss_kib": 1037136
+      },
+      {
+        "cpu_percent": 0.1,
+        "executable": "node",
+        "memory_percent": 1.1,
+        "pid": 1628740,
+        "rss_kib": 776192
+      },
+      {
+        "cpu_percent": 0.7,
+        "executable": "clangd.main",
+        "memory_percent": 1.1,
+        "pid": 1628994,
+        "rss_kib": 737800
+      }
+    ],
+    "utc": "2026-09-04T22:46:50+00:00"
+  },
+  "measurement_start_utc": "2026-09-04T22:46:55+00:00",
+  "measurements": {
+    "core_math::acosq": {
+      "benchmark": {
+        "directory_name": "core_math__acosq",
+        "full_id": "core_math::acosq",
+        "function_id": null,
+        "group_id": "core_math::acosq",
+        "throughput": null,
+        "title": "core_math::acosq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 82.19547119880812,
+            "upper_bound": 82.88193129414391
+          },
+          "point_estimate": 82.5923700180418,
+          "standard_error": 0.1777038599964052
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 82.60422709964489,
+            "upper_bound": 82.96291997559373
+          },
+          "point_estimate": 82.84587837724061,
+          "standard_error": 0.08264586530087399
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__acosq/new",
+      "sample_count": 100,
+      "target": "acosq"
+    },
+    "core_math::asinq": {
+      "benchmark": {
+        "directory_name": "core_math__asinq",
+        "full_id": "core_math::asinq",
+        "function_id": null,
+        "group_id": "core_math::asinq",
+        "throughput": null,
+        "title": "core_math::asinq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 71.0489899098044,
+            "upper_bound": 71.2985771862004
+          },
+          "point_estimate": 71.171565220232,
+          "standard_error": 0.06382838972478357
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 70.9537839758394,
+            "upper_bound": 71.2259640692897
+          },
+          "point_estimate": 71.108083174099,
+          "standard_error": 0.07445368599688243
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__asinq/new",
+      "sample_count": 100,
+      "target": "asinq"
+    },
+    "core_math::atan2q": {
+      "benchmark": {
+        "directory_name": "core_math__atan2q",
+        "full_id": "core_math::atan2q",
+        "function_id": null,
+        "group_id": "core_math::atan2q",
+        "throughput": null,
+        "title": "core_math::atan2q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 97.0942666291093,
+            "upper_bound": 97.44942500276245
+          },
+          "point_estimate": 97.27222413409005,
+          "standard_error": 0.0916654287617412
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 97.0286088943765,
+            "upper_bound": 97.47622561075586
+          },
+          "point_estimate": 97.29972660235968,
+          "standard_error": 0.12514760659396806
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__atan2q/new",
+      "sample_count": 100,
+      "target": "atan2q"
+    },
+    "core_math::atanq": {
+      "benchmark": {
+        "directory_name": "core_math__atanq",
+        "full_id": "core_math::atanq",
+        "function_id": null,
+        "group_id": "core_math::atanq",
+        "throughput": null,
+        "title": "core_math::atanq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 68.5009607547996,
+            "upper_bound": 68.66290184589153
+          },
+          "point_estimate": 68.5834371711146,
+          "standard_error": 0.0413869728226004
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 68.4986005856011,
+            "upper_bound": 68.70255267539328
+          },
+          "point_estimate": 68.6264923397068,
+          "standard_error": 0.05187916884810818
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__atanq/new",
+      "sample_count": 100,
+      "target": "atanq"
+    },
+    "core_math::cbrtq": {
+      "benchmark": {
+        "directory_name": "core_math__cbrtq",
+        "full_id": "core_math::cbrtq",
+        "function_id": null,
+        "group_id": "core_math::cbrtq",
+        "throughput": null,
+        "title": "core_math::cbrtq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 53.731129155949716,
+            "upper_bound": 54.95335483865113
+          },
+          "point_estimate": 54.39942285064779,
+          "standard_error": 0.3132807114950697
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 54.945924657816114,
+            "upper_bound": 55.165638524250525
+          },
+          "point_estimate": 55.050341328345354,
+          "standard_error": 0.05573193326119747
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__cbrtq/new",
+      "sample_count": 100,
+      "target": "cbrtq"
+    },
+    "core_math::exp10q": {
+      "benchmark": {
+        "directory_name": "core_math__exp10q",
+        "full_id": "core_math::exp10q",
+        "function_id": null,
+        "group_id": "core_math::exp10q",
+        "throughput": null,
+        "title": "core_math::exp10q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 51.78812844502465,
+            "upper_bound": 52.347604060302
+          },
+          "point_estimate": 52.12396883078986,
+          "standard_error": 0.1481125740483809
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.199743597297626,
+            "upper_bound": 52.39149755542968
+          },
+          "point_estimate": 52.31818140369115,
+          "standard_error": 0.05023370105693606
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__exp10q/new",
+      "sample_count": 100,
+      "target": "exp10q"
+    },
+    "core_math::exp2q": {
+      "benchmark": {
+        "directory_name": "core_math__exp2q",
+        "full_id": "core_math::exp2q",
+        "function_id": null,
+        "group_id": "core_math::exp2q",
+        "throughput": null,
+        "title": "core_math::exp2q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 50.54526685720313,
+            "upper_bound": 50.770400097614335
+          },
+          "point_estimate": 50.66682903186669,
+          "standard_error": 0.05773094098100848
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 50.61786823781928,
+            "upper_bound": 50.78044819376089
+          },
+          "point_estimate": 50.71435406004065,
+          "standard_error": 0.0444434948859234
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__exp2q/new",
+      "sample_count": 100,
+      "target": "exp2q"
+    },
+    "core_math::expm1q": {
+      "benchmark": {
+        "directory_name": "core_math__expm1q",
+        "full_id": "core_math::expm1q",
+        "function_id": null,
+        "group_id": "core_math::expm1q",
+        "throughput": null,
+        "title": "core_math::expm1q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 55.44809600001745,
+            "upper_bound": 55.62055653702029
+          },
+          "point_estimate": 55.53381668188978,
+          "standard_error": 0.04423138220942745
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 55.4106162464986,
+            "upper_bound": 55.55837618126641
+          },
+          "point_estimate": 55.481851427439665,
+          "standard_error": 0.038421727368227875
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__expm1q/new",
+      "sample_count": 100,
+      "target": "expm1q"
+    },
+    "core_math::expq": {
+      "benchmark": {
+        "directory_name": "core_math__expq",
+        "full_id": "core_math::expq",
+        "function_id": null,
+        "group_id": "core_math::expq",
+        "throughput": null,
+        "title": "core_math::expq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 50.452540308786666,
+            "upper_bound": 51.48545436595686
+          },
+          "point_estimate": 51.024211482832825,
+          "standard_error": 0.26703675248213793
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 51.365816573363745,
+            "upper_bound": 51.66644570586208
+          },
+          "point_estimate": 51.55732603159717,
+          "standard_error": 0.0779022343353268
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__expq/new",
+      "sample_count": 100,
+      "target": "expq"
+    },
+    "core_math::hypotq": {
+      "benchmark": {
+        "directory_name": "core_math__hypotq",
+        "full_id": "core_math::hypotq",
+        "function_id": null,
+        "group_id": "core_math::hypotq",
+        "throughput": null,
+        "title": "core_math::hypotq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 74.9392876255633,
+            "upper_bound": 75.13710799831702
+          },
+          "point_estimate": 75.03775030738811,
+          "standard_error": 0.050629257627927554
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 74.86020061728395,
+            "upper_bound": 75.21446256038648
+          },
+          "point_estimate": 75.01158405508738,
+          "standard_error": 0.08732536349445752
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__hypotq/new",
+      "sample_count": 100,
+      "target": "hypotq"
+    },
+    "core_math::logq": {
+      "benchmark": {
+        "directory_name": "core_math__logq",
+        "full_id": "core_math::logq",
+        "function_id": null,
+        "group_id": "core_math::logq",
+        "throughput": null,
+        "title": "core_math::logq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 47.02079106934961,
+            "upper_bound": 48.65003006710177
+          },
+          "point_estimate": 47.851270396003656,
+          "standard_error": 0.41389404578220346
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 49.85810564129678,
+            "upper_bound": 50.36726528132587
+          },
+          "point_estimate": 50.15375204229477,
+          "standard_error": 0.12256778646267608
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__logq/new",
+      "sample_count": 100,
+      "target": "logq"
+    },
+    "core_math::rsqrtq": {
+      "benchmark": {
+        "directory_name": "core_math__rsqrtq",
+        "full_id": "core_math::rsqrtq",
+        "function_id": null,
+        "group_id": "core_math::rsqrtq",
+        "throughput": null,
+        "title": "core_math::rsqrtq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 36.36075700789062,
+            "upper_bound": 36.51197736746819
+          },
+          "point_estimate": 36.447074755930934,
+          "standard_error": 0.03856463346297882
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 36.4383782928306,
+            "upper_bound": 36.536074909408114
+          },
+          "point_estimate": 36.48798235235557,
+          "standard_error": 0.02562568456138657
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__rsqrtq/new",
+      "sample_count": 100,
+      "target": "rsqrtq"
+    },
+    "core_math::sqrtq": {
+      "benchmark": {
+        "directory_name": "core_math__sqrtq",
+        "full_id": "core_math::sqrtq",
+        "function_id": null,
+        "group_id": "core_math::sqrtq",
+        "throughput": null,
+        "title": "core_math::sqrtq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 37.321891684989694,
+            "upper_bound": 37.41536804674523
+          },
+          "point_estimate": 37.3684011091373,
+          "standard_error": 0.02394592772438841
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 37.326202144023924,
+            "upper_bound": 37.414717459629486
+          },
+          "point_estimate": 37.372520823510925,
+          "standard_error": 0.023359661807752303
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/core_math__sqrtq/new",
+      "sample_count": 100,
+      "target": "sqrtq"
+    },
+    "f128::acos": {
+      "benchmark": {
+        "directory_name": "f128__acos",
+        "full_id": "f128::acos",
+        "function_id": null,
+        "group_id": "f128::acos",
+        "throughput": null,
+        "title": "f128::acos",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 925.946410299711,
+            "upper_bound": 931.8289050597367
+          },
+          "point_estimate": 929.4078248484977,
+          "standard_error": 1.533806816162584
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 929.9968984233652,
+            "upper_bound": 931.7695452346395
+          },
+          "point_estimate": 930.7742198838897,
+          "standard_error": 0.4482266466012177
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__acos/new",
+      "sample_count": 100,
+      "target": "acosq"
+    },
+    "f128::asin": {
+      "benchmark": {
+        "directory_name": "f128__asin",
+        "full_id": "f128::asin",
+        "function_id": null,
+        "group_id": "f128::asin",
+        "throughput": null,
+        "title": "f128::asin",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 886.9225922008618,
+            "upper_bound": 888.9408973648328
+          },
+          "point_estimate": 887.9244817317699,
+          "standard_error": 0.5170872630096344
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 886.4625934230194,
+            "upper_bound": 889.967997953275
+          },
+          "point_estimate": 888.4420529225297,
+          "standard_error": 0.8771025459013804
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__asin/new",
+      "sample_count": 100,
+      "target": "asinq"
+    },
+    "f128::atan": {
+      "benchmark": {
+        "directory_name": "f128__atan",
+        "full_id": "f128::atan",
+        "function_id": null,
+        "group_id": "f128::atan",
+        "throughput": null,
+        "title": "f128::atan",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 598.9881217288834,
+            "upper_bound": 606.7076136420196
+          },
+          "point_estimate": 603.2472865557503,
+          "standard_error": 2.0029514362959664
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 606.6135375191424,
+            "upper_bound": 609.0153868591847
+          },
+          "point_estimate": 607.921185356139,
+          "standard_error": 0.5507034826439234
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__atan/new",
+      "sample_count": 100,
+      "target": "atanq"
+    },
+    "f128::atan2": {
+      "benchmark": {
+        "directory_name": "f128__atan2",
+        "full_id": "f128::atan2",
+        "function_id": null,
+        "group_id": "f128::atan2",
+        "throughput": null,
+        "title": "f128::atan2",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 701.4147068590221,
+            "upper_bound": 702.7116231256358
+          },
+          "point_estimate": 702.0502028996697,
+          "standard_error": 0.3324169328414812
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 700.893826282735,
+            "upper_bound": 702.7879599512407
+          },
+          "point_estimate": 701.9362164873586,
+          "standard_error": 0.5617780400693405
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__atan2/new",
+      "sample_count": 100,
+      "target": "atan2q"
+    },
+    "f128::cbrt": {
+      "benchmark": {
+        "directory_name": "f128__cbrt",
+        "full_id": "f128::cbrt",
+        "function_id": null,
+        "group_id": "f128::cbrt",
+        "throughput": null,
+        "title": "f128::cbrt",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 673.4750720123508,
+            "upper_bound": 675.0613159213157
+          },
+          "point_estimate": 674.2557261839314,
+          "standard_error": 0.40389520686963204
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 673.7796332819723,
+            "upper_bound": 674.9891339679591
+          },
+          "point_estimate": 674.292863020135,
+          "standard_error": 0.26629368213867055
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__cbrt/new",
+      "sample_count": 100,
+      "target": "cbrtq"
+    },
+    "f128::cos": {
+      "benchmark": {
+        "directory_name": "f128__cos",
+        "full_id": "f128::cos",
+        "function_id": null,
+        "group_id": "f128::cos",
+        "throughput": null,
+        "title": "f128::cos",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 651.9976590370029,
+            "upper_bound": 653.4379103334292
+          },
+          "point_estimate": 652.7288219986926,
+          "standard_error": 0.3680761405764201
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 651.7510828638146,
+            "upper_bound": 653.4503020318506
+          },
+          "point_estimate": 652.5438718423943,
+          "standard_error": 0.48930156106729417
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__cos/new",
+      "sample_count": 100,
+      "target": "cosq"
+    },
+    "f128::exp": {
+      "benchmark": {
+        "directory_name": "f128__exp",
+        "full_id": "f128::exp",
+        "function_id": null,
+        "group_id": "f128::exp",
+        "throughput": null,
+        "title": "f128::exp",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 805.9943676956219,
+            "upper_bound": 807.4535599347075
+          },
+          "point_estimate": 806.7077738474186,
+          "standard_error": 0.37061344394523316
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 805.4349218817497,
+            "upper_bound": 807.890687361419
+          },
+          "point_estimate": 806.4603564572275,
+          "standard_error": 0.6263498790577745
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__exp/new",
+      "sample_count": 100,
+      "target": "expq"
+    },
+    "f128::exp2": {
+      "benchmark": {
+        "directory_name": "f128__exp2",
+        "full_id": "f128::exp2",
+        "function_id": null,
+        "group_id": "f128::exp2",
+        "throughput": null,
+        "title": "f128::exp2",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 864.7086996075618,
+            "upper_bound": 866.2519718961122
+          },
+          "point_estimate": 865.4780309985181,
+          "standard_error": 0.39402129722157725
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 864.6011626552795,
+            "upper_bound": 866.4638099219621
+          },
+          "point_estimate": 865.8330121703855,
+          "standard_error": 0.49445724956898857
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__exp2/new",
+      "sample_count": 100,
+      "target": "exp2q"
+    },
+    "f128::exp_m1": {
+      "benchmark": {
+        "directory_name": "f128__exp_m1",
+        "full_id": "f128::exp_m1",
+        "function_id": null,
+        "group_id": "f128::exp_m1",
+        "throughput": null,
+        "title": "f128::exp_m1",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 993.7598962639522,
+            "upper_bound": 996.4394917467287
+          },
+          "point_estimate": 995.1031247315357,
+          "standard_error": 0.6855712465309527
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 994.469507101086,
+            "upper_bound": 997.0736183894079
+          },
+          "point_estimate": 995.7317191788995,
+          "standard_error": 0.72073931819227
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__exp_m1/new",
+      "sample_count": 100,
+      "target": "expm1q"
+    },
+    "f128::hypot": {
+      "benchmark": {
+        "directory_name": "f128__hypot",
+        "full_id": "f128::hypot",
+        "function_id": null,
+        "group_id": "f128::hypot",
+        "throughput": null,
+        "title": "f128::hypot",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 879.6977527566668,
+            "upper_bound": 882.2348309013948
+          },
+          "point_estimate": 880.8931502375889,
+          "standard_error": 0.6457858063233345
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 879.4405519600238,
+            "upper_bound": 881.628683263639
+          },
+          "point_estimate": 880.4012769756249,
+          "standard_error": 0.550390117273125
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__hypot/new",
+      "sample_count": 100,
+      "target": "hypotq"
+    },
+    "f128::ln": {
+      "benchmark": {
+        "directory_name": "f128__ln",
+        "full_id": "f128::ln",
+        "function_id": null,
+        "group_id": "f128::ln",
+        "throughput": null,
+        "title": "f128::ln",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 851.2359037275244,
+            "upper_bound": 859.9518453505481
+          },
+          "point_estimate": 856.4444093140338,
+          "standard_error": 2.2710481978906865
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 858.6076659038902,
+            "upper_bound": 860.7947342995169
+          },
+          "point_estimate": 859.5170923913043,
+          "standard_error": 0.5246750958143105
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__ln/new",
+      "sample_count": 100,
+      "target": "logq"
+    },
+    "f128::ln_1p": {
+      "benchmark": {
+        "directory_name": "f128__ln_1p",
+        "full_id": "f128::ln_1p",
+        "function_id": null,
+        "group_id": "f128::ln_1p",
+        "throughput": null,
+        "title": "f128::ln_1p",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1219.0101937920062,
+            "upper_bound": 1222.3409715266296
+          },
+          "point_estimate": 1220.6729984399133,
+          "standard_error": 0.84912148753527
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1219.3993055555557,
+            "upper_bound": 1222.6158940724913
+          },
+          "point_estimate": 1221.475237148038,
+          "standard_error": 0.8809688540927793
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__ln_1p/new",
+      "sample_count": 100,
+      "target": "log1pq"
+    },
+    "f128::log10": {
+      "benchmark": {
+        "directory_name": "f128__log10",
+        "full_id": "f128::log10",
+        "function_id": null,
+        "group_id": "f128::log10",
+        "throughput": null,
+        "title": "f128::log10",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 877.768013384607,
+            "upper_bound": 879.5875390508603
+          },
+          "point_estimate": 878.6559069953066,
+          "standard_error": 0.46822936027213563
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 876.9163627093395,
+            "upper_bound": 879.3167777048338
+          },
+          "point_estimate": 877.9444771554271,
+          "standard_error": 0.6870287924237172
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__log10/new",
+      "sample_count": 100,
+      "target": "log10q"
+    },
+    "f128::log2": {
+      "benchmark": {
+        "directory_name": "f128__log2",
+        "full_id": "f128::log2",
+        "function_id": null,
+        "group_id": "f128::log2",
+        "throughput": null,
+        "title": "f128::log2",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 760.4439492462444,
+            "upper_bound": 777.3590077763529
+          },
+          "point_estimate": 769.5275034576866,
+          "standard_error": 4.349009584369593
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 781.1084199617517,
+            "upper_bound": 783.0875089477452
+          },
+          "point_estimate": 782.0746336969311,
+          "standard_error": 0.5280767168306856
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__log2/new",
+      "sample_count": 100,
+      "target": "log2q"
+    },
+    "f128::powf": {
+      "benchmark": {
+        "directory_name": "f128__powf",
+        "full_id": "f128::powf",
+        "function_id": null,
+        "group_id": "f128::powf",
+        "throughput": null,
+        "title": "f128::powf",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 2271.033431905636,
+            "upper_bound": 2293.945569600943
+          },
+          "point_estimate": 2283.817508273938,
+          "standard_error": 5.8795725034758615
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 2288.8193641618495,
+            "upper_bound": 2295.888274153592
+          },
+          "point_estimate": 2292.6603417944207,
+          "standard_error": 1.8085696453068
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__powf/new",
+      "sample_count": 100,
+      "target": "powq"
+    },
+    "f128::sin": {
+      "benchmark": {
+        "directory_name": "f128__sin",
+        "full_id": "f128::sin",
+        "function_id": null,
+        "group_id": "f128::sin",
+        "throughput": null,
+        "title": "f128::sin",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 646.1959981905876,
+            "upper_bound": 647.9752707644566
+          },
+          "point_estimate": 647.1110476646102,
+          "standard_error": 0.4545499599367971
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 646.2991063212958,
+            "upper_bound": 648.7550969355848
+          },
+          "point_estimate": 647.7565218126193,
+          "standard_error": 0.6800821559323037
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__sin/new",
+      "sample_count": 100,
+      "target": "sinq"
+    },
+    "f128::sqrt": {
+      "benchmark": {
+        "directory_name": "f128__sqrt",
+        "full_id": "f128::sqrt",
+        "function_id": null,
+        "group_id": "f128::sqrt",
+        "throughput": null,
+        "title": "f128::sqrt",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 65.35327854702054,
+            "upper_bound": 65.53575118322965
+          },
+          "point_estimate": 65.44356331313675,
+          "standard_error": 0.04673455094928482
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 65.32657185089047,
+            "upper_bound": 65.52432283029299
+          },
+          "point_estimate": 65.40797874350943,
+          "standard_error": 0.04526789272645991
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__sqrt/new",
+      "sample_count": 100,
+      "target": "sqrtq"
+    },
+    "f128::tan": {
+      "benchmark": {
+        "directory_name": "f128__tan",
+        "full_id": "f128::tan",
+        "function_id": null,
+        "group_id": "f128::tan",
+        "throughput": null,
+        "title": "f128::tan",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 790.6618094947399,
+            "upper_bound": 792.5494000433371
+          },
+          "point_estimate": 791.5827333482407,
+          "standard_error": 0.485593658460339
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 790.2243555065054,
+            "upper_bound": 792.5295050923794
+          },
+          "point_estimate": 790.9683814189802,
+          "standard_error": 0.5143595349018197
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/f128__tan/new",
+      "sample_count": 100,
+      "target": "tanq"
+    },
+    "glibc::exp10f128": {
+      "benchmark": {
+        "directory_name": "glibc__exp10f128",
+        "full_id": "glibc::exp10f128",
+        "function_id": null,
+        "group_id": "glibc::exp10f128",
+        "throughput": null,
+        "title": "glibc::exp10f128",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1645.4300276589033,
+            "upper_bound": 1649.4322263812378
+          },
+          "point_estimate": 1647.5066203366382,
+          "standard_error": 1.0236549112612243
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1644.937154588798,
+            "upper_bound": 1649.0212204982195
+          },
+          "point_estimate": 1646.558877449829,
+          "standard_error": 1.275442625498871
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/glibc__exp10f128/new",
+      "sample_count": 100,
+      "target": "exp10q"
+    },
+    "metallic::acosq": {
+      "benchmark": {
+        "directory_name": "metallic__acosq",
+        "full_id": "metallic::acosq",
+        "function_id": null,
+        "group_id": "metallic::acosq",
+        "throughput": null,
+        "title": "metallic::acosq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 78.14029688519447,
+            "upper_bound": 78.57431215842989
+          },
+          "point_estimate": 78.36073979389931,
+          "standard_error": 0.11054673003432042
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 78.24020773067704,
+            "upper_bound": 78.66628197579325
+          },
+          "point_estimate": 78.43998968661643,
+          "standard_error": 0.13907719167922408
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__acosq/new",
+      "sample_count": 100,
+      "target": "acosq"
+    },
+    "metallic::asinq": {
+      "benchmark": {
+        "directory_name": "metallic__asinq",
+        "full_id": "metallic::asinq",
+        "function_id": null,
+        "group_id": "metallic::asinq",
+        "throughput": null,
+        "title": "metallic::asinq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 68.91686352482786,
+            "upper_bound": 71.23981250451725
+          },
+          "point_estimate": 70.16999479977966,
+          "standard_error": 0.5987097453433677
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 71.67762013824303,
+            "upper_bound": 72.06469117736724
+          },
+          "point_estimate": 71.8159674299239,
+          "standard_error": 0.09393120134917708
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__asinq/new",
+      "sample_count": 100,
+      "target": "asinq"
+    },
+    "metallic::atan2q": {
+      "benchmark": {
+        "directory_name": "metallic__atan2q",
+        "full_id": "metallic::atan2q",
+        "function_id": null,
+        "group_id": "metallic::atan2q",
+        "throughput": null,
+        "title": "metallic::atan2q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 99.01426569508489,
+            "upper_bound": 99.33275331994116
+          },
+          "point_estimate": 99.17242814993169,
+          "standard_error": 0.0812519866852064
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 98.9662173851022,
+            "upper_bound": 99.33709160995042
+          },
+          "point_estimate": 99.15427485873582,
+          "standard_error": 0.08376733675138304
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__atan2q/new",
+      "sample_count": 100,
+      "target": "atan2q"
+    },
+    "metallic::atanq": {
+      "benchmark": {
+        "directory_name": "metallic__atanq",
+        "full_id": "metallic::atanq",
+        "function_id": null,
+        "group_id": "metallic::atanq",
+        "throughput": null,
+        "title": "metallic::atanq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 67.51334406540298,
+            "upper_bound": 68.3096568489994
+          },
+          "point_estimate": 67.98964184278856,
+          "standard_error": 0.2113347428712255
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 68.1885299782281,
+            "upper_bound": 68.40023378301245
+          },
+          "point_estimate": 68.2722523085719,
+          "standard_error": 0.05360304985394921
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__atanq/new",
+      "sample_count": 100,
+      "target": "atanq"
+    },
+    "metallic::cbrtq": {
+      "benchmark": {
+        "directory_name": "metallic__cbrtq",
+        "full_id": "metallic::cbrtq",
+        "function_id": null,
+        "group_id": "metallic::cbrtq",
+        "throughput": null,
+        "title": "metallic::cbrtq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.71272860991522,
+            "upper_bound": 52.90178999884694
+          },
+          "point_estimate": 52.81422279543189,
+          "standard_error": 0.048336428725672106
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.80130224707473,
+            "upper_bound": 52.9455362346159
+          },
+          "point_estimate": 52.864078563835896,
+          "standard_error": 0.036919067653988565
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__cbrtq/new",
+      "sample_count": 100,
+      "target": "cbrtq"
+    },
+    "metallic::cosq": {
+      "benchmark": {
+        "directory_name": "metallic__cosq",
+        "full_id": "metallic::cosq",
+        "function_id": null,
+        "group_id": "metallic::cosq",
+        "throughput": null,
+        "title": "metallic::cosq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 76.28203108841589,
+            "upper_bound": 77.49868146426844
+          },
+          "point_estimate": 76.97501830778897,
+          "standard_error": 0.31639450860279933
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 77.20363070722783,
+            "upper_bound": 77.54105222223359
+          },
+          "point_estimate": 77.32034780876683,
+          "standard_error": 0.0915835750830593
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__cosq/new",
+      "sample_count": 100,
+      "target": "cosq"
+    },
+    "metallic::exp10q": {
+      "benchmark": {
+        "directory_name": "metallic__exp10q",
+        "full_id": "metallic::exp10q",
+        "function_id": null,
+        "group_id": "metallic::exp10q",
+        "throughput": null,
+        "title": "metallic::exp10q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.14685552425046,
+            "upper_bound": 52.2727276368609
+          },
+          "point_estimate": 52.209003607702726,
+          "standard_error": 0.03199907535679072
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.143907541511226,
+            "upper_bound": 52.29917725233698
+          },
+          "point_estimate": 52.21275264892215,
+          "standard_error": 0.0463757463830435
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__exp10q/new",
+      "sample_count": 100,
+      "target": "exp10q"
+    },
+    "metallic::exp2q": {
+      "benchmark": {
+        "directory_name": "metallic__exp2q",
+        "full_id": "metallic::exp2q",
+        "function_id": null,
+        "group_id": "metallic::exp2q",
+        "throughput": null,
+        "title": "metallic::exp2q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.55209308598955,
+            "upper_bound": 52.70029313493926
+          },
+          "point_estimate": 52.62603064497145,
+          "standard_error": 0.03758039887842314
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.56638355247167,
+            "upper_bound": 52.68413352839473
+          },
+          "point_estimate": 52.63042867160769,
+          "standard_error": 0.0312228839383043
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__exp2q/new",
+      "sample_count": 100,
+      "target": "exp2q"
+    },
+    "metallic::expm1q": {
+      "benchmark": {
+        "directory_name": "metallic__expm1q",
+        "full_id": "metallic::expm1q",
+        "function_id": null,
+        "group_id": "metallic::expm1q",
+        "throughput": null,
+        "title": "metallic::expm1q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.058048132588304,
+            "upper_bound": 52.23677046416396
+          },
+          "point_estimate": 52.151030633307364,
+          "standard_error": 0.045661068675306164
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 52.15053838951311,
+            "upper_bound": 52.311663991439275
+          },
+          "point_estimate": 52.242149348198474,
+          "standard_error": 0.043019567946357695
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__expm1q/new",
+      "sample_count": 100,
+      "target": "expm1q"
+    },
+    "metallic::expq": {
+      "benchmark": {
+        "directory_name": "metallic__expq",
+        "full_id": "metallic::expq",
+        "function_id": null,
+        "group_id": "metallic::expq",
+        "throughput": null,
+        "title": "metallic::expq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 51.101515650533614,
+            "upper_bound": 51.967131132559906
+          },
+          "point_estimate": 51.58195625748018,
+          "standard_error": 0.22253512307758266
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 51.826566825182766,
+            "upper_bound": 52.10944342303193
+          },
+          "point_estimate": 51.98886979097472,
+          "standard_error": 0.07513143115228327
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__expq/new",
+      "sample_count": 100,
+      "target": "expq"
+    },
+    "metallic::hypotq": {
+      "benchmark": {
+        "directory_name": "metallic__hypotq",
+        "full_id": "metallic::hypotq",
+        "function_id": null,
+        "group_id": "metallic::hypotq",
+        "throughput": null,
+        "title": "metallic::hypotq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 74.23925625366498,
+            "upper_bound": 74.46507468939939
+          },
+          "point_estimate": 74.35054430693509,
+          "standard_error": 0.057057144078576
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 74.22579483822705,
+            "upper_bound": 74.50269152165048
+          },
+          "point_estimate": 74.3591683696447,
+          "standard_error": 0.06298648042199559
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__hypotq/new",
+      "sample_count": 100,
+      "target": "hypotq"
+    },
+    "metallic::log10q": {
+      "benchmark": {
+        "directory_name": "metallic__log10q",
+        "full_id": "metallic::log10q",
+        "function_id": null,
+        "group_id": "metallic::log10q",
+        "throughput": null,
+        "title": "metallic::log10q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 54.155467593846794,
+            "upper_bound": 54.338675014605215
+          },
+          "point_estimate": 54.245610227032486,
+          "standard_error": 0.04688305250863344
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 54.058488375645375,
+            "upper_bound": 54.293763174777744
+          },
+          "point_estimate": 54.18152552469984,
+          "standard_error": 0.05704216132305602
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__log10q/new",
+      "sample_count": 100,
+      "target": "log10q"
+    },
+    "metallic::log1pq": {
+      "benchmark": {
+        "directory_name": "metallic__log1pq",
+        "full_id": "metallic::log1pq",
+        "function_id": null,
+        "group_id": "metallic::log1pq",
+        "throughput": null,
+        "title": "metallic::log1pq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59.492676600836376,
+            "upper_bound": 59.656219654746536
+          },
+          "point_estimate": 59.57523957223261,
+          "standard_error": 0.042107016101806054
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59.460488809139925,
+            "upper_bound": 59.63246127592045
+          },
+          "point_estimate": 59.541953229534926,
+          "standard_error": 0.04621212707443257
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__log1pq/new",
+      "sample_count": 100,
+      "target": "log1pq"
+    },
+    "metallic::log2q": {
+      "benchmark": {
+        "directory_name": "metallic__log2q",
+        "full_id": "metallic::log2q",
+        "function_id": null,
+        "group_id": "metallic::log2q",
+        "throughput": null,
+        "title": "metallic::log2q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 49.16203473746617,
+            "upper_bound": 50.07277396283518
+          },
+          "point_estimate": 49.6710868886747,
+          "standard_error": 0.23743307937259922
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 49.822974796417185,
+            "upper_bound": 50.1278184329798
+          },
+          "point_estimate": 50.016515201043035,
+          "standard_error": 0.08000276331881817
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__log2q/new",
+      "sample_count": 100,
+      "target": "log2q"
+    },
+    "metallic::logq": {
+      "benchmark": {
+        "directory_name": "metallic__logq",
+        "full_id": "metallic::logq",
+        "function_id": null,
+        "group_id": "metallic::logq",
+        "throughput": null,
+        "title": "metallic::logq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 50.73409483570062,
+            "upper_bound": 51.85649423206763
+          },
+          "point_estimate": 51.35818251718244,
+          "standard_error": 0.28350957712385805
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 51.80304776382896,
+            "upper_bound": 52.01429482149862
+          },
+          "point_estimate": 51.91359222611304,
+          "standard_error": 0.06185576086034926
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__logq/new",
+      "sample_count": 100,
+      "target": "logq"
+    },
+    "metallic::powq": {
+      "benchmark": {
+        "directory_name": "metallic__powq",
+        "full_id": "metallic::powq",
+        "function_id": null,
+        "group_id": "metallic::powq",
+        "throughput": null,
+        "title": "metallic::powq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 108.89302260917678,
+            "upper_bound": 109.37635579240236
+          },
+          "point_estimate": 109.14131717506604,
+          "standard_error": 0.12351696546967157
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 108.9142500936008,
+            "upper_bound": 109.35031639565653
+          },
+          "point_estimate": 109.20044127269982,
+          "standard_error": 0.12636515189962183
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__powq/new",
+      "sample_count": 100,
+      "target": "powq"
+    },
+    "metallic::rsqrtq": {
+      "benchmark": {
+        "directory_name": "metallic__rsqrtq",
+        "full_id": "metallic::rsqrtq",
+        "function_id": null,
+        "group_id": "metallic::rsqrtq",
+        "throughput": null,
+        "title": "metallic::rsqrtq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 35.06136052748707,
+            "upper_bound": 35.179454607531845
+          },
+          "point_estimate": 35.118126590423174,
+          "standard_error": 0.03021247129565009
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 35.01518318071054,
+            "upper_bound": 35.096664960887736
+          },
+          "point_estimate": 35.06259026432517,
+          "standard_error": 0.018554269468302236
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__rsqrtq/new",
+      "sample_count": 100,
+      "target": "rsqrtq"
+    },
+    "metallic::sinq": {
+      "benchmark": {
+        "directory_name": "metallic__sinq",
+        "full_id": "metallic::sinq",
+        "function_id": null,
+        "group_id": "metallic::sinq",
+        "throughput": null,
+        "title": "metallic::sinq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 75.87683758044899,
+            "upper_bound": 76.14757629980657
+          },
+          "point_estimate": 76.01226046725789,
+          "standard_error": 0.06940223034806442
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 75.7715146141242,
+            "upper_bound": 76.2557982843608
+          },
+          "point_estimate": 76.04433878009834,
+          "standard_error": 0.12136487594301706
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__sinq/new",
+      "sample_count": 100,
+      "target": "sinq"
+    },
+    "metallic::sqrtq": {
+      "benchmark": {
+        "directory_name": "metallic__sqrtq",
+        "full_id": "metallic::sqrtq",
+        "function_id": null,
+        "group_id": "metallic::sqrtq",
+        "throughput": null,
+        "title": "metallic::sqrtq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 39.31982048058761,
+            "upper_bound": 39.51662267996494
+          },
+          "point_estimate": 39.432456178545735,
+          "standard_error": 0.05144322938095654
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 39.40718596025024,
+            "upper_bound": 39.50338691771781
+          },
+          "point_estimate": 39.45097407433869,
+          "standard_error": 0.024577439894533176
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__sqrtq/new",
+      "sample_count": 100,
+      "target": "sqrtq"
+    },
+    "metallic::tanq": {
+      "benchmark": {
+        "directory_name": "metallic__tanq",
+        "full_id": "metallic::tanq",
+        "function_id": null,
+        "group_id": "metallic::tanq",
+        "throughput": null,
+        "title": "metallic::tanq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 91.81542560117221,
+            "upper_bound": 92.07807100967858
+          },
+          "point_estimate": 91.9492893482332,
+          "standard_error": 0.0665801842502398
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 91.80051157162065,
+            "upper_bound": 92.07220799513948
+          },
+          "point_estimate": 91.92194665937043,
+          "standard_error": 0.08259671344513025
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/metallic__tanq/new",
+      "sample_count": 100,
+      "target": "tanq"
+    },
+    "quadmath::cosq": {
+      "benchmark": {
+        "directory_name": "quadmath__cosq",
+        "full_id": "quadmath::cosq",
+        "function_id": null,
+        "group_id": "quadmath::cosq",
+        "throughput": null,
+        "title": "quadmath::cosq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 646.1691866234619,
+            "upper_bound": 648.0296591164085
+          },
+          "point_estimate": 647.1138349942453,
+          "standard_error": 0.4748916839883818
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 646.3522559914312,
+            "upper_bound": 648.3370060790273
+          },
+          "point_estimate": 647.1969689557018,
+          "standard_error": 0.47897859182139396
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__cosq/new",
+      "sample_count": 100,
+      "target": "cosq"
+    },
+    "quadmath::log10q": {
+      "benchmark": {
+        "directory_name": "quadmath__log10q",
+        "full_id": "quadmath::log10q",
+        "function_id": null,
+        "group_id": "quadmath::log10q",
+        "throughput": null,
+        "title": "quadmath::log10q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 838.5102551235768,
+            "upper_bound": 840.2260550462189
+          },
+          "point_estimate": 839.3732579293354,
+          "standard_error": 0.43500578090404923
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 838.1808384468623,
+            "upper_bound": 840.3461464539689
+          },
+          "point_estimate": 839.0871982910501,
+          "standard_error": 0.5776099268877162
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__log10q/new",
+      "sample_count": 100,
+      "target": "log10q"
+    },
+    "quadmath::log1pq": {
+      "benchmark": {
+        "directory_name": "quadmath__log1pq",
+        "full_id": "quadmath::log1pq",
+        "function_id": null,
+        "group_id": "quadmath::log1pq",
+        "throughput": null,
+        "title": "quadmath::log1pq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1142.8912640379301,
+            "upper_bound": 1159.5880296905627
+          },
+          "point_estimate": 1152.0651162045658,
+          "standard_error": 4.29558096883376
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1160.0566202042353,
+            "upper_bound": 1163.39522417154
+          },
+          "point_estimate": 1161.6211530509777,
+          "standard_error": 0.7520438006869966
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__log1pq/new",
+      "sample_count": 100,
+      "target": "log1pq"
+    },
+    "quadmath::log2q": {
+      "benchmark": {
+        "directory_name": "quadmath__log2q",
+        "full_id": "quadmath::log2q",
+        "function_id": null,
+        "group_id": "quadmath::log2q",
+        "throughput": null,
+        "title": "quadmath::log2q",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 754.4306252518726,
+            "upper_bound": 756.0922237734268
+          },
+          "point_estimate": 755.2355875591077,
+          "standard_error": 0.4257595397232113
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 753.8085614035087,
+            "upper_bound": 755.976450617284
+          },
+          "point_estimate": 754.8564661654136,
+          "standard_error": 0.6155289627064492
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__log2q/new",
+      "sample_count": 100,
+      "target": "log2q"
+    },
+    "quadmath::powq": {
+      "benchmark": {
+        "directory_name": "quadmath__powq",
+        "full_id": "quadmath::powq",
+        "function_id": null,
+        "group_id": "quadmath::powq",
+        "throughput": null,
+        "title": "quadmath::powq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 2184.1799446306723,
+            "upper_bound": 2218.867143926785
+          },
+          "point_estimate": 2202.9752964599493,
+          "standard_error": 8.952336157546384
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 2219.7243744955613,
+            "upper_bound": 2230.310532687651
+          },
+          "point_estimate": 2224.8894909821815,
+          "standard_error": 3.118123352731638
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__powq/new",
+      "sample_count": 100,
+      "target": "powq"
+    },
+    "quadmath::sinq": {
+      "benchmark": {
+        "directory_name": "quadmath__sinq",
+        "full_id": "quadmath::sinq",
+        "function_id": null,
+        "group_id": "quadmath::sinq",
+        "throughput": null,
+        "title": "quadmath::sinq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 640.0843102410608,
+            "upper_bound": 644.7057981235621
+          },
+          "point_estimate": 642.8822670638639,
+          "standard_error": 1.2494211026289272
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 643.6121212121212,
+            "upper_bound": 645.2058943089431
+          },
+          "point_estimate": 644.3409024120142,
+          "standard_error": 0.460203616122969
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__sinq/new",
+      "sample_count": 100,
+      "target": "sinq"
+    },
+    "quadmath::tanq": {
+      "benchmark": {
+        "directory_name": "quadmath__tanq",
+        "full_id": "quadmath::tanq",
+        "function_id": null,
+        "group_id": "quadmath::tanq",
+        "throughput": null,
+        "title": "quadmath::tanq",
+        "value_str": null
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 771.9573062812128,
+            "upper_bound": 782.6590273154812
+          },
+          "point_estimate": 777.956537507664,
+          "standard_error": 2.741961574674983
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 781.6683874902961,
+            "upper_bound": 784.0730971128609
+          },
+          "point_estimate": 782.6183562992126,
+          "standard_error": 0.580691872105329
+        }
+      },
+      "raw_directory": "/tmp/metallic-bench-20260905-77e271f/target/benchmark-f128/criterion/quadmath__tanq/new",
+      "sample_count": 100,
+      "target": "tanq"
+    }
+  },
+  "precision": "f128",
+  "schema_version": 1,
+  "settings": {
+    "cpu_affinity": 15,
+    "measurement_seconds": 2.0,
+    "nresamples": 10000,
+    "sample_size": 100,
+    "warm_up_seconds": 1.0
+  },
+  "source": {
+    "cargo_lock_sha256": "28881f69e77a9e724caafd3722652b25fef19cd278c1ad24488ec374f7ea909b",
+    "git_head": {
+      "command": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "output": "77e271f7ce393d246450de194f1598e59063c008"
+    },
+    "git_status": {
+      "command": [
+        "git",
+        "status",
+        "--porcelain"
+      ],
+      "exit_code": 0,
+      "output": "M Cargo.toml\n M README.md\n M benches/bench128.rs\n M benches/powq.rs\n?? ._Cargo.lock\n?? ._Cargo.toml\n?? benches/._acosh.rs\n?? benches/._acospi.rs\n?? benches/._acospif.rs\n?? benches/._acosq.rs\n?? benches/._asinh.rs\n?? benches/._asinpi.rs\n?? benches/._asinpif.rs\n?? benches/._asinq.rs\n?? benches/._atan2.rs\n?? benches/._atan2f.rs\n?? benches/._atan2pi.rs\n?? benches/._atan2pif.rs\n?? benches/._atan2q.rs\n?? benches/._atanpi.rs\n?? benches/._atanpif.rs\n?? benches/._atanq.rs\n?? benches/._bench.rs\n?? benches/._bench128.rs\n?? benches/._cbrtq.rs\n?? benches/._compound.rs\n?? benches/._compoundf.rs\n?? benches/._cos.rs\n?? benches/._cospi.rs\n?? benches/._cospif.rs\n?? benches/._cosq.rs\n?? benches/._erfcf.rs\n?? benches/._erff.rs\n?? benches/._exp10m1.rs\n?? benches/._exp10m1f.rs\n?? benches/._exp10q.rs\n?? benches/._exp2m1.rs\n?? benches/._exp2m1f.rs\n?? benches/._exp2q.rs\n?? benches/._expm1q.rs\n?? benches/._expq.rs\n?? benches/._fma.rs\n?? benches/._fmaf.rs\n?? benches/._hypot.rs\n?? benches/._hypotq.rs\n?? benches/._lgamma.rs\n?? benches/._lgammaf.rs\n?? benches/._log10p1.rs\n?? benches/._log10p1f.rs\n?? benches/._log10q.rs\n?? benches/._log1p.rs\n?? benches/._log1pq.rs\n?? benches/._log2p1.rs\n?? benches/._log2p1f.rs\n?? benches/._log2q.rs\n?? benches/._logq.rs\n?? benches/._powq.rs\n?? benches/._rsqrt.rs\n?? benches/._rsqrtf.rs\n?? benches/._rsqrtq.rs\n?? benches/._sin.rs\n?? benches/._sincos.rs\n?? benches/._sinpi.rs\n?? benches/._sinpif.rs\n?? benches/._sinq.rs\n?? benches/._sqrtq.rs\n?? benches/._tan.rs\n?? benches/._tanh.rs\n?? benches/._tanpi.rs\n?? benches/._tanpif.rs\n?? benches/._tanq.rs\n?? benches/._tgamma.rs\n?? benches/atan2f.rs\n?? benches/compound.rs\n?? benches/erfcf.rs\n?? benches/erff.rs\n?? benches/fma.rs\n?? benches/fmaf.rs\n?? benchmarks/\n?? tools/benchmark_snapshot.py"
+    },
+    "source_files_sha256": {
+      "Cargo.lock": "28881f69e77a9e724caafd3722652b25fef19cd278c1ad24488ec374f7ea909b",
+      "Cargo.toml": "44910e097302e537dab11929516cce918c3bdd41296aba00edd35992e15784fc",
+      "benches/._acosh.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._acospi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._acospif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._acosq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._asinh.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._asinpi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._asinpif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._asinq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atan2.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atan2f.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atan2pi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atan2pif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atan2q.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atanpi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atanpif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._atanq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._bench.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._bench128.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._cbrtq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._compound.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._compoundf.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._cos.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._cospi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._cospif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._cosq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._erfcf.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._erff.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._exp10m1.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._exp10m1f.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._exp10q.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._exp2m1.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._exp2m1f.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._exp2q.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._expm1q.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._expq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._fma.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._fmaf.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._hypot.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._hypotq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._lgamma.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._lgammaf.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log10p1.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log10p1f.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log10q.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log1p.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log1pq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log2p1.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log2p1f.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._log2q.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._logq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._powq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._rsqrt.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._rsqrtf.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._rsqrtq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._sin.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._sincos.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._sinpi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._sinpif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._sinq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._sqrtq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._tan.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._tanh.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._tanpi.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._tanpif.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._tanq.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/._tgamma.rs": "06f21086b556acb6c38242db17275367006f02619e01505f4c72c16b093549c7",
+      "benches/acos.rs": "f44f3cbbbc2ef63f30c43482d01387014dec8196b537e2323dee414ae6518bc7",
+      "benches/acosf.rs": "1702b6bdfb85f3b0fe0e1142f7eecda3fd3240fb972bf4c99b1ac612fdd8e54c",
+      "benches/acosh.rs": "04d60b1be16688e2664a5332d0f90dbd808e4dad7957eee1a034ecc30e99d4c0",
+      "benches/acoshf.rs": "6421fb0dc01f71a34b0a82fbe9a24a2dab2fc76bf98753e2a29e8569f0c39eba",
+      "benches/acospi.rs": "34bc5bfb2513d18a53818a274f454646a3fbf43a4834aea356dfd7422e9beaea",
+      "benches/acospif.rs": "8c9424a9779715556c729ef042eeaf3a3b6ba21a6fca71ceb28833fcce53adfc",
+      "benches/acosq.rs": "01afee17fa1da471b0378aba359a8c097ccbadacfb6cf600fa95be452f9adf47",
+      "benches/asin.rs": "d06db13651ca25ccd17769247b9423a8292fc03d8a242a19fb9b344dec665068",
+      "benches/asinf.rs": "818d01f0554542bde5249924774a114fbbc580b0c5d51734fc4bb8248f5dd371",
+      "benches/asinh.rs": "4df667c08c46b455e212af281881a808513839c212c47a5da9ab22c1d21d230c",
+      "benches/asinhf.rs": "3fc89c6a95fa6b3c9d89b20e03aae67941b59421005013eae7dfc5ed754a676d",
+      "benches/asinpi.rs": "073456b52e0fb246b9ec2ade3c6a654f8953f84c2f794a6e4a90f146e6cfbea4",
+      "benches/asinpif.rs": "898676b9684b6d4b98c01b97f147b9ba2dcea15bb89efdd25231e06ebb772f52",
+      "benches/asinq.rs": "4aee467d2c298eaf8b91991987289cecc86d1cacf65efda76d102d415c275f88",
+      "benches/atan.rs": "0123b82de559dd82dec1e9dec808a1707ea8cbb465e787966a197ba8e04d6c20",
+      "benches/atan2.rs": "88a4ce97c3c055869d3e667e50533a6b9ee23cd5d8f75acfb274437c09725c19",
+      "benches/atan2f.rs": "734a4e0c314d7e4558531c588fc8717497a8d0991a113cb232178a3a6d3e8fa0",
+      "benches/atan2pi.rs": "ee7b0ce856f88f353ff836f6c3c88fbf960b0dd7c6b02c52012ff2458b65f4d8",
+      "benches/atan2pif.rs": "c969acee531fbdfffad50f16f60be4a654cc6d067630085887f2af25d01ceeb5",
+      "benches/atan2q.rs": "1141845688f99971655324015569720c3e61c831640f72560177f287551b8d8b",
+      "benches/atanf.rs": "87f27ff226b347467a7ae7df29df03b040a13f6197b4ec4759172d292ba5313b",
+      "benches/atanh.rs": "15eeb61e9c7213277fde16ef4e9d86a6d38ceab1dbf1601ad320b537dfbe58dd",
+      "benches/atanhf.rs": "64e269d2ba21da0d9e3c66f0b4d8bc7337b7ce39dab99f4b53c1181204e2b532",
+      "benches/atanpi.rs": "fbec3e9dddca08870fdecf1378971115648d2cafc3f5db510b875ddaa2d7b2eb",
+      "benches/atanpif.rs": "66e8daa4817e2a77ad6fb00d5872325b9b106fd2ae8a4e23c4fac85832a8ef3d",
+      "benches/atanq.rs": "390ee679fc4b3a4ccf8f6dbba6552060c2ab618fdf8852018e59f293a025731f",
+      "benches/bench.rs": "2a97f6165c62893f3f57c25697357590ccf450ebf7bfc18b761304e04e8b59b9",
+      "benches/bench128.rs": "7eff1ccc6fcfd621c1d0b13e95ba2a31c88dc4752e6914c1f7ef0e1c4d35377d",
+      "benches/cbrt.rs": "1f95e30294ae8791f277dd815bfa0bcef27aca91da4e155c03cfa4be93ced7c6",
+      "benches/cbrtf.rs": "01eda77d71d0e881f800ff295abebe76e20f74e1f94a6f2993987fadbcf3b7e4",
+      "benches/cbrtq.rs": "58fe8651203bfe44f04b25aa9ea2eadfa008f95b89fe0ed035d830afd9276da1",
+      "benches/compound.rs": "feb0587f9f18741107b66bd54d6007b18024b03d37610c0f3c76912f6c7ca6f2",
+      "benches/compoundf.rs": "d4beee5e1ce17f6b64d0e70b8b20d2753a97e93aece0d508c1330d4ec97b9a1e",
+      "benches/cos.rs": "097344a5dcf182050c5ea0f0d52b5111260deb02e759f213632ae9524d094344",
+      "benches/cosf.rs": "97344d5801afc4e649769ee45c83ad2563240b69d40593580e57570490c9e50b",
+      "benches/cosh.rs": "7dec4f0773c6dbfcb69712b51fab2ea317a9eaa68175dabbea585485c64cf16a",
+      "benches/coshf.rs": "e8503946ff5950baaa2ecebb33228026725c9c143acb75e2e1cecdd532a807d4",
+      "benches/cospi.rs": "f5c2295593cf217a74551e69e65189a46acf41b8a2ff59374f807cd4adcef4b3",
+      "benches/cospif.rs": "ba07f3c31a4bd16040ba4d15f92f7ba1bd49cdaab0a427877f3e8041e6f0d4dd",
+      "benches/cosq.rs": "03643961141bf69fcb6e9028694fd9e821fec7bba8d0dfd83ece7130ccfb70dd",
+      "benches/erf.rs": "9026bf861d1aa635a2c5e91ad380916e33a1569807dd1d35138c378d126addc8",
+      "benches/erfc.rs": "1e2cd1f7f57e4bf51559f0a3af9fb54c1d22503668ac6fb9e755d2d02221d802",
+      "benches/erfcf.rs": "7c1f0c59579b4f92d830d94d157b9481d958f46b1ced44f7bb3de81fdd90ff46",
+      "benches/erff.rs": "76ebcadd98602217a3dcf519eb9f4d74022afa28a5a87968f3bf3736400d9a25",
+      "benches/exp.rs": "0aeebb37a0f3e0b25077ad6c25ef72bdd241cdb2530bc24d989e193a001abea8",
+      "benches/exp10.rs": "d99b06b5f5c36959906aa5fba6c2325153297792459b6a906c18acc89bec019a",
+      "benches/exp10f.rs": "b4c447cc4397b39cf45ff5dc988e4ddeaa7d909fa8e75ddef390be48f7b01a88",
+      "benches/exp10m1.rs": "c7e6669acf24ec8885dd28a0db92d852542feb0168a2bc0623dd1def359de972",
+      "benches/exp10m1f.rs": "11a398359760d388e017475e8247805dc02b66851d802d1a445ebd3ed1873a3b",
+      "benches/exp10q.rs": "8db7f199f5f401bdb0c3c5551af9935d3b78dc396cc483d27fb7f7d9c0f2c378",
+      "benches/exp2.rs": "2e0590f7fec4792cd5a715ed50f525554ac4de21c6e6e089066c296e047f3a37",
+      "benches/exp2f.rs": "aa383543b5552e370f67a876d2ce2609de9c930b3db36282d6241d916e10adec",
+      "benches/exp2m1.rs": "0e734a22dea54319577f3be18e71b3aafd96b4958dad7a05bc3e4519562e000d",
+      "benches/exp2m1f.rs": "cbf8f93916554840dde174699e1dd35d77d544606fe9a350ed1ce17ffa34e5ed",
+      "benches/exp2q.rs": "9bc326141fc5b7c00f82a49c436acd05aa9f9674ef807b277bba48bdd0c8caaf",
+      "benches/expf.rs": "797e2962acc1cb2c72e11848e3eaab709561effc6831116d3acfc05b448f0a70",
+      "benches/expm1.rs": "1b1bef9e84e74434c40ad522f4fc3680375aada1e0b5db3d5ae27f5144c2d73c",
+      "benches/expm1f.rs": "90c445847c4be529740e99035a2eb8ff457e712cf9f09bc6f529dbcf287d8eff",
+      "benches/expm1q.rs": "bd403ff210733e628bdfba3c2dfae866c526ec4bcdd7f98151d56e14b9f7a081",
+      "benches/expq.rs": "ade288529f8096f6a4ed312d156e7c6a4e9adadd4c20bc7f428423c90aa39458",
+      "benches/fma.rs": "64a1d67a48252db2283f004b1ad73de2d942833760d4f817b9f014805bc5c954",
+      "benches/fmaf.rs": "727cb257aab2efd632c2eb4c321dc166c563812c3a795f8d57c52b8a429b15a1",
+      "benches/frexp.rs": "3560fd44e270d690b57c9f47663099de7e631aef39f83503d52d1159a0ccc8f0",
+      "benches/frexpf.rs": "f545c9eacccec42331ff97c488c04bd55560fc02b4f8cb2bf256015b9cc020d0",
+      "benches/hypot.rs": "5c1871d34b995029b4702f634f619c80e17a6842e8d958678da54e0d1d7ec443",
+      "benches/hypotf.rs": "c5c364561b73b540a0213314fd6031e8d7438d6ec36de43c70ff5f1cc904245d",
+      "benches/hypotq.rs": "1d8ca8b72ba2ad7324ad6ffaf58428c46a8cd766e115aa72ca0007bc198841eb",
+      "benches/ldexp.rs": "b7070e93c182674172e876d8796c79abdeb42bbfa0ab4a751af3804ddb6c339f",
+      "benches/ldexpf.rs": "2ffa4723d5c2098ce03511de97dde9a7629a4bbc59eae24146149c785276ea54",
+      "benches/lgamma.rs": "7bf02209bef2e708e2cd3424a132f2b38a17f8eaa850bd04bb912fd65c8a38eb",
+      "benches/lgammaf.rs": "bc26420e36b55e94d79f46555d9436c4a912c7259a426ac9fe7f11c49a040dd4",
+      "benches/log.rs": "44a5ace107a2e97e6c652894c566d6f4e3cbb9eceaa78d4fed6bfb9c84a56747",
+      "benches/log10.rs": "40019d9d4dd0e6115584eb7bcc1fc92f53729c55f6f2a776bd15e02000997132",
+      "benches/log10f.rs": "db7a04d0bbd6200d2104f7336d67ed5f8a01620aba294307334775801b7d6124",
+      "benches/log10p1.rs": "6275bc5a9679537179ee50b64290f6ab44e572705d0d9be8fbc17d25e42dc053",
+      "benches/log10p1f.rs": "1ed06658cd70b2dcb0517e4cfa00cba0037ad90b8aa7a7f543fed50449f8d6c7",
+      "benches/log10q.rs": "8c224d2925fe7e70fb34cf00d7844c606ef8be3a5aa82e72eb4006809adc12c3",
+      "benches/log1p.rs": "8a4997dce5c8210a41260bf440364e2f38f7e2482d1051a24c6143cebf1651e8",
+      "benches/log1pf.rs": "9ec2ecfe85594e611e022a5a5cd42a145f7fa2d59c62c2d59597e586fcc6fe0e",
+      "benches/log1pq.rs": "f838c555be9d3e9c40e60b44d6b02744c494085d846f7bd2c03a8e0de23f90c8",
+      "benches/log2.rs": "d4c7e2141a825d0a6281d587cb18a07cca904619164fbf8cd2a82d9970be2cd0",
+      "benches/log2f.rs": "376c850e97eb5fa131b8ac02d2569d0f6bd0fe0d96496513a019da4c46ba605d",
+      "benches/log2p1.rs": "d10a049ccc76609d0426478b74ad376cd78f89b5e9e791ceda1f2502f67f0fe5",
+      "benches/log2p1f.rs": "7903d026b1a9a36fbfb1478ccc75e80e6977ba2d76fe51c2768f6baf8a92e410",
+      "benches/log2q.rs": "a3c0c85f25412eaad1b743aa05e3c8b4736355ef5bfc4af461ceb7c590a85305",
+      "benches/logf.rs": "99309a7d0368169eac485003bca2ae8e8c2c473a1a147b2a9cb2246bf239f97a",
+      "benches/logq.rs": "9e45cb9d55fdba3a03993bf0b96922463e8ea9fa368e819614f0a94b08e1e322",
+      "benches/pow.rs": "988d2b8b19f7b2447ea313d72bc5098f0292e7a3f8de0cc92446b3a5e92e5f60",
+      "benches/powf.rs": "ec62ca7e26f76b75bc64212312cf281430865b9316fde61917ee075ab0218d1a",
+      "benches/powq.rs": "592ff1d527d7e5ac0e2f1e904a5782d48dbd73d82e0e679111475ef800de8372",
+      "benches/round.rs": "6f75a6e5d3ebc6badb096c798b75d2fcf1ba86b6e9b8cd3ff4c77da57c6ae98f",
+      "benches/roundf.rs": "8477cb9e1b35b7fc8d400e943b7416c4209795ea2d56f74d61bd42184e4e08ca",
+      "benches/rsqrt.rs": "4484984120ac7b4f4da4540247727e8e323dbfb07b4c190e748c7db0b215ee00",
+      "benches/rsqrtf.rs": "593e5fb04064c086ea3f14ed0166351bd2446bf82faa7d07dda57630be64c1be",
+      "benches/rsqrtq.rs": "c26028900ff146c4fca970890014cd18a4d87b94aa901ced330f61103aa4277b",
+      "benches/sin.rs": "0334368a6b3cd4ac1783ea99587b72098ab41901ae5bfef804bd67c348cbbd74",
+      "benches/sincos.rs": "1f92461c3d7b3605fa15098f2a35e9d95349323f8da89fe7c7f448b5daf23f8b",
+      "benches/sincosf.rs": "9b9056afa86e37397a90436afb57abe1aee6376fdadec8679a11c430bb60c7ed",
+      "benches/sinf.rs": "d8f2bf30e016019582b30cad385a89bd7a93eb563710cfd4679213e2e24faeee",
+      "benches/sinh.rs": "f38c971573b00a5656317be17a746e22bc7777d2dc617e5418a724a813432e82",
+      "benches/sinhf.rs": "432a0975f7fda1406372ef93fc8351b791714538c0180e16dbc88a58da81d7dc",
+      "benches/sinpi.rs": "afa7548f9490312db5f723350aaffd156991bf992981f2f829243995f93e8873",
+      "benches/sinpif.rs": "f23d9bec3df500e909279755a1de55f8bc2d0aa89c5c040d4a28feb974220e7f",
+      "benches/sinq.rs": "7b2cd447e3e2c7f5412942bde5bd8104b398b4ff940c669687528e506b8328c2",
+      "benches/sqrtq.rs": "39377151f83cf99ce3fb3f50b8a1b23536dd2c907c58d6860f1e5024c4521fbf",
+      "benches/tan.rs": "ae440f17307174bb0eab1a6edcf975250e9d309f9ad4eb0f21c8742cba52a058",
+      "benches/tanf.rs": "04745263a67d82bf2f3b491b3e7f46074c39bae46d535ade5b80b90546dd63d3",
+      "benches/tanh.rs": "cc5f7c56f4864715a4d16f6a04ce46f98ec3b4993e2b7c471cd16dd86bccbce4",
+      "benches/tanhf.rs": "05466a3edfd85c2d4459966c632245b4a946b254738d6dcf45cee837d5732373",
+      "benches/tanpi.rs": "5723edeb24cd3820f6db92e8bc3c0f363af4a73b1beccec0a941f14d89b2f0b3",
+      "benches/tanpif.rs": "ae6ee2355148562ab07270d54296ce29357355fa74c05bda263aa020fa07663e",
+      "benches/tanq.rs": "19df5275559b3b6cf143236c09b992b2842d26120c1025f9fa2f54ebb0dcd644",
+      "benches/tgamma.rs": "edbec6625e65561646abb0a39b3e2c41567a7fc469f998c034b477e13bfe8167",
+      "benches/tgammaf.rs": "e837821c7d761993a7a4435df8294636e94a717ee63c32027ea72323d2a16cf8",
+      "build.rs": "d0235b2c829c7de10f44c0b25dd833ff8bc6c77e0cc5d7c66c55e4e0393bbd16",
+      "src/f128_.rs": "b3bff069479db33159204a54d2e8c3ae3c32d737ae20d4f18c8ad87dc77d55d1",
+      "src/f128_/asin.rs": "1c1edea17f2e8a28936586a1fb7771e288d0783bae94ed4faeda889f3007b667",
+      "src/f128_/atan2.rs": "1f5ed27de1740d3c5ed82bfc1e938942275956b68d34985085f5dc1b1749d305",
+      "src/f128_/atan2_tables.rs": "ba235f4c232b7ddf00e7aae2fac8b40a6cfbab8de780fa81fedb324b86a9b7bd",
+      "src/f128_/cbrt_tables.rs": "faeadb9f3dd6049d30224fbd1a65b0de0148834d0aa9f7a0b0cc40d55b97931f",
+      "src/f128_/exp.rs": "3ab3e0c5762e8e9c4b62a3d5736d323320a0e3c5d5ca87c5acae3d3e3b87fe79",
+      "src/f128_/exp_tables.rs": "b152b818cc74de3dec29ab798a049f292effa57a9e2e33eede7edf8a4cec3e9f",
+      "src/f128_/hypot.rs": "e8fd6b0abc187c1db7f388ad794fec96bfe59a8696f6927e3f22f1a5a630bc60",
+      "src/f128_/log.rs": "022435ec4d35763e290d8d56c8b706616586c170c00c05ec37dcf5fa913e00fd",
+      "src/f128_/log10_tables.rs": "f4d16b72e2dea921ec7aeb622401ee7939d641c7260988aded4df0bdef7b23f3",
+      "src/f128_/log2_tables.rs": "3a800f3b1832a06815f9bf08aaf97f7f7e6db4f8d4292b786ec3661192a3a245",
+      "src/f128_/log_tables.rs": "67bed8b9b6b41d677785165c5d5d020bd889d05a53637e4b3188ec1649ea89a8",
+      "src/f128_/misc.rs": "c5c1dc2ad151c5aefcbc3e44cac7bfc66ba039d74ac3c143fb55559074cd7548",
+      "src/f128_/mpfr.rs": "353991ae6f416d479bff8c0a89c0cc63a113a86f52b6ce996853de0c345c6a85",
+      "src/f128_/pow.rs": "5c4e8c500c6bf93ac65646698253fbb747eac84029bf16e5bb80e1dabfbc28de",
+      "src/f128_/pow_tables.rs": "3cef3a6adc17a1d8b46f8980c2002e33bf3cd35c7301486c20dae13fe8c7bbf5",
+      "src/f128_/roots.rs": "b306d5374a9c1d66deab38eab1113157a687fd97d3b0f6f16582b2dc4f573565",
+      "src/f128_/rsqrt_tables.rs": "620bc7bb2d7a70e75e367521cad04cab9b58144a7334d75712a29371db803bd4",
+      "src/f128_/tan.rs": "4c3e36826d796d23b7901ccf005e20bea7780ce97556dc39ad2d57d022b3e2d7",
+      "src/f128_/trig.rs": "784db5556ea12966859309fcf4c1e79f7faa5f3b61cae59757bce183aeaa0c33",
+      "src/f128_/trig_tables.rs": "d6105eaeb1f51b2625715e43c59c7bdf407e2b54df6e97a722068bbd4bbf45c8",
+      "src/f128_/uint.rs": "141e55c96e9fec1b2ced4682dc63833971dc86263abefe6508a978b927080fb3",
+      "src/f32_.rs": "aa02dca1c7eb6b166875f99db08f857d824bbcb1a68ef41bb497ed163af1c4c1",
+      "src/f32_/atan.rs": "0dcecb252ab10ac4b80930474b8df22b791127831bc444dc7d49f90804e084c8",
+      "src/f32_/erf.rs": "8fefdc19df13804265e8579df91c98882f283fdf54004cfb125a8d1df62bf9ce",
+      "src/f32_/exp.rs": "e5dcd8629fbdb8e93427a034acda0aa48027c92cf7f1d3df3a7e484f40310c5c",
+      "src/f32_/gamma.rs": "62461ff5ca1c0fb5d31ac9fe0d3a63b38664b1c49f35d025cf70a28fd913ecc9",
+      "src/f32_/hyp.rs": "c778e35bb23e84d88225f3e271713b1fa7d8f5578802b420ffa1ed500bc0fec5",
+      "src/f32_/log.rs": "426e9f907fd59514e383d86dfbf39f0ae9fd6073cbe22b6ec9ea5cfb4170fa81",
+      "src/f32_/misc.rs": "58349b564f6d9bd15bd68e513b00fe27fafd42fe2916bd41337cc98828359bd2",
+      "src/f32_/pow.rs": "643524258a93027fcd84ffb34eee8b78116e7856435789dbcd5039a884090115",
+      "src/f32_/trig.rs": "f7e733d3e2878e773c82f49056cccdfe162f445ba9c6392dc0f3bfaddafb958c",
+      "src/f64_.rs": "bfc70864bba43bcd4bb16ea58dce406b8de91fb0f9797925bc22146a425fe45d",
+      "src/f64_/atan.rs": "627a447128f87df545128a09038e5d058f3c6e64b8d4716d44e1f9be2e990ecf",
+      "src/f64_/dint.rs": "73997923a28fc3acb5724e4bbf61eb92aed3ec27f6547245f147d382a852e8e5",
+      "src/f64_/dint_consts.rs": "f965881024cf1de857ea75b9082c878ef582188d9ebae29552c38f97cf617fde",
+      "src/f64_/double.rs": "0467c2769346213a7ed18d878dd97cb7474af38140897152bfa61904a5b1d468",
+      "src/f64_/erf.rs": "e82bf1be32b3078e9106724b2d08f02b3dd5bfcc22b69b84eb460fd9be02dee0",
+      "src/f64_/exp.rs": "141c0d84ee690de9601bd446bc9f4251cb49f3a72b9600a3867264c104035f9f",
+      "src/f64_/gamma.rs": "eb5c1df1374954a3f7d29c5428f8eb0eb6744a3c69ad1d73b4c5f40bb3364c36",
+      "src/f64_/gamma_piece_tables.rs": "a4bea4e91418c529ffb787c978eb95e6d97b755d2df33e501983d41554cff782",
+      "src/f64_/gamma_td_tables.rs": "5e16bb8026039f812758e7add0bd05cb10c39796c3d965a7d37c362b100aa49f",
+      "src/f64_/hyp.rs": "de138bc8cc445f16d1fc3369e1b1f3a07e6b18fa662256020d0fcd390bbde5ca",
+      "src/f64_/log.rs": "53faa25e8b41709bd4a5061474727773d31398be39d50f42f51c226c7947cc5c",
+      "src/f64_/misc.rs": "5908ee89fc4df6baec4fa7ec60190212a8efd1d09fc1c5618aaf1847a9405aa2",
+      "src/f64_/pow.rs": "5f61b45dfb4663d3d9ab3da68d17b02fca05ed7a2cf662d669d82bb319bdd615",
+      "src/f64_/pow_accurate.rs": "29f7b0c5ce09a03ce4b052843a7199b9cce72df9bd09bb063e86876c48e55bdc",
+      "src/f64_/pow_consts.rs": "776512cdef0bb2bf953d11452d3961c52a2d73fd8b31015c6d7fe0d747240cd5",
+      "src/f64_/qint.rs": "f254fe57bd511c597104c2d6147ced75253ebbec68362bb33f6739b18de647a6",
+      "src/f64_/trig.rs": "8fae7a7a8520e6ac5671a112c1dc65e25155df1ef400a6c4b6aa319517127b02",
+      "src/lib.rs": "13009e83b67397b6ff2c4b998973b141b4a33e50377c6327bef9ad18fb80bccc",
+      "tools/benchmark_snapshot.py": "d46fcdbd698599c98ba7ee542e19350b3cf5d03d9620bc175d579e626998833d"
+    },
+    "source_tree_sha256": "71d8bccc744d4e702065237c6ef3bd453fd99588e00bf6890ab569c69f931d10",
+    "tracked_diff_sha256": "ac7c453e8729b5f1a39a4e95d097e91f40cfd8c69a3ff9e63b0bf88dd3376b73"
+  },
+  "start_utc": "2026-09-04T22:46:49+00:00",
+  "status": "complete",
+  "targets": [
+    "acosq",
+    "asinq",
+    "atan2q",
+    "atanq",
+    "cbrtq",
+    "cosq",
+    "exp10q",
+    "exp2q",
+    "expm1q",
+    "expq",
+    "hypotq",
+    "log10q",
+    "log1pq",
+    "log2q",
+    "logq",
+    "powq",
+    "rsqrtq",
+    "sinq",
+    "sqrtq",
+    "tanq"
+  ]
+}

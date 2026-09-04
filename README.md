@@ -7,6 +7,10 @@
 
 A fast correctly rounded math library in Rust!
 
+See [BENCHMARKS.md](BENCHMARKS.md) for measurements of every public math
+function on Apple M4 and AMD Ryzen 9 7950X3D, including same-run CORE-MATH
+comparisons and reproduction commands.
+
 This library is a successor to [Metallic], my C library for WebAssembly
 started in 2017.  Its most wanted feature turned out to be math functions I
 wrote from scratch, so I decided to rewrite them in Rust.

@@ -1,0 +1,19 @@
+Fri Sep  4 22:32:45 UTC 2026
+CLS %CPU %MEM COMMAND
+IDL 2880  7.1 dump-teacher
+ TS 96.0  0.0 cbrtf-47b2660be
+ TS  2.1  0.2 k3s-agent
+ TS  1.3  0.8 2.1.259
+ TS  0.9  0.6 claude
+ TS  0.8  1.5 node
+ TS  0.7  0.0 kcompactd0
+ TS  0.7  0.1 containerd
+ TS  0.7  1.1 clangd.main
+ TS  0.7  0.3 claude
+ TS  0.5  0.0 kswapd0
+32.95 33.07 33.26 36/2430 2376887
+               total        used        free      shared  buff/cache   available
+Mem:            61Gi        15Gi        18Gi       9.0Mi        27Gi        45Gi
+Swap:             0B          0B          0B
+15,31
+powersave

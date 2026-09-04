@@ -31,3 +31,12 @@ impl crate::bench::Draw<f128> for crate::bench::Exponents {
         f128::from_bits((bits & SIGN) | (((e + 16383) as u128) << 112) | (bits & FRACTION))
     }
 }
+
+/// Positive-only counterpart used for real powers with noninteger exponents.
+impl crate::bench::Draw<f128> for crate::bench::PositiveExponents {
+    fn draw(self) -> f128 {
+        let e = rand::random_range(self.0);
+        let bits = rand::random::<u128>();
+        f128::from_bits((((e + 16383) as u128) << 112) | (bits & FRACTION))
+    }
+}

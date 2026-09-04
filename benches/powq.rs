@@ -12,27 +12,27 @@ unsafe extern "C" {
     fn powq(x: f128, y: f128) -> f128;
 }
 
-// Log-uniform over both arguments, like `atan2q`: `|x| ≤ 2^17` and
+// Log-uniform over both arguments, with a positive base: `0 < x < 2^17` and
 // `|y| < 2^9` keep `|y·log2 x|` under 2^13.1, so every result is finite and
 // normal, both engines stay on their fast legs, and the sign of `y·log2 x` is
 // the coin flip it is in practice.
 bench!(
     bench_metallic,
     metallic::powq,
-    bench::Exponents(-16..=16),
+    bench::PositiveExponents(-16..=16),
     bench::Exponents(-16..=8)
 );
 bench!(
     bench_quadmath,
     "quadmath::powq",
     |x, y| unsafe { powq(x, y) },
-    bench::Exponents(-16..=16),
+    bench::PositiveExponents(-16..=16),
     bench::Exponents(-16..=8)
 );
 bench!(
     bench_std,
     f128::powf,
-    bench::Exponents(-16..=16),
+    bench::PositiveExponents(-16..=16),
     bench::Exponents(-16..=8)
 );
 
