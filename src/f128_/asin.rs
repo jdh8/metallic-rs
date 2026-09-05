@@ -296,9 +296,10 @@ fn root_256(xs: u128) -> ([u128; 2], u32) {
     // `xs = x·2^128` exactly, so its square is `x²·2^256` with no shift at all.
     let (hi, lo) = wmul(xs, xs);
     let v = sub_256([0, 0], [lo, hi]);
-    // 1 − x² ≥ 2^-112·(1 − 2^-113) keeps at most 111 leading zeros.
+    // 1 − x² ≥ 2^-112·(1 − 2^-114) (at `x = 1 − 2^-113`) keeps at most 112
+    // leading zeros.
     let lz = leading_zeros_256(v);
-    debug_assert!(lz <= 111);
+    debug_assert!(lz <= 112);
     let parity = lz & !1;
     let vn = shl_256(v, parity);
 
