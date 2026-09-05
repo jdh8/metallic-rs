@@ -55,6 +55,9 @@ pub fn sqrtq(x: f128) -> f128 {
 
 /// `sqrt(z)·2^125` for `z = mantissa·2^(w−112) ∈ [1, 4)`, within
 /// [`SQRT_GATE`]/2 units of 2^-125.
+// The `#[inline]` entry points are instantiated in the caller's crate, so their
+// private helpers must be inline candidates too or every call crosses the GOT.
+#[inline]
 fn sqrt_fixed(mantissa: u128, w: i32) -> u128 {
     sqrt_wide(mantissa << (14 + w))
 }
@@ -70,6 +73,9 @@ fn sqrt_fixed(mantissa: u128, w: i32) -> u128 {
 /// `|h| ≤ 2^-42`, the dropped 5⁄16·|h|³ term is below 2^-1 units and each
 /// shift truncation costs at most a few units.  The seed reads only the top
 /// 64 bits, so bits past the 113th cost it nothing.
+// `always`: two callers (`sqrt_fixed`, `hypot_fixed`), and without it `hypotq`'s
+// fast path reached this wrapper through a GOT-indirect call.
+#[inline(always)]
 pub(super) fn sqrt_wide(z: u128) -> u128 {
     sqrt_wide_seeded(z).0
 }
@@ -164,6 +170,7 @@ pub fn rsqrtq(x: f128) -> f128 {
 /// `(1 + h)^(-1/2) ≈ 1 + |h|/2 + ⅜h²`, and both correction terms are short
 /// exact-width products.  With `|h| ≤ 2^-42`, the dropped 5⁄16·h³ term is
 /// below 2^-4 units and each shift truncation costs at most a few units.
+#[inline]
 fn rsqrt_fixed(mantissa: u128, w: i32) -> u128 {
     let r = rsqrt64(mantissa, w);
     let z = mantissa << (14 + w); // z·2^126, exact
@@ -274,6 +281,7 @@ pub fn cbrtq(x: f128) -> f128 {
 /// both correction terms are short exact-width products.  With `|h| ≤ 2^-44`,
 /// the dropped h³ term is below 2^-10 units and each shift truncation costs at
 /// most a few units.
+#[inline]
 fn cbrt_fixed(mantissa: u128, remainder: i32) -> u128 {
     // Degree-2 Taylor expansion of m^(-1/3) from the nearest of 64 interval
     // centers c = 1 + (2i+1)/128: within 2^-23.2 of the true value, so the

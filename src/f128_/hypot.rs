@@ -86,6 +86,8 @@ pub fn hypotq(x: f128, y: f128) -> f128 {
 /// octave; a truncation *across* 2^126 only re-labels `z ≈ 4` into the `[1, 4)`
 /// frame, where the rounding composition in [`hypotq`] reunifies the two
 /// descriptions of the same real number.
+// `always`: without it the fast path reached this through a GOT-indirect call.
+#[inline(always)]
 fn hypot_fixed(ma: u128, mb: u128, dn: u32) -> (u128, u32) {
     let big = ma << 14;
     let small = (mb << 14) >> dn;

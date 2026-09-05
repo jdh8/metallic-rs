@@ -204,7 +204,7 @@ Each function is done when both gates hold:
 | `exp2q`  | ✅ | 0.94× |
 | `expm1q` | ✅ | 0.94× |
 | `expq`   | ✅ | 0.96× |
-| `hypotq` | ✅ | 1.01× |
+| `hypotq` | ✅ | 0.97× |
 | `log2q`  | ✅ | n/a — CORE-MATH has no `log2q`; 15× faster than glibc's and libquadmath's faithful `log2q` |
 | `log10q` | ✅ | n/a — CORE-MATH has no `log10q`; 15× faster than glibc's and libquadmath's faithful `log10q` |
 | `log1pq` | ✅ | n/a — CORE-MATH has no `log1pq`; 20× faster than glibc's and libquadmath's faithful `log1pq` |

@@ -277,6 +277,7 @@ evidence wastes a session.
 | Series fast legs for **wide** bands | atanh +34% (75% fallback at band edge). A plain-f64 series leg floors at ~2⁻⁵³ relative on the correction, so it only pays when the band is narrow (asinh: win) or the general path is heavier than a polynomial. |
 | Folding a squaring's equal cross terms (`mhi_approx(x,x)` in 2 muls, not 3) | atan2q 98.1 -> 100.5 ns. Two multiplies out of ~31 in a chain that is neither multiplier- nor throughput-bound; the extra `<< 1` lengthens the serial step that mattered. |
 | Re-cutting `reduce`'s variable shifts onto 64-bit limbs (atan2q) | 100.2 vs 99.95 ns — exactly nothing. The reduction's shifts sit before the divide and overlap it entirely. Price a shift *in situ* before rewriting it; only the ones on the post-divide chain paid. |
+| `#[inline(always)]` on a two-site leaf that bare `#[inline]` left out of line (`atan_frac` in atanq) | 68.4 vs 67.8 ns, interleaved A/B, all three rounds — *slower*. Inlining pays when the call carries an `sret` struct and a spill storm (asin `fast_frame`, −5 ns; hypotq `hypot_fixed`+`sqrt_wide`, −3.4 ns), not for a leaf returning one `u128`: the duplicated body only adds register pressure. A/B every inline; the probe's `call` count alone is not a verdict. |
 
 ## Current standings
 
