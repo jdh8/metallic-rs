@@ -839,19 +839,15 @@ const LOG2P1_MID: [f64; 8] = [
 /// exact product `x·log₂e` serves the band directly; elsewhere `1 + x` is exact
 /// (an f32 mantissa plus the unit bit spans at most 53 bits) and the
 /// division-free [`log_lookup`] kernel finishes.  The exhaustive 2³² sweep in
-/// `tests/log2p1f.rs` certifies every input.
+/// `tests/log2p1f.rs` certifies every input.  As in [`log1pf`], both harmless
+/// legs run together and merge in bit space, removing the unpredictable band
+/// branch without changing either approximation.
 #[must_use]
 #[inline]
 pub fn log2p1f(x: f32) -> f32 {
     let bits = x.to_bits();
     let ax = bits & 0x7FFF_FFFF;
 
-    if ax < 0x3CC0_0000 {
-        // |x| < 0.0234375 (±0 flows through as ±0).
-        let xd = f64::from(x);
-        let f = xd * crate::poly(xd, &LOG2P1_MID);
-        return crate::fast_mul_add(xd, LOG2P1_C24, f) as f32;
-    }
     if bits >= 0xBF80_0000 || ax >= 0x7F80_0000 {
         return log2p1f_special(x);
     }
@@ -864,7 +860,16 @@ pub fn log2p1f(x: f32) -> f32 {
         return f32::from_bits(0x4218_c7fd);
     }
 
-    log_lookup(1.0 + f64::from(x), &LOG2F_TABLES) as f32
+    let xd = f64::from(x);
+    // |x| < 0.0234375 (±0 flows through as ±0); outside this band the
+    // polynomial may overflow, and its result is discarded.
+    let f = xd * crate::poly(xd, &LOG2P1_MID);
+    let small = crate::fast_mul_add(xd, LOG2P1_C24, f);
+    let big = log_lookup(1.0 + xd, &LOG2F_TABLES);
+
+    let mask = core::hint::black_box(u64::from(ax < 0x3CC0_0000).wrapping_neg());
+    let y = (big.to_bits() & !mask) | (small.to_bits() & mask);
+    f64::from_bits(y) as f32
 }
 
 /// [`log2p1f`]'s off-domain and non-finite returns: `x ≤ -1`, `+∞`, NaN
@@ -883,36 +888,48 @@ fn log2p1f_special(x: f32) -> f32 {
 /// Common logarithm of 1 plus `x`
 ///
 /// [`log2p1f`]'s reduction finished in base 10 by [`log_lookup`]'s
-/// dedicated base-10 tables.  The exhaustive 2³² sweep in
-/// `tests/log10p1f.rs` certifies every input.
+/// dedicated base-10 tables.  Both the tiny series and table leg run
+/// unconditionally and merge in bit space, as in [`log1pf`].  The exhaustive
+/// 2³² sweep in `tests/log10p1f.rs` certifies every input.
 #[must_use]
 #[inline]
 pub fn log10p1f(x: f32) -> f32 {
     use core::f64::consts::LOG10_E;
 
-    if x == 0.0 || x.is_nan() || x == f32::INFINITY {
-        return x;
-    }
-    if x < -1.0 {
-        return f32::NAN;
-    }
-    if x == -1.0 {
-        return f32::NEG_INFINITY;
+    let bits = x.to_bits();
+    let ax = bits & 0x7FFF_FFFF;
+    if ax == 0 || bits >= 0xBF80_0000 || ax >= 0x7F80_0000 {
+        return log10p1f_special(x);
     }
 
     // Intrinsic hard ties: one in the series leg, one in the kernel range.
-    if x.to_bits() == 0xb051_e173 {
+    if bits == 0xb051_e173 {
         return f32::from_bits(0xafb6_4ccf);
     }
-    if x.to_bits() == 0x399a_7c00 {
+    if bits == 0x399a_7c00 {
         return f32::from_bits(0x3906_29e5);
     }
 
     let xd = f64::from(x);
-    if x.abs() < 1.862_645_1e-9 {
-        // |x| < 2⁻²⁹: see `log2p1f`
-        return (LOG10_E * crate::fast_mul_add(-0.5 * xd, xd, xd)) as f32;
-    }
+    // |x| < 2⁻²⁹: the tiny series.  The table leg may round 1 + x to 1
+    // below this band, where that result is discarded.
+    let small = LOG10_E * crate::fast_mul_add(-0.5 * xd, xd, xd);
+    let big = log_lookup(1.0 + xd, &LOG10F_TABLES);
 
-    log_lookup(1.0 + xd, &LOG10F_TABLES) as f32
+    let mask = core::hint::black_box(u64::from(ax < 0x3100_0000).wrapping_neg());
+    let y = (big.to_bits() & !mask) | (small.to_bits() & mask);
+    f64::from_bits(y) as f32
+}
+
+/// [`log10p1f`]'s signed zeros, off-domain and non-finite returns.
+#[cold]
+#[inline(never)]
+fn log10p1f_special(x: f32) -> f32 {
+    if x == -1.0 {
+        f32::NEG_INFINITY
+    } else if x < -1.0 {
+        f32::NAN
+    } else {
+        x
+    }
 }

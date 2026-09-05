@@ -405,6 +405,100 @@ fn atan_dd(q: DoubleDouble) -> DoubleDouble {
 /// sign of `y` with `copysign`.
 #[inline]
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f32 {
+    let r = atan2_fast::<false>(a, b, x_negative);
+    if let Some(value) = atan2_round(r) {
+        return value;
+    }
+    atan2_mag_accurate(a, b, x_negative)
+}
+
+/// Relative rounding-test half-width shared by the radian and half-turn legs.
+/// The polynomial's relative approximation error is below 4.70e-14, giving
+/// over 9x margin before the f64 evaluation error. The quotient, polynomial,
+/// and quadrant folds are certified
+/// together by `ziv_soundness`; the accurate tier settles the rare f32 ties.
+const ATAN2_EPS: f64 = crate::exp2i(-41);
+
+/// `atan(sqrt(z))/sqrt(z)` on `z ∈ [0, 1]`, a degree-15 Chebyshev fit.
+/// Write the target as `g(z) = integral_0^1 1/(1 + z*t²) dt`. Its interpolation
+/// remainder is `W(z) * integral_0^1 A(t)/(1 + z*t²) dt`, where `W` is the
+/// monic Chebyshev node polynomial and `A(t) = product_j t²/(1 + z_j*t²)`
+/// increases with `t`. Since `1/(1 + z*t²)` decreases with `t`, the relative
+/// remainder is bounded by `|W(0)| * integral_0^1 A(t) dt = 1 - P(0)`:
+/// 4.684e-14. Coefficient rounding adds at most 7.618e-17 relative (sum of
+/// coefficient errors divided by `g(1) = π/4`), so the bound is 4.70e-14.
+/// `ziv_soundness` additionally includes evaluation, quotient rounding, and
+/// the quadrant folds. Generated independently with:
+/// ```text
+/// python3 -c 'import mpmath as m; m.mp.dps=90;
+/// p=m.chebyfit(lambda z:m.atan(m.sqrt(z))/m.sqrt(z), [0,1],16);
+/// print("\n".join(repr(float(c))+"," for c in reversed(p)))'
+/// ```
+const ATAN2_POLY: [f64; 16] = [
+    0.999_999_999_999_953_1,
+    -0.333_333_333_309_310_53,
+    0.199_999_997_939_534_96,
+    -0.142_857_072_466_787_06,
+    0.111_109_837_749_621_85,
+    -0.090_895_025_090_027_9,
+    0.076_819_849_160_459_11,
+    -0.066_134_944_958_944_22,
+    0.056_826_465_091_119_466,
+    -0.047_005_235_904_944_216,
+    0.035_447_830_488_371_3,
+    -0.022_792_063_782_796_54,
+    0.011_594_726_016_119_614,
+    -0.004_269_501_096_678_408_5,
+    0.000_996_134_899_106_262_4,
+    -0.000_109_501_337_372_926_65,
+];
+
+/// Plain-f64 angle for positive, finite, nonzero f32 magnitudes. Their ratio
+/// lies above 2^-277, so both the ratio and its square stay normal in f64.
+/// The polynomial avoids a second division, then folds about π/2 and π (or
+/// exact 1/2 and 1). Conditional selects fold the quadrants; x86 uses opaque
+/// integer masks to prevent LLVM from turning those selects into branches.
+#[inline]
+fn atan2_fast<const HALF_TURNS: bool>(a: f64, b: f64, x_negative: bool) -> f64 {
+    let q = a.min(b) / a.max(b);
+    let r = q * crate::poly(q * q, &ATAN2_POLY);
+    let (r, half, full) = if HALF_TURNS {
+        (r * core::f64::consts::FRAC_1_PI, 0.5_f64, 1.0_f64)
+    } else {
+        (r, core::f64::consts::FRAC_PI_2, core::f64::consts::PI)
+    };
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        // LLVM recognizes transparent masks as selects and reintroduces two
+        // unpredictable branches on x86. Opaque masks retain integer bit ops;
+        // the Ryzen benchmark drops atan2pif from 28.5 to 24.5 ns. AArch64's
+        // native fsub/fcsel pairs are cheaper than these opaque masks.
+        let swap = core::hint::black_box(u64::from(b > a).wrapping_neg());
+        let phi = f64::from_bits(r.to_bits() ^ (swap & (1 << 63)))
+            + f64::from_bits(half.to_bits() & swap);
+        let negative = core::hint::black_box(u64::from(x_negative).wrapping_neg());
+        f64::from_bits(phi.to_bits() ^ (negative & (1 << 63)))
+            + f64::from_bits(full.to_bits() & negative)
+    }
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        let phi = if b > a { half - r } else { r };
+        if x_negative { full - phi } else { phi }
+    }
+}
+
+#[inline]
+fn atan2_round(r: f64) -> Option<f32> {
+    let upper = crate::fast_mul_add(r, ATAN2_EPS, r) as f32;
+    let lower = crate::fast_mul_add(r, -ATAN2_EPS, r) as f32;
+    (upper == lower).then_some(upper)
+}
+
+/// Original double-double pipeline, retained for the fast leg's rounding ties.
+#[cold]
+#[inline(never)]
+fn atan2_mag_accurate(a: f64, b: f64, x_negative: bool) -> f32 {
     let phi = if a >= b {
         atan_dd(DoubleDouble::from_quotient(b, a))
     } else {
@@ -463,12 +557,22 @@ const FRAC_1_PI_DD: DoubleDouble = DoubleDouble {
     low: -1.967_867_667_518_248_6e-17,
 };
 
-/// Magnitude of `atan2pi(y, x)`: [`atan2_mag`]'s double-double angle times
-/// the double-double `1/π` before the one rounding to `f32` — ≈2⁻⁷⁰
-/// relative, deep enough for every bivariate corpus tie the promoted f64
-/// path double-rounds.
+/// Magnitude of `atan2pi(y, x)`: the shared plain-f64 polynomial with exact
+/// half-turn quadrant offsets. Rounding-test failures recover the angle and
+/// `1/π` in double-double — ≈2⁻⁷⁰ relative, deep enough for every bivariate
+/// corpus tie the promoted f64 path double-rounds.
 #[inline]
 fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f32 {
+    let r = atan2_fast::<true>(a, b, x_negative);
+    if let Some(value) = atan2_round(r) {
+        return value;
+    }
+    atan2pi_mag_accurate(a, b, x_negative)
+}
+
+#[cold]
+#[inline(never)]
+fn atan2pi_mag_accurate(a: f64, b: f64, x_negative: bool) -> f32 {
     let phi = if a >= b {
         atan_dd(DoubleDouble::from_quotient(b, a))
     } else {
@@ -501,7 +605,7 @@ fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f32 {
 ///
 /// [`atan2f`]'s quadrant dispatch with exact half-turn rays (`±¼`/`±¾` at
 /// infinite corners, `±½` on the axes, `±0`/`±1` at zero `y`), and
-/// [`atan2pi_mag`]'s double-double kernel for the finite interior.  The
+/// [`atan2pi_mag`]'s gated kernel for the finite interior. The
 /// worst-cases corpus in `tests/atan2pif.rs` gates it bit-exactly.
 #[must_use]
 #[inline]
@@ -834,4 +938,92 @@ pub fn atan2f(y: f32, x: f32) -> f32 {
     }
 
     atan2_mag(x.abs().into(), y.abs().into(), x.is_sign_negative()).copysign(y)
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::{Float, float::Constant};
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Certify the exact scalar and relative gate seen by each public function.
+    /// The dense ratio sweep resolves the polynomial; representation-uniform
+    /// pairs exercise quotient rounding and the entire f32 exponent span. Both
+    /// signs of x cover every quadrant (the final sign of y is exact).
+    #[test]
+    fn atan2_fast_legs_are_sound() {
+        let pi = Float::with_val(250, Constant::Pi);
+        let mut worst = [0.0_f64; 2];
+        let mut worst_at = [(0.0_f64, 0.0_f64); 2];
+        let mut checked = 0_u64;
+        let mut check = |a: f32, b: f32| {
+            if !(a > 0.0 && b > 0.0 && a.is_finite() && b.is_finite()) {
+                return;
+            }
+            let a = f64::from(a);
+            let b = f64::from(b);
+            let angle = (Float::with_val(250, b) / Float::with_val(250, a)).atan();
+            for negative in [false, true] {
+                let truth = if negative {
+                    Float::with_val(250, &pi - &angle)
+                } else {
+                    angle.clone()
+                };
+                let scaled = Float::with_val(250, &truth / &pi);
+                let values = [
+                    (atan2_fast::<false>(a, b, negative), &truth),
+                    (atan2_fast::<true>(a, b, negative), &scaled),
+                ];
+                for (i, (got, truth)) in values.into_iter().enumerate() {
+                    let error = (Float::with_val(250, got) - truth).abs().to_f64();
+                    let ratio = error / (got * ATAN2_EPS);
+                    if ratio > worst[i] {
+                        worst[i] = ratio;
+                        worst_at[i] = (if negative { -a } else { a }, b);
+                    }
+                }
+                checked += 1;
+            }
+        };
+
+        for i in 1..=1_000_000_u64 {
+            let q = (i as f64 / 1_000_000.0) as f32;
+            check(1.0, q);
+            check(q, 1.0);
+            let h = mix(i);
+            check(
+                f32::from_bits((h as u32) & 0x7fff_ffff),
+                f32::from_bits(((h >> 32) as u32) & 0x7fff_ffff),
+            );
+        }
+        // Binade edges, adjacent magnitudes, and the most extreme ratios.
+        for exponent in 0..255_u32 {
+            let bits = (exponent << 23).max(1);
+            for offset in 0..=2 {
+                let x = f32::from_bits(bits + offset);
+                check(x, f32::from_bits(1));
+                check(f32::from_bits(1), x);
+                check(x, f32::MAX);
+                check(f32::MAX, x);
+                check(x, f32::from_bits(bits + 1));
+            }
+        }
+
+        assert!(checked > 5_900_000);
+        for (i, name) in ["atan2f", "atan2pif"].into_iter().enumerate() {
+            let (x, y) = worst_at[i];
+            println!(
+                "{name} fast leg: worst |err|/gate = {:.6} ({:.1}x margin), x={x:e}, y={y:e}",
+                worst[i],
+                1.0 / worst[i]
+            );
+            assert!(worst[i] < 0.5, "{name} gate lacks 2x margin");
+        }
+    }
 }

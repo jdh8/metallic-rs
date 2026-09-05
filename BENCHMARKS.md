@@ -2,6 +2,8 @@
 
 Measured 2026-09-05 (Asia/Taipei; UTC timestamps below) on the local machine and `dl02.skymizer.com`. The tables cover all **112 exposed math functions**: 46 f32 and 46 f64 functions on each host, plus all 20 opt-in binary128 functions on dl02. Each default run also includes nine gamma band measurements, reported separately.
 
+Subsequent improvements to six f32 functions are recorded in the [f32 optimization measurements](benchmarks/2026-09-05/f32-optimization/README.md), with paired before/after results and correctness checks.
+
 Times are Criterion **median nanoseconds per iteration**. **M/CORE = metallic / CORE-MATH** from the same benchmark run; below 1.00× favors metallic. Compare implementations within each row. Times characterize the recorded hosts, toolchains, and input distributions; they imply no universal ranking. A dash means that the harness has no corresponding comparison lane.
 
 ## Method and provenance
