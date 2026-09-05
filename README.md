@@ -194,8 +194,8 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `acosq`  | ✅ | 0.97× |
-| `asinq`  | ✅ | 1.03× |
+| `acosq`  | ✅ | 0.82× |
+| `asinq`  | ✅ | 0.89× |
 | `atanq`  | ✅ | 1.02× |
 | `atan2q` | ✅ | 1.01× |
 | `cbrtq`  | ✅ | 0.89× |
@@ -227,13 +227,16 @@ soundness certification.
 reduced argument: no root is formed at all and the fast leg is a bare Taylor
 series, in floating form for `asin` and summed into `π/2 ∓ ·` for `acos`.  The
 band charges each binade for its own width — fourteen terms below 2^-4,
-nineteen in the top binade alone — because the root pipeline costs 2.7× the
-series there and the extra terms must not be billed to the binades that never
-needed them.  Above the band both are the `atan2q` pipeline fed a wide
-`√(1−x²)`:
-`1 − x²` is exact in fixed point, the root reaches 2^-207 (fast leg) and
-2^-305 (accurate leg), and the reduction runs in 256/384-bit limbs before
-rejoining `atan2q`'s legs, tables, and certified Ziv gate.
+nineteen in the top binade alone.  Above it the fast leg reduces on dyadic
+*sine* breakpoints and never divides: with `u = min(x, √(1−x²))` and
+`v = max(·)`, the breakpoint `sin φ_j = j/128` is read off `u`'s top bits, and
+`sin(asin(u) − φ_j) = u·cos φ_j − v·(j/128)` makes one side an exact
+small-integer product and the other a 256-bit multiply by the tabulated
+`cos φ_j`; the same series finishes the difference, and `asin(j/128)` adds
+back in `atan2q`'s frame.  `1 − x²` is exact in fixed point and its root is
+`sqrtq`'s own integer frame plus one Newton step against all 256 bits.  The
+accurate leg is the `atan2q` pipeline fed a 384-bit root, with its own
+reduction, tables, and certified Ziv gate.
 
 `sinq` and `cosq` reduce by Payne–Hanek on 64-bit limbs of 2/π: the window
 starts at the limb the exponent points to, everything above the units bit but

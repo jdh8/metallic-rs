@@ -71,6 +71,15 @@ fn sqrt_fixed(mantissa: u128, w: i32) -> u128 {
 /// shift truncation costs at most a few units.  The seed reads only the top
 /// 64 bits, so bits past the 113th cost it nothing.
 pub(super) fn sqrt_wide(z: u128) -> u128 {
+    sqrt_wide_seeded(z).0
+}
+
+/// [`sqrt_wide`] together with its seed `r = R·2^-63 ≈ z^(-1/2)` (strictly
+/// below the true value, within ~2^-43): `1/(2√z)` for one more Newton step
+/// on a wider residual, which is how [`super::asin`] reaches 2^-160 without a
+/// second seed or a divide.
+#[inline]
+pub(super) fn sqrt_wide_seeded(z: u128) -> (u128, u64) {
     #[allow(clippy::cast_possible_truncation)]
     let w = (z >> 127) as i32;
     let r = rsqrt64(z >> (14 + w), w);
@@ -93,7 +102,7 @@ pub(super) fn sqrt_wide(z: u128) -> u128 {
     // ⅜h²s·2^125; 3/8 is dyadic, so the shifts fold it in exactly.
     let quadratic = (((hs * hs) >> 68) * 3 * u128::from(s64)) >> 65;
 
-    s0 + linear + quadratic
+    (s0 + linear + quadratic, r)
 }
 
 /// Half-width, in units of the candidate's 2^-124, of the rounding-tie window
@@ -175,6 +184,7 @@ fn rsqrt_fixed(mantissa: u128, w: i32) -> u128 {
 /// `z^(-1/2)·2^63` for `z = mantissa·2^(w−112) ∈ [1, 4)`, strictly below the
 /// true value and within ~2^-43 of it — the shared seed of [`rsqrt_fixed`]
 /// and [`sqrt_fixed`].
+#[inline]
 fn rsqrt64(mantissa: u128, w: i32) -> u64 {
     // Degree-2 Taylor expansion of m^(-1/2) from the nearest of 64 interval
     // centers c = 1 + (2i+1)/128: within 2^-22.6 of the true value, so the

@@ -479,8 +479,26 @@ pub(super) fn combine(
     quadrant: usize,
     negate: bool,
 ) -> (u128, i32) {
+    combine_phi(
+        [PHI[sector][1], PHI[sector][2]],
+        theta,
+        negative,
+        quadrant,
+        negate,
+    )
+}
+
+/// [`combine`] with the breakpoint angle supplied by the caller, in the same
+/// 2^-253 frame: [`super::asin`]'s root band adds `asin(j/128)` here.
+#[inline]
+pub(super) fn combine_phi(
+    phi: [u128; 2],
+    theta: [u128; 2],
+    negative: bool,
+    quadrant: usize,
+    negate: bool,
+) -> (u128, i32) {
     // Both signs are coin flips on mixed quadrants: select by mask, not branch.
-    let phi = [PHI[sector][1], PHI[sector][2]];
     let arc = add_signed_256(phi, theta, negative);
     let qoff = [QOFF[quadrant][1], QOFF[quadrant][2]];
     let s = add_signed_256(qoff, arc, negate);

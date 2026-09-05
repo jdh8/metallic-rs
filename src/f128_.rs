@@ -3,6 +3,7 @@
 #![warn(clippy::unreadable_literal)]
 
 mod asin;
+mod asin_tables;
 mod atan2;
 mod atan2_tables;
 mod cbrt_tables;

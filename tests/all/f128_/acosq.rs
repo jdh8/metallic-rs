@@ -36,6 +36,24 @@ fn breakpoints() -> impl Iterator<Item = f128> {
     })
 }
 
+/// A few ulps around the fast leg's own breakpoints `±j/128` and their
+/// pullbacks `±√(1 − (j/128)²)`, where the sine difference collapses onto the
+/// root's slip alone.
+fn sine_breakpoints() -> impl Iterator<Item = f128> {
+    (0..SAMPLE_COUNT).map(|i| {
+        let bits = common128::mix128(i);
+        let j = (bits >> 113 & 127) as u32 % 91 + 1;
+        let t = f128::from(j) / 128.0;
+        let x = if bits & (1 << 126) == 0 {
+            t
+        } else {
+            metallic::sqrtq(1.0 - t * t)
+        };
+        let jitter = x.to_bits().wrapping_add(bits >> 119 & 15).wrapping_sub(7);
+        f128::from_bits((bits & (1 << 127)) | jitter)
+    })
+}
+
 /// The top binade approaching `±1`: tiny positive results on one side, the
 /// approach to π on the other.
 fn near_one() -> impl Iterator<Item = f128> {
@@ -58,6 +76,7 @@ fn test_acosq() {
         core_math::acosq,
         dense()
             .chain(breakpoints())
+            .chain(sine_breakpoints())
             .chain(near_one())
             .chain((0..SAMPLE_COUNT).map(domain)),
     );

@@ -177,22 +177,29 @@ series and the root finally meet.  `asin` keeps the floating frame; `acos`
 places it into `atan2q`'s 2^-253 frame as `π/2 ∓ ·`, reusing `PHI`/`QOFF`
 through the shared `place`/`combine`.
 
-Above the band both are the `atan2q` pipeline fed a *wide* square root:
-`asin(x) = atan2(x, √(1−x²))`, `acos(x) = atan2(√(1−x²), x)`.  `1 − x²` is
-exact in fixed point (`x²` is an exact 226-bit integer; a one-sided ⌈·⌉ at
-2^-384 covers deep exponents), so the root keeps full relative accuracy even
-next to `|x| = 1`, and `√(1−x²) ≥ 2^-57` keeps every exponent narrow.  An
-f64-seeded rsqrt refined by *one* `rsqrt_step` plus one Newton step at 256 bits
-reaches ~2^-207 for the fast leg — the leg's true need is 2^-133 (the sector's
-2^7 cancellation over a 2^-126 reduction), so hypot's second doubling step is
-pure latency here and `frame_residual` keeps the resulting shift windows
-honest.  The accurate leg takes one more step at 384 bits (~2^-305) and
-re-derives its own sort, sector, and reduction.  The breakpoint reduction runs
-in 256/384-bit limbs (the root is no longer a 113-bit significand; a 14-bit
-downshift buys the headroom `atan2q` had for free), then the fast leg truncates
-to the top 128 bits and rejoins `atan2q`'s `fast`, guard, and `ZIV_GATE`
-unchanged.  `asin.rs`'s own `ziv_soundness` certifies both legs together (worst
-|err|/gate 0.0667 ≈ 15× margin).  Tiny inputs need no special path: once
+Above the band the fast leg reduces on *dyadic sine breakpoints* and never
+divides (2026-09-05; the root path went 2.09× → 1.24× of CORE-MATH, asinq
+1.03× → 0.89×, acosq 0.96× → 0.82× on the full bench band).  With `u = min(x, √(1−x²))`, `v = max(·)`, the
+breakpoint is `sin φ_j = j/128` with `j = round(128·u)` read off `u`'s top
+bits, and `t = sin(asin(u) − φ_j) = u·cos φ_j − v·(j/128)` makes one side an
+*exact* small-integer product and the other a 256-bit multiply by the
+tabulated `cos φ_j` (`asin_tables.rs`, `tools/gen_asin_f128.py`); `|t| <
+2^-7.4` feeds the same `series`, and `asin(u) = φ_j + asin(t)` sums with
+`PHI[j] = asin(j/128)` in `atan2q`'s 2^-253 frame (`combine_phi`).  The sort
+is a constant compare against `√2/2`, off the root's critical path; when `v`
+is `x` its product is exact and `u`'s 2^sh scale (the root's normalization
+parity) rides through the frame unshifted (`j·2^sh ≤ 128`, so nothing
+overflows).  The root is `sqrt_wide`'s pure-integer frame on the top 128 bits
+of the *exact* 256-bit `1 − x²` (~2^-121) plus one Newton step against all 256
+bits dividing by the *same* `rsqrt64` seed (`sqrt_wide_seeded` returns it):
+~2^-160, and absolute accuracy is all the difference needs since `t`'s error
+enters the result directly against a half-ulp ≥ 2^-116.  A zero sector
+(`√(1−x²) < 2^-8`) is the relative band: the series in floating form on the
+root itself.  The accurate leg is unchanged — the `atan2q` pipeline fed a
+384-bit f64-seeded root (`wide_sqrt`, `sqrt_384`), a 384-bit dyadic-tangent
+reduction, `recip_wide`, and `atan_frac_384`.  `asin.rs`'s own `ziv_soundness`
+certifies both legs together (worst |err|/gate 0.0799 ≈ 12.5× margin, in the
+series band's top binade).  Tiny inputs need no special path: once
 `x² < 2^-128` of `x` the series *is* `x`, which is what `asin(x) = x + x³/6 + …`
 rounds to, down through the subnormals.
 
