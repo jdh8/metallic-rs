@@ -1633,6 +1633,20 @@ const LN1P_Q_COEFFS: [f64; 8] = [
     0.1111111111111111,
 ];
 
+/// Taylor tail `(ln(1+x) − x)/x²` for the smaller `|x| < 2⁻⁸` band.
+/// Generate with `python3 -c 'for k in range(2, 8): print((-1)**(k+1) / k)'`.
+/// The omitted logarithm terms total at most `|x|⁸ / (8·(1−|x|))`, or
+/// 0.251 of the `x²·2⁻⁴⁹` gate. The larger exact-`z` cells keep their
+/// degree-7 [`LN1P_Q_COEFFS`] and their separate absolute error budget.
+const LN1P_Q_SMALL: [f64; 6] = [
+    -0.5,
+    0.3333333333333333,
+    -0.25,
+    0.2,
+    -0.16666666666666666,
+    0.14285714285714285,
+];
+
 /// Plain-`f64` tail of `ln(1+x)` past the exact `x − x²/2`:
 /// `f(x) = (ln(1+x) − x + x²/2)/x³ = ∑_{k≥0} (−1)ᵏ xᵏ/(k+3)`, low-degree first.
 ///
@@ -1663,14 +1677,15 @@ const LN1P_F_WIDE: [f64; 14] = [
 /// the absolute error bound is `x² · LN1P_SMALL_ZIV_SCALE`.
 ///
 /// Every error in the branch scales with the `x²·Q(x)` correction: the Estrin
-/// evaluation of [`LN1P_Q_COEFFS`] (≈4·2⁻⁵⁴ against `|Q| ≈ ½`), the roundings
-/// of `x·x` and of the `x²·Q` product (≤2⁻⁵⁴ relative each), and the degree-7
-/// truncation (`x⁷/10 ≤ 2⁻⁵⁹` relative to the correction) — together under
-/// `2⁻⁵¹·⁴·x²`, so `2⁻⁴⁸` keeps a ~10× margin.  Scaling the gate by `x²` (the
-/// old gate was a flat `2⁻⁵⁶` *relative*, sized for the worst `|x| ≈ 2⁻⁸`)
-/// drops the straddle odds to `≈2⁻⁴⁵·|x|` — the fallback all but vanishes,
-/// where the flat gate fell back on ≈2⁻³·⁵ of random small inputs.
-const LN1P_SMALL_ZIV_SCALE: f64 = 3.552713678800501e-15; // 2^-48
+/// evaluation of [`LN1P_Q_SMALL`] (≈4·2⁻⁵⁴ against `|Q| ≈ ½`), the roundings
+/// of `x·x` and of the `x²·Q` product (≤2⁻⁵⁴ relative each), and the series
+/// truncation are separate: the roundings stay under `2⁻⁵¹·⁴·x²`, and the
+/// degree-5 truncation contributes at most 0.251 of the gate. Together they
+/// consume less than 0.46 of the `2⁻⁴⁹·x²` gate, retaining over 2× margin.
+/// Since the result's ulp is about `|x|·2⁻⁵²`, the straddle odds are of order
+/// `16·|x|`: misses concentrate near the top of the band. This gate also
+/// controls the costly 128-bit series fallback of the base-2/base-10 lifts.
+const LN1P_SMALL_ZIV_SCALE: f64 = 1.7763568394002505e-15; // 2^-49
 
 /// Ziv gate for `log1p`'s mid-`|x|` leg (`2⁻⁸ ≤ |x| < 2⁻⁴`): an absolute bound
 /// `|x|³ · LN1P_WIDE_ZIV_SCALE` on the leg error.
@@ -1752,11 +1767,18 @@ fn log1p_small_accurate(x: f64) -> f64 {
 /// lead plus the `x²·Q(x)` correction, as the raw pair the
 /// [`LN1P_SMALL_ZIV_SCALE`] gate consumes (soundness certified by
 /// `ziv_soundness::log1p_small_leg_is_sound`).
+///
+/// Keep `x` and the correction separate: the gate accepts this unnormalized
+/// pair directly, and the base-2/base-10 lifts can start their leading
+/// `x·log_b(e)` product while the polynomial is still evaluating. Their
+/// double-double multiply drops `tail·LOG{2,10}_E_LO`, at most
+/// `x²·2⁻⁵⁶`, well within the lifted `x²·2⁻⁴⁹` gate. The remaining product
+/// rounding also scales with `x²`, apart from the existing `2⁻¹⁰¹` floor.
 #[inline]
 fn log1p_small_eval(x: f64) -> DoubleDouble {
     let zz = x * x;
-    let tail = zz * crate::poly(x, &LN1P_Q_COEFFS);
-    fast_sum(x, tail)
+    let tail = zz * crate::poly(x, &LN1P_Q_SMALL);
+    DoubleDouble { high: x, low: tail }
 }
 
 /// The mid-`|x|` fast leg of [`log1p`] (`2⁻⁸ ≤ |x| < 2⁻⁴`): the exact
@@ -2116,8 +2138,8 @@ pub fn log1p(x: f64) -> f64 {
     // tiny, and `x` is already an exact reduced argument in the kernel's range.
     if x.abs() < 1.0 / 256.0 {
         // Fast path: `x` is exact here, so `ln(1+x) = x + x²·Q(x)` evaluates
-        // directly with the shared degree-7 plain-`f64` `Q`, and the `x` lead
-        // stays exact in the Fast2Sum.  The Ziv gate scales with the `x²`
+        // directly with the degree-5 plain-`f64` `Q`, and the `x` lead
+        // stays separate from its correction.  The Ziv gate scales with the `x²`
         // correction ([`LN1P_SMALL_ZIV_SCALE`]) — every error source does — so
         // the straddle odds shrink with `|x|` and the accurate kernel almost
         // never runs.  When `x²` underflows the gate is 0 and `x` itself is the
@@ -2476,29 +2498,14 @@ mod ziv_soundness {
     #[test]
     fn log1p_small_leg_is_sound() {
         let gate = |x: f64| LN1P_SMALL_ZIV_SCALE * (x * x);
-        let (lo, hi) = (5.551115123125783e-17, 3.90625e-3);
-        let (wp, xp) = worst_ratio(lo, hi, 4_000_000, log1p_small_eval, gate, |x| {
-            x.clone().ln_1p()
-        });
-        let (wn, xn) = worst_ratio(
-            lo,
-            hi,
-            4_000_000,
-            |t| log1p_small_eval(-t),
-            gate,
-            |t| (-t.clone()).ln_1p(),
-        );
-        println!("log1p small leg: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
-        assert!(
-            wp < 0.5,
-            "log1p small gate covers only {:.2}× the slip at x={xp:e}",
-            1.0 / wp
-        );
-        assert!(
-            wn < 0.5,
-            "log1p small gate covers only {:.2}× the slip at x=-{xn:e}",
-            1.0 / wn
-        );
+        for (name, lo, n) in [
+            ("log1p small leg", crate::exp2i(-54), 4_000_000),
+            ("log1p small leg top band", crate::exp2i(-12), 500_000),
+        ] {
+            signed_leg_cert(name, (lo, 3.90625e-3), n, &log1p_small_eval, &gate, &|x| {
+                x.clone().ln_1p()
+            });
+        }
     }
 
     /// The `|x|³`-scaled [`LN1P_WIDE_ZIV_SCALE`] gate must cover
@@ -2578,25 +2585,19 @@ mod ziv_soundness {
         );
     }
 
-    /// Both signs of a lifted `log2p1`/`log10p1` leg against its production
+    /// Both signs of a `log1p`/`log2p1`/`log10p1` leg against its production
     /// gate: the leg and gate closures receive the signed `x` exactly as the
     /// public function forms them.
-    fn lifted_leg_cert(
+    fn signed_leg_cert(
         name: &str,
         (lo, hi): (f64, f64),
+        n: u64,
         leg: &dyn Fn(f64) -> DoubleDouble,
         gate: &dyn Fn(f64) -> f64,
         fref: &dyn Fn(&Float) -> Float,
     ) {
-        let (wp, xp) = worst_ratio(lo, hi, 3_000_000, leg, gate, fref);
-        let (wn, xn) = worst_ratio(
-            lo,
-            hi,
-            3_000_000,
-            |t| leg(-t),
-            |t| gate(-t),
-            |t| fref(&-t.clone()),
-        );
+        let (wp, xp) = worst_ratio(lo, hi, n, leg, gate, fref);
+        let (wn, xn) = worst_ratio(lo, hi, n, |t| leg(-t), |t| gate(-t), |t| fref(&-t.clone()));
         println!("{name}: worst |err|/gate = {wp:.4} at x={xp:e}, {wn:.4} at x=-{xn:e}");
         assert!(
             wp < 0.5,
@@ -2616,28 +2617,35 @@ mod ziv_soundness {
     /// under the floor.
     #[test]
     fn log2p1_small_leg_is_sound() {
-        lifted_leg_cert(
-            "log2p1 small leg",
-            (crate::exp2i(-900), 3.90625e-3),
-            &|x| log1p_small_eval(x) * LOG2_E_DD,
-            &|x| {
-                let v = log1p_small_eval(x) * LOG2_E_DD;
-                crate::fast_mul_add(
-                    x * x,
-                    LN1P_SMALL_ZIV_SCALE * LOG2_E_HI,
-                    v.high.abs() * crate::exp2i(-101),
-                )
-            },
-            &|x| x.clone().log2_1p(),
-        );
+        let leg = |x| log1p_small_eval(x) * LOG2_E_DD;
+        let gate = |x| {
+            let v = log1p_small_eval(x) * LOG2_E_DD;
+            crate::fast_mul_add(
+                x * x,
+                LN1P_SMALL_ZIV_SCALE * LOG2_E_HI,
+                v.high.abs() * crate::exp2i(-101),
+            )
+        };
+        // The upper four binades stress the unnormalized correction and its
+        // omitted low×low product; broad representation sampling mostly hits
+        // tiny x, where that correction vanishes below the product floor.
+        for (name, lo, n) in [
+            ("log2p1 small leg", crate::exp2i(-900), 3_000_000),
+            ("log2p1 small leg top band", crate::exp2i(-12), 500_000),
+        ] {
+            signed_leg_cert(name, (lo, 3.90625e-3), n, &leg, &gate, &|x| {
+                x.clone().log2_1p()
+            });
+        }
     }
 
     /// The lifted wide-leg gate over `[2⁻⁸, 2⁻⁴)`.
     #[test]
     fn log2p1_wide_leg_is_sound() {
-        lifted_leg_cert(
+        signed_leg_cert(
             "log2p1 wide leg",
             (3.90625e-3, 0.0625),
+            3_000_000,
             &|x| log1p_wide_eval(x) * LOG2_E_DD,
             &|x| {
                 let v = log1p_wide_eval(x) * LOG2_E_DD;
@@ -2688,28 +2696,32 @@ mod ziv_soundness {
     /// [`log10p1`]'s small leg, as [`log2p1_small_leg_is_sound`].
     #[test]
     fn log10p1_small_leg_is_sound() {
-        lifted_leg_cert(
-            "log10p1 small leg",
-            (crate::exp2i(-900), 3.90625e-3),
-            &|x| log1p_small_eval(x) * LOG10_E_DD,
-            &|x| {
-                let v = log1p_small_eval(x) * LOG10_E_DD;
-                crate::fast_mul_add(
-                    x * x,
-                    LN1P_SMALL_ZIV_SCALE * LOG10_E_HI,
-                    v.high.abs() * crate::exp2i(-101),
-                )
-            },
-            &|x| x.clone().log10_1p(),
-        );
+        let leg = |x| log1p_small_eval(x) * LOG10_E_DD;
+        let gate = |x| {
+            let v = log1p_small_eval(x) * LOG10_E_DD;
+            crate::fast_mul_add(
+                x * x,
+                LN1P_SMALL_ZIV_SCALE * LOG10_E_HI,
+                v.high.abs() * crate::exp2i(-101),
+            )
+        };
+        for (name, lo, n) in [
+            ("log10p1 small leg", crate::exp2i(-900), 3_000_000),
+            ("log10p1 small leg top band", crate::exp2i(-12), 500_000),
+        ] {
+            signed_leg_cert(name, (lo, 3.90625e-3), n, &leg, &gate, &|x| {
+                x.clone().log10_1p()
+            });
+        }
     }
 
     /// [`log10p1`]'s wide leg, as [`log2p1_wide_leg_is_sound`].
     #[test]
     fn log10p1_wide_leg_is_sound() {
-        lifted_leg_cert(
+        signed_leg_cert(
             "log10p1 wide leg",
             (3.90625e-3, 0.0625),
+            3_000_000,
             &|x| log1p_wide_eval(x) * LOG10_E_DD,
             &|x| {
                 let v = log1p_wide_eval(x) * LOG10_E_DD;

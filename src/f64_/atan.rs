@@ -2325,19 +2325,39 @@ pub fn acos(x: f64) -> f64 {
     asin_tail(off, z, zl, r, j).unwrap_or_else(|| acos_accurate(x))
 }
 
-/// Fold the first-quadrant angle `inner = atan(small/big) ∈ [0, π/4]` into the
-/// quadrant the signs select: `π/2 − inner` when `|y| > |x|` (`swapped`), then
-/// `π − ·` when `x < 0`.  Shared by both `atan2` fast tiers; the double-double
-/// adds carry the exact `π/2`/`π` low words, so the fold costs only ≈2⁻¹⁰⁵.
+/// Fold `inner = atan(small/big) ∈ [0, π/4]` into its quadrant in one add.
+/// The four cases are `inner`, `π − inner`, `π/2 − inner`, and `π/2 + inner`:
+/// select their offsets together, and apply `swapped XOR x_negative` to both
+/// words' sign bits. Every nonzero offset dominates `inner.high`, so one
+/// ordered fold replaces two serial, sign-dependent double-double additions.
 #[inline]
 fn atan2_octant(inner: DoubleDouble, swapped: bool, x_negative: bool) -> DoubleDouble {
-    let phi = if swapped {
-        FRAC_PI_2 + neg(inner)
-    } else {
-        inner
-    };
-    if x_negative { PI + neg(phi) } else { phi }
+    const OFFSETS: [DoubleDouble; 4] = [ZERO, PI, FRAC_PI_2, FRAC_PI_2];
+    let offset = OFFSETS[2 * usize::from(swapped) + usize::from(x_negative)];
+    let sign = u64::from(swapped ^ x_negative) << 63;
+    offset.add_ordered(DoubleDouble {
+        high: f64::from_bits(inner.high.to_bits() ^ sign),
+        low: f64::from_bits(inner.low.to_bits() ^ sign),
+    })
 }
+
+/// Relative bound on the compensated ratio's cubic correction, with
+/// `u = 2^-53`. Over `q < ATAN_SMALL`, the coefficient/Taylor remainder costs
+/// < 0.6u, polynomial evaluation < 2.01u, forming q²/q³ and the final product
+/// < 3.01u, and evaluating at rounded q omits `-q²·ql + O(q⁴·ql)`, costing
+/// < 3.01u of the correction. The low-word and quadrant folds add < 3.01u;
+/// the half-turn multiply adds < 2u. Their sum is < 14u, so 32u gives over
+/// twice the bound. Errors proportional to q alone (the quotient residual)
+/// or the quadrant offset ride the separate 2^-100/2^-98 floors.
+const ATAN_RATIO_CORR_EPS: f64 = crate::exp2i(-48);
+
+/// Fine-cell error per unit |h|: the two FMAs and division that form h cost
+/// < 3.01u, the separately evaluated cubic correction and coefficient errors
+/// < 0.02u, and adding h back < 1.01u. The octant folds add < 2.01u and the
+/// half-turn multiply < 1.57u: < 7.62u altogether, so 16u keeps > 2× margin.
+/// Table constants and additions involving their low limbs use the relative
+/// floor in `atan2_fast_raw`, independently of h.
+const ATAN_RATIO_CELL_EPS: f64 = crate::exp2i(-49);
 
 /// `atan(small/big)` for `0 < small ≤ big` as a lean unrounded pair, plus the
 /// absolute Ziv half-width — the plain-`f64` first tier of [`atan2_mag`],
@@ -2346,19 +2366,38 @@ fn atan2_octant(inner: DoubleDouble, swapped: bool, x_negative: bool) -> DoubleD
 ///
 /// `q = small/big` only *picks the cell*; the reduced argument is formed from the
 /// exact `(small, big)` as `h = (small − tan c·big)/(big + tan c·small)`, so the
-/// quotient's `≲2⁻⁵³` rounding rides the `|h|·ATAN_ZIV_E` gate exactly as in
-/// CORE-MATH's `atan2`.  Because the octant fold (above) preserves the absolute
-/// error, the caller can gate the *quadrant-adjusted* pair with this half-width.
+/// quotient's rounding is irrelevant to the approximation. The two FMAs and
+/// division that form h are charged by `|h|·ATAN_RATIO_CELL_EPS`, together with
+/// the polynomial and later folds. `atan2_fast_raw` adds a relative floor for
+/// the table constants and quadrant offsets before testing the final pair.
 #[inline]
 fn atan_ratio(big: f64, small: f64, q: f64) -> (DoubleDouble, f64) {
     let qb = q.to_bits();
     if qb < ATAN_SMALL {
-        // Small ratio: atan(q) = q + q³·P(q²).  The division's `≲2⁻⁵³` slip and
-        // the tiny correction both ride the `q·ATAN_ZIV_E` gate; `q` is the
-        // dominant word so the octant fold's 2Sum keeps it ordered.
+        // Small ratio: compensate the IEEE quotient before adding atan's cubic
+        // correction. Without that residual, the several-ulp quotient gate
+        // almost always rejects the first-quadrant result, making the larger
+        // double-double reduction pay for inputs whose series is already tiny.
         let q2 = q * q;
         let corr = (q * q2) * crate::poly(q2, &ATAN_FAST_CH2);
-        return (DoubleDouble { high: q, low: corr }, q * ATAN_ZIV_E);
+        if small < crate::exp2i(-960) || q < crate::exp2i(-955) {
+            // A subnormal FMA residual can lose the quotient's low bits. Keep
+            // the original wide gate here; the scaled accurate tier owns any
+            // ambiguous result, including the direct underflow boundary.
+            return (DoubleDouble { high: q, low: corr }, q * ATAN_ZIV_E);
+        }
+        // The reciprocal is independent of the quotient residual and can
+        // overlap the first division; its rounding costs only the low word.
+        let reciprocal = 1.0 / big;
+        let ql = crate::fma(-q, big, small) * reciprocal;
+        let eps = crate::fast_mul_add(corr.abs(), ATAN_RATIO_CORR_EPS, q * crate::exp2i(-100));
+        return (
+            DoubleDouble {
+                high: q,
+                low: ql + corr,
+            },
+            eps,
+        );
     }
 
     // Fine cell from `q`'s bits (the quadratic index fit of `atan_fast`), reduced
@@ -2376,19 +2415,47 @@ fn atan_ratio(big: f64, small: f64, q: f64) -> (DoubleDouble, f64) {
     let tab = unsafe { *ATAN_FAST_TABLE.get_unchecked(i) };
     let ta = tab.high;
     let h = crate::fma(-ta, big, small) / crate::fma(ta, small, big);
-    let f = crate::poly(h * h, &ATAN_FAST_CH); // atan(h)/h
+    // Keep atan(h)'s cubic correction separate: rounding atan(h)/h near 1
+    // would spend up to 2u of h before the final add and quadrant folds.
+    let h2 = h * h;
+    let correction =
+        (h * h2) * crate::poly(h2, &[ATAN_FAST_CH[1], ATAN_FAST_CH[2], ATAN_FAST_CH[3]]);
     let ih = i as f64;
     // atan(q) = i·π/256 + atan(h); `ATAN_STEP_HI·i` is exact for i ≤ 64, and
     // `al` collects the within-cell angle plus the cell lead's low words.
     let ah = ATAN_STEP_HI * ih;
-    let al = crate::fma(h, f, crate::fast_mul_add(ATAN_STEP_LO, ih, tab.low));
-    (DoubleDouble { high: ah, low: al }, h.abs() * ATAN_ZIV_E)
+    let al = h + (crate::fast_mul_add(ATAN_STEP_LO, ih, tab.low) + correction);
+    (
+        DoubleDouble { high: ah, low: al },
+        h.abs() * ATAN_RATIO_CELL_EPS,
+    )
+}
+
+/// Reconstruct the first-tier pair and its absolute gate. The reduction's
+/// error scales with its residual, while table low-word rounding and the
+/// quadrant fold need a relative floor even when that residual is zero.
+/// At `small = big`, for example, the table pair differs from π/4 by 2^-104.2
+/// but the residual-derived gate vanishes. Neighbors of cell 46 add two low-word
+/// roundings and need a wider floor: 2^-98 retains margin for the table and
+/// reconstruction errors; `ziv_soundness` checks the complete pair.
+#[inline]
+fn atan2_fast_raw(
+    big: f64,
+    small: f64,
+    q: f64,
+    swapped: bool,
+    x_negative: bool,
+) -> (DoubleDouble, f64) {
+    let (inner, eps) = atan_ratio(big, small, q);
+    let value = atan2_octant(inner, swapped, x_negative);
+    let eps = crate::fast_mul_add(value.high, crate::exp2i(-98), eps);
+    (value, eps)
 }
 
 /// Magnitude of `atan2(y, x)` in `[0, π]` for finite nonzero `a = |x|`, `b = |y|`.
 #[inline]
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
-    let (big, small, swapped) = if a >= b { (a, b, false) } else { (b, a, true) };
+    let (big, small, swapped) = (a.max(b), a.min(b), b > a);
     let q = small / big;
 
     // Subnormal-result corner: the magnitude can only be subnormal in the
@@ -2416,8 +2483,7 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
     // unscaled reduction's products (`tan c·big`, `small − tan c·big`) under/overflow
     // and lose bits, so those rare extremes take the dd tier's scaled reduction.
     if (crate::exp2i(-960)..=crate::exp2i(1020)).contains(&big) {
-        let (inner, e) = atan_ratio(big, small, q);
-        let v = atan2_octant(inner, swapped, x_negative);
+        let (v, e) = atan2_fast_raw(big, small, q, swapped, x_negative);
         let lo = v.high + (v.low - e);
         let hi = v.high + (v.low + e);
         if lo == hi {
@@ -2528,7 +2594,7 @@ fn atan2pi_tint_mag(a: f64, b: f64, x_negative: bool) -> f64 {
 /// tier keeps its scale-invariant relative gate, and the 192-bit tier takes
 /// the lift inside [`atan2pi_tint_mag`].
 fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f64 {
-    let (big, small, swapped) = if a >= b { (a, b, false) } else { (b, a, true) };
+    let (big, small, swapped) = (a.max(b), a.min(b), b > a);
     let q = small / big;
 
     // Deep-tail corner, much wider than `atan2_mag`'s: below q ≈ 2⁻⁹⁵⁵ the
@@ -2539,8 +2605,7 @@ fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f64 {
     }
 
     if (crate::exp2i(-960)..=crate::exp2i(1020)).contains(&big) {
-        let (inner, e) = atan_ratio(big, small, q);
-        let v = atan2_octant(inner, swapped, x_negative);
+        let (v, e) = atan2_fast_raw(big, small, q, swapped, x_negative);
         let w = v * INV_PI;
         let eps = crate::fast_mul_add(e, INV_PI.high, w.high.abs() * crate::exp2i(-102));
         let lo = w.high + (w.low - eps);
@@ -3260,6 +3325,15 @@ mod fold_ordering {
         }
     }
 
+    /// The quadrant offsets are zero (an exact fold) or at least π/2, while
+    /// the inner high word is at most π/4 plus its reduction's rounding slip.
+    #[test]
+    fn atan2_offsets() {
+        let inner_max = ATAN_STEP_HI * 64.0 * 1.0001;
+        assert!(inner_max < FRAC_PI_2.high);
+        assert!(inner_max < PI.high);
+    }
+
     /// [`asin_tail`]'s `off ⊕ p` fold: `|off| ≥ |p.high|` for every nonzero
     /// offset (`off = 0`, asin's direct branch, is exact unconditionally).
     /// `|p.high| ≤ Bmax·|z|·(1 + ε)` with `Bmax = B(¼)` the largest table lead;
@@ -3293,6 +3367,152 @@ mod ziv_soundness {
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
+    }
+
+    /// Certify both bivariate fast legs after quadrant reconstruction. Mix
+    /// value-uniform ratios with the floating band and all reduction-cell
+    /// centres/seams, carrying the inputs over the unscaled leg's full range.
+    #[test]
+    fn atan2_fast_legs_are_sound() {
+        const PREC: u32 = 250;
+        // Bound the small polynomial against the alternating Taylor series.
+        // This isolates the coefficient/remainder part of the analytic gate:
+        // every coefficient discrepancy is charged by absolute value, and
+        // z^4/11 bounds the entire omitted alternating tail.
+        let edge = Float::with_val(PREC, f64::from_bits(ATAN_SMALL));
+        let z = Float::with_val(PREC, &edge * &edge);
+        let mut power = Float::with_val(PREC, 1);
+        let mut coefficient_error = Float::with_val(PREC, 0);
+        for (k, coefficient) in ATAN_FAST_CH2.iter().enumerate() {
+            let numerator = if k % 2 == 0 { -1 } else { 1 };
+            let exact = Float::with_val(PREC, numerator) / (2 * k + 3) as u32;
+            let mut error = (Float::with_val(PREC, *coefficient) - exact).abs();
+            error *= &power;
+            coefficient_error += error;
+            power *= &z;
+        }
+        coefficient_error += Float::with_val(PREC, &power / 11);
+        coefficient_error /= Float::with_val(PREC, 1) / 3 - Float::with_val(PREC, &z / 5);
+        coefficient_error *= crate::exp2i(53);
+        assert!(coefficient_error < 0.6);
+
+        // The fine-cell coefficients use the same alternating-series bound.
+        // ATAN_SMALL exceeds tan(π/512), so this interval is conservative.
+        let mut power = Float::with_val(PREC, 1);
+        let mut fine_error = Float::with_val(PREC, 0);
+        for (k, coefficient) in ATAN_FAST_CH.iter().enumerate() {
+            let numerator = if k % 2 == 0 { 1 } else { -1 };
+            let exact = Float::with_val(PREC, numerator) / (2 * k + 1) as u32;
+            let mut error = (Float::with_val(PREC, *coefficient) - exact).abs();
+            error *= &power;
+            fine_error += error;
+            power *= &z;
+        }
+        fine_error += Float::with_val(PREC, &power / 9);
+        fine_error *= crate::exp2i(53);
+        assert!(fine_error < 0.017);
+
+        let pi = Float::with_val(PREC, rug::float::Constant::Pi);
+        let half_pi = Float::with_val(PREC, &pi / 2);
+        let mut worst = [0.0_f64; 2];
+        let mut worst_case = [(0.0, 0.0, false, false); 2];
+        let mut check = |big: f64, small: f64| {
+            if !(crate::exp2i(-960)..=crate::exp2i(1020)).contains(&big)
+                || small <= 0.0
+                || small > big
+            {
+                return;
+            }
+            let q = small / big;
+            // The deep direct corner has a separately proved rounded-quotient
+            // shortcut (atan2) or goes straight to Tint (atan2pi).
+            if q <= crate::exp2i(-955) {
+                return;
+            }
+            let mut angle = Float::with_val(PREC, small);
+            angle /= big;
+            angle.atan_mut();
+            for swapped in [false, true] {
+                let phi = if swapped {
+                    Float::with_val(PREC, &half_pi - &angle)
+                } else {
+                    angle.clone()
+                };
+                for x_negative in [false, true] {
+                    let truth = if x_negative {
+                        Float::with_val(PREC, &pi - &phi)
+                    } else {
+                        phi.clone()
+                    };
+                    let (v, e) = atan2_fast_raw(big, small, q, swapped, x_negative);
+                    let w = v * INV_PI;
+                    let scaled_eps =
+                        crate::fast_mul_add(e, INV_PI.high, w.high.abs() * crate::exp2i(-102));
+                    let scaled_truth = Float::with_val(PREC, &truth / &pi);
+                    for (j, (pair, eps, reference)) in
+                        [(v, e, &truth), (w, scaled_eps, &scaled_truth)]
+                            .into_iter()
+                            .enumerate()
+                    {
+                        let got =
+                            Float::with_val(PREC, pair.high) + Float::with_val(PREC, pair.low);
+                        let mut error = Float::with_val(PREC, got - reference).abs();
+                        error /= eps;
+                        let ratio = error.to_f64();
+                        if ratio > worst[j] {
+                            worst[j] = ratio;
+                            worst_case[j] = (big, small, swapped, x_negative);
+                        }
+                    }
+                }
+            }
+        };
+        for i in 0..1_000_000_u64 {
+            let h = mix(i);
+            let exponent = -960 + ((h >> 52) % 1980) as i64;
+            let big = f64::from_bits((((exponent + 1023) as u64) << 52) | (h & (u64::MAX >> 12)));
+            let r = mix(i ^ 0x9e37_79b9);
+            let ratio = if i & 1 == 0 {
+                r as f64 / u64::MAX as f64
+            } else {
+                let e = -954 + ((r >> 52) % 954) as i64;
+                f64::from_bits((((e + 1023) as u64) << 52) | (r & (u64::MAX >> 12)))
+            };
+            check(big, big * ratio);
+        }
+        for exponent in [-960, -900, -500, -40, 0, 40, 500, 1019, 1020] {
+            let big = crate::exp2i(exponent);
+            for cell in &ATAN_FAST_TABLE[..=64] {
+                for bits in [
+                    cell.high.to_bits().saturating_sub(1),
+                    cell.high.to_bits(),
+                    cell.high.to_bits() + 1,
+                ] {
+                    check(big, big * f64::from_bits(bits));
+                }
+            }
+            for bits in [ATAN_SMALL - 1, ATAN_SMALL, ATAN_SMALL + 1] {
+                check(big, big * f64::from_bits(bits));
+            }
+            let small_cut = crate::exp2i(-960).to_bits();
+            for bits in [small_cut - 1, small_cut, small_cut + 1] {
+                check(big, f64::from_bits(bits));
+            }
+            let ratio_cut = crate::exp2i(-955).to_bits();
+            for bits in [ratio_cut - 1, ratio_cut, ratio_cut + 1] {
+                check(big, big * f64::from_bits(bits));
+            }
+        }
+        for (i, name) in ["atan2", "atan2pi"].into_iter().enumerate() {
+            println!(
+                "{name} fast leg: worst |err|/gate = {:.6} at {:?}",
+                worst[i], worst_case[i]
+            );
+        }
+        assert!(
+            worst.iter().all(|&ratio| ratio < 0.5),
+            "insufficient gate margin"
+        );
     }
 
     /// Worst `|leg(x) − asin(x)/π| / eps` for [`asinpi`]'s rescaled fast tail,

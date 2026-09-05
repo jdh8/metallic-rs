@@ -201,6 +201,38 @@ const TAN_TAIL: [f64; 15] = [
     9.276_165_196_030_918e-08,
 ];
 
+/// Taylor coefficients of `(tan(x) − x)/x³`, low-degree first in `x²`,
+/// for `|x| < 1/32`. The omitted relative tail is below 2⁻⁷⁹; the rounding
+/// error scales with the correction, covered by [`TAN_SMALL_ZIV_SCALE`].
+/// Generate independently by dividing the exact sine and cosine Taylor series:
+/// ```text
+/// python3 - <<'PY'
+/// from fractions import Fraction as F
+/// from math import factorial
+/// a = []
+/// for k in range(7):
+///     a.append(F((-1)**k, factorial(2*k+1))
+///         - sum(a[j]*F((-1)**(k-j), factorial(2*(k-j))) for j in range(k)))
+/// print([float(c) for c in a[1:]])
+/// PY
+/// ```
+const TAN_SMALL: [f64; 6] = [
+    0.3333333333333333,
+    0.13333333333333333,
+    0.05396825396825397,
+    0.021869488536155203,
+    0.008863235529902197,
+    0.003592128036572481,
+];
+
+/// Small-tangent gate relative to the cubic correction. The exact leading
+/// input contributes no error. Coefficient/evaluation and three product
+/// roundings consume fewer than eight binary64 unit roundoffs; 2⁻⁴⁹ is
+/// sixteen. The omitted Taylor tail is below 2⁻⁶⁷ of the correction at
+/// 1/32 and shrinks with x¹². Unlike the general result-relative gate, this
+/// window shrinks with x³, avoiding needless refinements near zero.
+const TAN_SMALL_ZIV_SCALE: f64 = crate::exp2i(-49);
+
 /// Relative half-width of the trig fast-path Ziv gate.  Over a dense sweep of
 /// the `[-π/4, π/4]` octant the fast kernel's relative error peaks at ≈2⁻⁶¹·⁶
 /// (cos) and ≈2⁻⁶⁵ (sin); `2⁻⁵⁹` keeps a ~6× margin over that while the gate
@@ -859,6 +891,42 @@ fn tan_kernel_fast(r: DoubleDouble) -> DoubleDouble {
     r * t
 }
 
+/// The raw tangent pair and its absolute gate for a nonnegative input.
+/// Below 1/32 the exact input is the leading word and only its cubic
+/// correction needs evaluating. Larger
+/// inputs use octant reduction and one lean reciprocal in odd quadrants.
+#[inline]
+fn tan_fast(x: f64) -> (DoubleDouble, f64) {
+    if x < 0.03125 {
+        let u = x * x;
+        let correction = (x * u) * crate::poly(u, &TAN_SMALL);
+        return (
+            DoubleDouble {
+                high: x,
+                low: correction,
+            },
+            correction.abs() * TAN_SMALL_ZIV_SCALE,
+        );
+    }
+
+    let (q, r) = rem_pio2(x);
+    let t = tan_kernel_fast(r);
+    let v = if q & 1 == 0 {
+        t
+    } else {
+        // −1/t: the inner FMA extracts the exact division residual; the outer
+        // one folds t.low into e = 1 + y·t. Dropping y·e² costs about 2⁻¹⁰⁴
+        // relative, well below the 2⁻⁵⁹ gate.
+        let y = -1.0 / t.high;
+        let e = crate::fma(y, t.low, crate::fma(y, t.high, 1.0));
+        DoubleDouble {
+            high: y,
+            low: y * e,
+        }
+    };
+    (v, v.high.abs() * TRIG_ZIV_EPS)
+}
+
 /// Reconstruct `sin(|x|)` from the kernel pair and quadrant `q` (before the sign
 /// of `x` is restored).  Shared by the fast and accurate paths so they select
 /// identically.
@@ -883,7 +951,12 @@ fn select_cos(q: i64, s: DoubleDouble, c: DoubleDouble) -> DoubleDouble {
 /// error interval agree, else `None` to fall back to the accurate kernel.
 #[inline]
 fn ziv(v: DoubleDouble) -> Option<f64> {
-    let eps = v.high.abs() * TRIG_ZIV_EPS;
+    ziv_with_eps(v, v.high.abs() * TRIG_ZIV_EPS)
+}
+
+/// Round a raw pair when both ends of its absolute error interval agree.
+#[inline]
+fn ziv_with_eps(v: DoubleDouble, eps: f64) -> Option<f64> {
     let lo = v.high + (v.low - eps);
     let hi = v.high + (v.low + eps);
     (lo == hi).then_some(lo)
@@ -2587,27 +2660,8 @@ pub fn tan(x: f64) -> f64 {
         return x;
     }
 
-    let (q, r) = rem_pio2(x.abs());
-
-    // tan has period π, so tan(|x|) = tan(r) for even quadrants and −cot(r) =
-    // −1/tan(r) for odd ones — one kernel, a reciprocal only half the time.
-    let t = tan_kernel_fast(r);
-    let fast = if q & 1 == 0 {
-        t
-    } else {
-        // −1/t leanly: seed `y = −1/t.high` (the inner FMA's cancellation is
-        // exact), fold `t.low` into the residual `e = 1 + y·t`, and take
-        // `y·(1 + e)` — dropping `y·e²` ≈ 2⁻¹⁰⁴ relative, noise to the 2⁻⁵⁹
-        // gate.  The full Newton `recip` (a double-double multiply, add, and
-        // multiply on top of the divide) buys accuracy the gate cannot use.
-        let y = -1.0 / t.high;
-        let e = crate::fma(y, t.low, crate::fma(y, t.high, 1.0));
-        DoubleDouble {
-            high: y,
-            low: y * e,
-        }
-    };
-    let magnitude = ziv(fast).unwrap_or_else(|| {
+    let (fast, eps) = tan_fast(x.abs());
+    let magnitude = ziv_with_eps(fast, eps).unwrap_or_else(|| {
         // Accurate `Dint` path: the sin/cos pair ratio in 128-bit fixed point.
         let (q, r) = payne_hanek_dint(x.abs());
         let (s, c) = sin_cos_dint(&r);
@@ -2706,9 +2760,8 @@ mod fold_ordering {
     }
 }
 
-/// MPFR-certified soundness of `sinpi`'s lean-table-leg Ziv gate.  The gate may
-/// only confirm a rounding when its relative half-width [`SINPI_ZIV_EPS`] truly
-/// exceeds the leg's error.  Run with `--features mpfr`.
+/// MPFR certification of the trigonometric fast legs and their Ziv gates.
+/// Run with `--features mpfr`.
 #[cfg(all(test, feature = "mpfr"))]
 mod ziv_soundness {
     use super::*;
@@ -2719,6 +2772,79 @@ mod ziv_soundness {
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
+    }
+
+    /// Certify the complete reduction/kernel/reconstruction for all four
+    /// consumers of rem_pio2. Cover the octant, the whole Cody–Waite range,
+    /// every exponent through Payne–Hanek, neighbours of multiples of π/2,
+    /// and dense/logarithmic samples around tangent's small-leg threshold.
+    #[test]
+    fn trig_fast_legs_are_sound() {
+        let mut worst = [0.0_f64; 3];
+        let mut worst_x = [0.0_f64; 3];
+        let inputs = (0..3_000_000_u64).map(|i| {
+            let h = mix(i);
+            let fraction = (h >> 11) as f64 * crate::exp2i(-53);
+            match i % 6 {
+                0 => fraction * core::f64::consts::FRAC_PI_4,
+                1 => fraction * 1_048_576.0,
+                2 => {
+                    let exponent = 996 + (i / 6) % 1051;
+                    f64::from_bits((exponent << 52) | (h >> 12))
+                }
+                3 => {
+                    let center = ((h >> 32) % 667_545) as f64 * core::f64::consts::FRAC_PI_2;
+                    f64::from_bits(center.to_bits().wrapping_add_signed((h % 5) as i64 - 2))
+                }
+                4 => {
+                    let lo = SMALL.to_bits();
+                    let hi = 0.0625_f64.to_bits();
+                    f64::from_bits(lo + h % (hi - lo))
+                }
+                _ => 0.015625 + fraction * 0.03125,
+            }
+        });
+        let seams = [SMALL, 0.03125].into_iter().flat_map(|x| {
+            (-4..=4).map(move |offset| f64::from_bits(x.to_bits().wrapping_add_signed(offset)))
+        });
+        for x in inputs.chain(seams) {
+            if !x.is_finite() || x < SMALL {
+                continue;
+            }
+            let (q, r) = rem_pio2(x);
+            let (s, c) = sin_cos_kernel_fast(r);
+            let (s, c) = (select_sin(q, s, c), select_cos(q, s, c));
+            let values = [
+                (s, s.high.abs() * TRIG_ZIV_EPS),
+                (c, c.high.abs() * TRIG_ZIV_EPS),
+                tan_fast(x),
+            ];
+            let truths = [
+                Float::with_val(250, x).sin(),
+                Float::with_val(250, x).cos(),
+                Float::with_val(250, x).tan(),
+            ];
+            for (j, ((v, eps), truth)) in values.into_iter().zip(truths).enumerate() {
+                let got = Float::with_val(250, v.high) + Float::with_val(250, v.low);
+                let error = Float::with_val(250, got - truth).abs().to_f64();
+                let ratio = error / eps;
+                if ratio > worst[j] {
+                    worst[j] = ratio;
+                    worst_x[j] = x;
+                }
+            }
+        }
+        for (j, name) in ["sin", "cos", "tan"].into_iter().enumerate() {
+            println!(
+                "{name} fast leg: worst |err|/gate = {} at x={:e}",
+                worst[j], worst_x[j]
+            );
+            assert!(
+                worst[j] < 0.5,
+                "{name} gate has only {}× margin",
+                1.0 / worst[j]
+            );
+        }
     }
 
     /// Worst `|leg(x) − sin(πx)| / SINPIN_ERR` for the main-band integer-

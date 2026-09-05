@@ -3369,13 +3369,12 @@ fn erf_small_accurate(x: f64) -> f64 {
 /// [`ERF_TABLE`] — the fast leg that sidesteps the `erfc` bridge's `exp`.
 ///
 /// `i = round(16·ax)` picks the cell (`xi = i/16`); `h = ax − xi` is exact
-/// (Sterbenz, `|h| ≤ 1/32`).  The `c2..c10` tail is summed in `f64`, then the
-/// `c1`/`c0` leads fold as `cₖ + h·acc`: an exact product, a Fast2Sum on the
-/// high words (valid: `|h·acc|` stays under half the lead coefficient in every
-/// cell — see `fold_ordering`), and an `f64` low-word carry.  These two folds
-/// are the table leg's whole serial chain, so the cheap Fast2Sum beats a full
-/// renormalizing double-double `Add` (same error class: both leave
-/// ≈2⁻¹⁰⁵-scale residue, far under the leg's ≈2⁻⁶⁷ budget).
+/// (Sterbenz, `|h| ≤ 1/32`). Keep `c0 + h·c1.high` as an exact pair while the
+/// plain-f64 tail evaluates independently. The correction `h·(c1.low + h·tail)`
+/// enters last through one FMA, after the small product/addition residuals have
+/// combined. The gate accepts this unnormalized pair directly, avoiding a
+/// Fast2Sum on the tail's critical path. Its correction-scale rounding is
+/// included in `ziv_soundness::erf_table_leg_is_sound`, for both erf and erfc.
 #[inline]
 fn erf_table_eval(ax: f64) -> DoubleDouble {
     let fi = (ax * 16.0).round_ties_even();
@@ -3385,15 +3384,14 @@ fn erf_table_eval(ax: f64) -> DoubleDouble {
 
     // P(h) = c0 + h·(c1 + h·tail), tail = c2 + c3·h + … in f64.  The finer 1/16
     // cell (|h| ≤ 1/32) keeps the `c2..` tail accurate enough in plain `f64` to
-    // need only two double-double folds (`c1`, `c0`) — one fewer than the 1/8 table.
+    // fold into the low word while the exact linear lead evaluates independently.
     let tail = crate::poly(h, &cell.tail);
-    let s1 = fast_sum(cell.c1.high, h * tail);
-    let l1 = s1.low + cell.c1.low;
-    let p0 = DoubleDouble::from_product(h, s1.high);
+    let l1 = crate::fast_mul_add(h, tail, cell.c1.low);
+    let p0 = DoubleDouble::from_product(h, cell.c1.high);
     let s0 = fast_sum(cell.c0.high, p0.high);
     DoubleDouble {
         high: s0.high,
-        low: s0.low + (cell.c0.low + crate::fma(h, l1, p0.low)),
+        low: crate::fma(h, l1, s0.low + cell.c0.low + p0.low),
     }
 }
 
@@ -3846,25 +3844,45 @@ mod ziv_soundness {
         (worst, worst_x)
     }
 
-    /// The table fast leg's Ziv gate must be *sound*: `ERF_TABLE_ZIV_EPS` has to
-    /// exceed [`erf_table_eval`]'s true worst-case relative error (measured here
-    /// at ≈2⁻⁶¹·⁸, larger than the minimax nominal) with margin, or a confident
-    /// `lo == hi` could certify a value on the wrong side of a rounding boundary
-    /// (the off-corpus 1-ulp `erf` errors near `x ≈ 0.469`).
+    /// Measure the actual gates on the unnormalized erf pair and on the
+    /// negative-erfc consumer's `1 + erf` fold, including every cell seam.
     #[test]
     fn erf_table_leg_is_sound() {
-        let (worst, x) = worst_rel(0.4375, 6.25, 4_000_000, |x| erf_table_eval(x));
-        println!(
-            "erf_table_eval: worst rel error 2^{:.2} at x={x:e}; eps = 2^{:.2}",
-            worst.log2(),
-            ERF_TABLE_ZIV_EPS.log2()
-        );
-        assert!(
-            ERF_TABLE_ZIV_EPS > 2.0 * worst,
-            "ERF_TABLE_ZIV_EPS = 2^{:.2} does not cover 2^{:.2}",
-            ERF_TABLE_ZIV_EPS.log2(),
-            worst.log2()
-        );
+        let mut worst = [0.0_f64; 2];
+        let mut worst_x = [0.0_f64; 2];
+        let mut check = |x: f64| {
+            let e = erf_table_eval(x);
+            let truth = Float::with_val(250, x).erf();
+            let erfc = ONE.add_ordered(e);
+            let truth_erfc = Float::with_val(250, &truth + 1);
+            for (j, (pair, reference)) in [(e, &truth), (erfc, &truth_erfc)].into_iter().enumerate()
+            {
+                let got = Float::with_val(250, pair.high) + Float::with_val(250, pair.low);
+                let error = Float::with_val(250, got - reference).abs();
+                let ratio = (error / (pair.high.abs() * ERF_TABLE_ZIV_EPS)).to_f64();
+                if ratio > worst[j] {
+                    worst[j] = ratio;
+                    worst_x[j] = x;
+                }
+            }
+        };
+        let (lo, hi) = (0.4375_f64.to_bits(), 6.25_f64.to_bits());
+        for i in 0..4_000_000 {
+            check(f64::from_bits(lo + mix(i) % (hi - lo)));
+        }
+        for i in 7..100 {
+            let seam = (f64::from(i) + 0.5) / 16.0;
+            for offset in -2..=2 {
+                check(f64::from_bits(seam.to_bits().wrapping_add_signed(offset)));
+            }
+        }
+        for (j, name) in ["erf table", "negative erfc table"].into_iter().enumerate() {
+            println!(
+                "{name}: worst |err|/gate = {:.6} at x={:e}",
+                worst[j], worst_x[j]
+            );
+            assert!(worst[j] < 0.5, "{name}: insufficient gate margin");
+        }
     }
 
     /// Same soundness check for the small-`|x|` fast leg ([`ERF_SMALL_FAST`]):
