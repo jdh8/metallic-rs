@@ -11,7 +11,7 @@ use common::Identity as _;
 // no MPFR, and the MPFR sweeps stay the independent cross-check.
 
 /// Size of `tests/cases/cosq.wc` (kept in sync with the generator).
-const CORPUS_LEN: usize = 39_664;
+const CORPUS_LEN: usize = 96_265;
 
 const SAMPLE_COUNT: u64 = 200_000;
 

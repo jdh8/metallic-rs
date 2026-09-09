@@ -11,7 +11,7 @@ use common::Identity as _;
 // the independent cross-check.
 
 /// Size of `tests/cases/tanq.wc` (kept in sync with the generator).
-const CORPUS_LEN: usize = 39_597;
+const CORPUS_LEN: usize = 95_383;
 
 const SAMPLE_COUNT: u64 = 200_000;
 

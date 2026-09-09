@@ -5,14 +5,14 @@
 //!
 //! 1. **Reduce.** `x·2/π` is formed as an exact product of the 113-bit
 //!    significand with a window of 2/π cut from 64-bit limbs at the exponent
-//!    (Payne–Hanek): five limbs on the fast leg, nine on the accurate one.
+//!    (Payne–Hanek): six limbs on the fast leg, ten on the accurate one.
 //!    Everything above the units bit but its two low bits is a multiple of 4
 //!    and drops; what is left is the quadrant and a fraction, 192 bits wide on
 //!    the fast leg and 448 on the accurate one.
 //! 2. **Split.** Quadrant and fraction round to `n = round(256·x/π) mod 512`
 //!    — the quadrant `n >> 7` and a breakpoint `j = n & 127` — leaving a
 //!    signed residual `g` with `|g| ≤ 1/256`, so `θ = g·π/2` stays within
-//!    `π/512 < 2^-7.35`.  `|g|` normalizes into a floating fraction at its
+//!    `π/512 < 2^-7.34`.  `|g|` normalizes into a floating fraction at its
 //!    own exponent, so the residual keeps full relative precision however
 //!    deep the cancellation; the fast leg only insists on 136 of its 192 bits
 //!    ([`MAX_LZ`]) and hands anything closer to a multiple of π/2 over.
@@ -48,7 +48,7 @@ use super::uint::{
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, QUIET_BIT, SIGN_MASK, split};
 
-/// Below 2^-57 the sine rounds to `x` and the cosine to 1: `x³/6 < 2^-170.6`
+/// Below 2^-57 the sine rounds to `x` and the cosine to 1: `x³/6 < 2^-173.5`
 /// sits under the half ulp 2^-171 of `x`, and `x²/2 < 2^-115` under the half
 /// ulp 2^-114 below 1.
 pub(super) const TINY: u128 = ((BIAS - 57) as u128) << EXP_SHIFT;
@@ -163,17 +163,19 @@ pub(super) struct Residual {
     pub(super) et: i32,
 }
 
-/// Payne–Hanek on five limbs of 2/π: `None` when the residual keeps fewer
-/// than 136 of the fraction's 192 bits.
+/// Payne–Hanek on six limbs of 2/π: `None` when the residual keeps fewer
+/// than 136 of the fraction's 192 bits. The omitted 2/π tail contributes less
+/// than `2^(shift−269) ≤ 2^-206` to `x·2/π`, below the 192-bit cut.
 #[inline]
 pub(super) fn reduce(m: u128, e: i32) -> Option<Residual> {
-    let (window, shift) = window::<5>(e);
-    let p: [u64; 8] = product(m, window);
+    let (window, shift) = window::<6>(e);
+    let p: [u64; 9] = product(m, window);
     // The fraction is the 192 bits below the units bit, the quadrant the two
-    // above: four funnels at one offset, from limb `i ≤ 3`.
-    let base = (126 - shift) as u32;
-    debug_assert!((63..=248).contains(&base));
-    let i = (base / 64) as usize & 3;
+    // above: four funnels at one offset, from limb `i ≤ 4`.
+    let base = (190 - shift) as u32;
+    debug_assert!((127..=312).contains(&base));
+    let i = (base / 64) as usize;
+    debug_assert!(i <= 4);
     let bits = base % 64;
     let f0 = funnel_down(p[i], p[i + 1], bits);
     let f1 = funnel_down(p[i + 1], p[i + 2], bits);
@@ -222,7 +224,7 @@ pub(super) const fn squares(t1: u128, et: i32) -> (u128, u128, u128) {
 
 /// `sin θ` in `θ`'s own floating form: `t1·(1 − u·(A − u·B))` with the even
 /// and odd halves of `Σ (−1)^k u^k/(2k+3)!` as two short chains in `v`.  Six
-/// terms: the seventh is below 2^-143 for `u < 2^-14.7`.
+/// terms: the seventh is below 2^-143 for `u < 2^-14.69`.
 #[inline]
 fn sin_frac(t1: u128, u: u128, v: u128) -> u128 {
     let s = |k: usize| SIN_COEF[k][2];
@@ -234,7 +236,7 @@ fn sin_frac(t1: u128, u: u128, v: u128) -> u128 {
 
 /// `1 − cos θ` as the floating fraction `c1·2^(2·et−128)`: `θ²·(½ − u·W)`
 /// with `W` the even and odd halves of `Σ (−1)^k u^k/(2k+4)!` in `v`.  Seven
-/// terms: the eighth is below 2^-131 of the correction.
+/// terms: the eighth is below 2^-146 of the correction.
 #[inline]
 fn cos_corr(u1: u128, u: u128, v: u128) -> u128 {
     let c = |k: usize| COS_COEF[k][2];
@@ -291,14 +293,16 @@ fn fast(m: u128, e: i32, cosine: bool) -> Option<(u128, i32, u128)> {
     Some((top_256(f, lz), -(lz as i32), flip))
 }
 
-/// [`reduce`] on nine limbs of 2/π and a 448-bit fraction, the residual as a
-/// normalized 384-bit fraction `t·2^(et−384)`.
+/// [`reduce`] on ten limbs of 2/π and a 448-bit fraction, the residual as a
+/// normalized 384-bit fraction `t·2^(et−384)`. The omitted tail is below
+/// `2^-462`, so all 448 fraction bits are meaningful.
 pub(super) fn reduce_wide(m: u128, e: i32) -> (usize, bool, [u128; 3], i32) {
-    let (window, shift) = window::<9>(e);
-    let p: [u64; 12] = product(m, window);
-    let base = (126 - shift) as u32;
-    debug_assert!((63..=248).contains(&base));
-    let i = (base / 64) as usize & 3;
+    let (window, shift) = window::<10>(e);
+    let p: [u64; 13] = product(m, window);
+    let base = (190 - shift) as u32;
+    debug_assert!((127..=312).contains(&base));
+    let i = (base / 64) as usize;
+    debug_assert!(i <= 4);
     let bits = base % 64;
     let mut f = [0; 7];
 
@@ -487,7 +491,7 @@ mod tests {
 /// true error with the 2× margin the project requires.  Run with
 /// `CC=clang cargo +nightly test --release --features "f128 mpfr"`.
 #[cfg(all(test, feature = "mpfr"))]
-mod ziv_soundness {
+pub(super) mod ziv_soundness {
     use super::super::MANTISSA_MASK;
     use super::super::atan2::ZIV_GATE;
     use super::*;
@@ -528,6 +532,51 @@ mod ziv_soundness {
         x + crate::f128_::exp2i(-i64::from(t))
     }
 
+    /// A convergent of `2^(e−111)/π` nearest a chosen residual `2^-t`,
+    /// for `e ∈ [114, 16383]`, `t ∈ [8, 57]`. This exercises the large-input
+    /// cancellation that a mantissa-uniform sampler almost never reaches.
+    pub(in crate::f128_) fn fast_window(i: u64) -> f128 {
+        use rug::Integer;
+        use std::sync::LazyLock;
+        static PI: LazyLock<Integer> = LazyLock::new(|| {
+            (Float::with_val(17_064, Constant::Pi) << 17_000u32)
+                .to_integer()
+                .expect("finite pi")
+        });
+        let e = 114 + (mix(i) % (16384 - 114)) as i32;
+        let target = 8 + (mix(!i) % 50) as i32;
+        let numerator = Integer::from(1) << (e - 111 + 17_000) as u32;
+        let mut a = numerator.clone();
+        let mut b = PI.clone();
+        let (mut p0, mut q0) = (Integer::from(0), Integer::from(1));
+        let (mut p1, mut q1) = (Integer::from(1), Integer::from(0));
+        let mut best = (i32::MAX, 1u128);
+        loop {
+            let (quotient, remainder) = a.div_rem(b.clone());
+            let p2 = Integer::from(&quotient * &p1) + &p0;
+            let q2 = Integer::from(&quotient * &q1) + &q0;
+            if q2.significant_bits() > 113 {
+                break;
+            }
+            if q2 != 0 {
+                let error = (Integer::from(&q2 * &numerator) - Integer::from(&p2 * &*PI)).abs();
+                let t = PI.significant_bits() as i32 - error.significant_bits() as i32;
+                let distance = (t - target).abs();
+                if (8..=57).contains(&t) && distance < best.0 {
+                    best = (distance, q2.to_u128().expect("113 bits"));
+                }
+            }
+            (p0, q0, p1, q1) = (p1, q1, p2, q2);
+            if remainder == 0 {
+                break;
+            }
+            a = b;
+            b = remainder;
+        }
+        assert_ne!(best.0, i32::MAX, "no fast-window convergent at e={e}");
+        (Float::with_val(113, best.1) << (e - 112)).to_f128()
+    }
+
     /// A binade edge: a mantissa within 2^-100 of a power of two from either
     /// side, where the series' leading bit moves.
     fn edge(i: u64) -> f128 {
@@ -542,10 +591,11 @@ mod ziv_soundness {
     }
 
     fn draw(i: u64) -> f128 {
-        match i % 5 {
+        match i % 6 {
             0 => sample(i, -57..=20),
             1 => sample(i, -57..=16383),
             2 => edge(i),
+            3 => fast_window(i),
             _ => near_multiple(i),
         }
     }

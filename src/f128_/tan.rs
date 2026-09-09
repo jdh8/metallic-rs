@@ -72,7 +72,7 @@ const fn flip(negative: bool) -> u128 {
 
 /// `tan θ` in `θ`'s own floating form: `t1·(1 + u·P)` with the even and odd
 /// halves of `Σ TAN_COEF[k]·u^k` as two chains in `v`.  Eight terms: the
-/// ninth is below 2^-143 for `u < 2^-14.7`.  `tan θ > θ` can carry into the
+/// ninth is below 2^-144 for `u < 2^-14.69`.  `tan θ > θ` can carry into the
 /// next binade, which only the top of the direct band reaches.
 #[inline]
 fn tan_frac(t1: u128, et: i32, u: u128, v: u128) -> (u128, i32) {
@@ -370,10 +370,11 @@ mod ziv_soundness {
     }
 
     fn draw(i: u64) -> f128 {
-        match i % 5 {
+        match i % 6 {
             0 => sample(i, -57..=20),
             1 => sample(i, -57..=16383),
             2 => edge(i),
+            3 => super::super::trig::ziv_soundness::fast_window(i),
             _ => near_multiple(i),
         }
     }

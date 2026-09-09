@@ -18,20 +18,20 @@ from math import factorial as ifactorial
 from mpmath import bernfrac, mp, mpf, pi, sin, cos, tan, factorial, floor, nint
 
 # 2/pi must reach past the largest finite binary128 exponent (2^16383) plus the
-# widest window the accurate leg reads (9 limbs of 64 bits) - see LIMBS.
+# widest window the accurate leg reads (10 limbs of 64 bits) - see LIMBS.
 mp.prec = 17200
 
 # Little-endian 64-bit limbs of 2/pi: `FRAC_2_PI[i]` holds bits `64i+1 ..= 64i+64`
 # after the binary point.  A window starts at limb `(e - 114) / 64` for an
-# unbiased exponent `e`, so the accurate leg's nine limbs reach index 262 at
+# unbiased exponent `e`, so the accurate leg's ten limbs reach index 263 at
 # `e = 16383`.
 LIMBS = 264
 
 # Breakpoints `j*pi/256` for `j = 0..128`: the reduced angle stays within
-# `pi/512 < 2^-7.35`, so the fast leg's Taylor sums converge in six terms.
+# `pi/512 < 2^-7.34`, so the fast leg's Taylor sums converge in six terms.
 SECTORS = 128
 
-# Taylor terms of the accurate leg: `u^18/37!` for `u < 2^-14.7` is below 2^-409,
+# Taylor terms of the accurate leg: `u^18/37!` for `u < 2^-14.69` is below 2^-407,
 # far past the 384-bit frame.
 TERMS = 18
 
@@ -44,8 +44,8 @@ FRAME = 384
 TAN_FRAME = FRAME - 7
 
 # Taylor terms of tanq's accurate leg: the tangent's coefficients fall only
-# geometrically, `T_k u^k ~ 2^(0.35 - 16k)` for `u < 2^-14.7`, so twenty-five
-# terms are needed to pass 2^-384 (the 26th is below 2^-415).
+# geometrically, `T_k u^k ~ 2^(-0.30 - 16k)` for `u < 2^-14.69`, so twenty-five
+# terms are needed to pass 2^-384 (the 26th is below 2^-416).
 TAN_TERMS = 25
 
 
