@@ -209,8 +209,8 @@ Each function is done when both gates hold:
 
 | Function | CR | Perf (ratio vs CORE-MATH) |
 |----------|:--:|:--|
-| `acosq`  | ✅ | 0.82× |
-| `asinq`  | ✅ | 0.89× |
+| `acosq`  | ✅ | 0.81× |
+| `asinq`  | ✅ | 0.84× |
 | `atanq`  | ✅ | 1.02× |
 | `atan2q` | ✅ | 1.01× |
 | `cbrtq`  | ✅ | 0.89× |
@@ -239,16 +239,17 @@ legs, tables, and Ziv gate carry over, and the folded path ships its own
 soundness certification.
 
 `asinq` and `acosq` split at `|x| = 2^-3`.  Below it the arc sine is its own
-reduced argument: no root is formed at all and the fast leg is a bare Taylor
-series, in floating form for `asin` and summed into `π/2 ∓ ·` for `acos`.  The
-band charges each binade for its own width — fourteen terms below 2^-4,
-nineteen in the top binade alone.  Above it the fast leg reduces on dyadic
-*sine* breakpoints and never divides: with `u = min(x, √(1−x²))` and
+reduced argument: no root is formed at all and the fast leg is a minimax
+polynomial, in floating form for `asin` and summed into `π/2 ∓ ·` for `acos`.
+Independent Remez fits use eleven terms below 2^-4 and fourteen in the top
+binade, with exact rational error bounds after coefficient rounding.
+Above it the fast leg reduces on dyadic *sine* breakpoints and never divides:
+with `u = min(x, √(1−x²))` and
 `v = max(·)`, the breakpoint `sin φ_j = j/128` is read off `u`'s top bits, and
 `sin(asin(u) − φ_j) = u·cos φ_j − v·(j/128)` makes one side an exact
 small-integer product and the other a 256-bit multiply by the tabulated
-`cos φ_j`; the same series finishes the difference, and `asin(j/128)` adds
-back in `atan2q`'s frame.  `1 − x²` is exact in fixed point and its root is
+`cos φ_j`; a seven-term Taylor series finishes the difference, and
+`asin(j/128)` adds back in `atan2q`'s frame.  `1 − x²` is exact in fixed point and its root is
 `sqrtq`'s own integer frame plus one Newton step against all 256 bits.  The
 accurate leg is the `atan2q` pipeline fed a 384-bit root, with its own
 reduction, tables, and certified Ziv gate.
@@ -266,9 +267,10 @@ A degree-four minimax for sine and six Taylor terms for cosine in `θ²`
 `sin`/`cos(j·π/256)` table recombine in `atan2q`'s frames; below 2^-8 the
 argument is its own reduced angle, below 2^-57 the results are `x` and 1.
 
-`tanq` shares that reduction and evaluates `tan θ` by one Taylor chain (eight
-terms, twenty-five on the accurate leg; the coefficients are exact Bernoulli
-rationals), then recombines by the addition formula `tan(j·π/256 + θ) =
+`tanq` shares that reduction and evaluates `tan θ` with a degree-six minimax
+polynomial, generated independently with rminimax and certified after fixed-point
+rounding. The accurate leg keeps twenty-five Taylor terms from exact Bernoulli
+rationals. It then recombines by the addition formula `tan(j·π/256 + θ) =
 (T_j + tan θ)/(1 − T_j·tan θ)` from a table of `tan(j·π/256)`: numerator and
 denominator never cancel, and an odd quadrant just swaps them (`−cot`).  The
 quotient is `atan2q`'s hardware-seeded Newton reciprocal of the denominator's

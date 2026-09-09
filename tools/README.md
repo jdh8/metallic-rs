@@ -12,7 +12,7 @@ generator — regenerate with the script, never edit the table by hand.
 | `gen_dint_atan.py` | 128-bit `Dint` accurate-path atan constants | `src/f64_/atan.rs` |
 | `gen_dint_trig.py` | `Dint` accurate-path trig constants (minimax sin/cos) | `src/f64_/trig.rs` |
 | `gen_erf_f64.py` | `erf`/`erfc` minimax + domain-split segments + `ERF_TABLE` cells | `src/f64_/erf.rs` |
-| `gen_asin_f128.py` | binary128 `asin`/`acos` root band: `cos(asin(j/128))` and `asin(j/128)` for the dyadic sine breakpoints | `src/f128_/asin_tables.rs` |
+| `gen_asin_f128.py` | binary128 `asin`/`acos`: dyadic sine breakpoint tables and small-argument minimax polynomials (requires Julia + Remez.jl), with exact rational error bounds | `src/f128_/asin_tables.rs` |
 | `gen_erf_hard.py` | `ERFC_HARD` hard-to-round exception database | `src/f64_/erf.rs` |
 | `gen_exp_f128.py` | binary128 exp family: 2^(j/2^k) tables, `ln(2)^k/k!`, log2(e)/log2(10) limbs | `src/f128_/exp_tables.rs` |
 | `gen_exp_f64.py` | f64 `exp` table + reduction + double-double poly | `src/f64_/exp.rs` |
@@ -25,6 +25,6 @@ generator — regenerate with the script, never edit the table by hand.
 | `gen_log_f64.py` | accurate-tier constants for the log family | `src/f64_/log.rs` |
 | `gen_pow_f128.py` | binary128 `pow` third tier: ln(2) and log2(e) at 640 bits | `src/f128_/pow_tables.rs` |
 | `gen_pow_tables.py` | verbatim `Dint`/`Qint` literals from CORE-MATH `dint.h`/`qint.h` | `src/f64_/pow_consts.rs` |
-| `gen_trig_f128.py` | binary128 `sin`/`cos`: 2/π limbs, π/2, `sin`/`cos(jπ/256)` table, `1/(2k+1)!`, `1/(2k+2)!` | `src/f128_/trig_tables.rs` |
+| `gen_trig_f128.py` | binary128 `sin`/`cos`/`tan`: reduction and breakpoint tables, Taylor coefficients, independently fitted sine/tangent minimax polynomials with exact rational error bounds | `src/f128_/trig_tables.rs` |
 | `gen_trig_f64.py` | sin/cos/tan kernels, Cody–Waite π/2 words, Payne–Hanek 2/π | `src/f64_/trig.rs` |
 | `sync-worst-cases.sh` | refreshes `tests/cases/*.wc` from a `core-math-sys` checkout (`CORE_MATH_SYS` env) | `tests/all/*/*.rs` worst-case gates |

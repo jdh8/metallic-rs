@@ -2,12 +2,10 @@
 //!
 //! Two legs meet at [`BAND`].  Below `|x| = 2^-3` the arc sine *is* its own
 //! reduced argument: no square root is formed at all and the fast leg is the
-//! bare Taylor series ([`series`]), in floating form for `asin` and summed
+//! minimax polynomial ([`series`]), in floating form for `asin` and summed
 //! into `π/2 ∓ ·` in `atan2q`'s frame for `acos`.  The band pays for its own
-//! width one binade at a time: [`taylor_14`] serves everything below 2^-4,
-//! and only the top binade runs the nineteen terms of [`taylor_19`].  Since
-//! the root pipeline costs some 2.7× the series even there, every binade the
-//! series can reach is one the root should not.
+//! width one binade at a time: [`minimax_11`] serves everything below 2^-4,
+//! and only the top binade runs the fourteen terms of [`minimax_14`].
 //!
 //! Above it the fast leg ([`root_frame`]) reduces on *dyadic sine
 //! breakpoints* and never divides.  With `u = min(x, √(1−x²))` and
@@ -21,7 +19,7 @@
 //!
 //! makes one side an *exact* small-integer product and the other a 256-bit
 //! multiply by the tabulated `cos φ_j` ([`COS`]).  `|t| < 2^-7.4`, so the
-//! same Taylor series as the band below ([`series`]) finishes it, and
+//! seven Taylor terms in the shared [`series`] frame finish it, and
 //! `asin(u) = φ_j + asin(t)` sums with [`PHI`] in `atan2q`'s 2^-253 frame.
 //! The pieces, in order:
 //!
@@ -55,7 +53,7 @@
 //! the series is exactly `x`, which is what `asin(x) = x + x³/6 + …` rounds
 //! to, all the way down through the subnormals.
 
-use super::asin_tables::{COS, PHI};
+use super::asin_tables::{ASIN_BROAD, ASIN_NARROW, COS, PHI};
 use super::atan2::{
     add_signed_256, assemble_384, atan_frac_384, combine, combine_phi, place, recip_128, round_384,
     round_fast, shr_round, top_256,
@@ -123,35 +121,26 @@ fn edge(bits: u128, ax: u128, endpoint: f128) -> f128 {
     f128::NAN
 }
 
-/// Frame exponent below which the fast leg is the bare Taylor series: `x` is
-/// its own reduced argument and no square root is formed at all.
-///
-/// A binade moved in here costs the series terms and saves it a whole root —
-/// 63 ns against 172 at this edge, so the trade is worth making as long as the
-/// terms are charged only to the binade that needs them ([`NARROW_BAND`]).
-/// One binade further would need some twenty-nine terms, which is where the
-/// two finally meet.
+/// Frame exponent below which `x` is its own reduced argument: a minimax
+/// polynomial replaces the square root and table reduction.
 const BAND: i32 = -3;
 
-/// Frame exponent below which the series needs only [`taylor_14`]: the wider
-/// chain of [`taylor_19`] is the top binade's alone.
+/// Frame exponent below which the series needs only [`minimax_11`]: the wider
+/// chain of [`minimax_14`] is the top binade's alone.
 const NARROW_BAND: i32 = -4;
 
-/// `asin(x)/x = Σ_k A_k·x^(2k)` past its leading 1, in units of 2^-128:
-/// `A_k = binomial(2k+2, k+1)/(4^(k+1)·(2k+3))`, the arc sine's own Taylor
-/// coefficients, rounded to nearest.  Nineteen of them cover the whole band:
-/// the twentieth term is 2^-128.4 at `|x| = 2^-3`, and [`taylor_14`] drops
-/// the last five because at 2^-4 the fifteenth is already 2^-127.7.
+/// The root band's seven Taylor coefficients of `asin(x)/x` past its leading
+/// 1, in Q128: `A_k = binomial(2k, k)/(4^k·(2k+1))`, rounded to nearest.
 ///
 /// ```text
 /// python3 -c 'from fractions import Fraction as F
 /// from math import comb
-/// for k in range(1, 20):
+/// for k in range(1, 8):
 ///     q = F(comb(2*k, k), 4**k*(2*k+1)) * (1 << 128)
 ///     h = f"{(2*q.numerator + q.denominator)//(2*q.denominator):032x}"
 ///     print("0x" + "_".join(h[i:i+4] for i in range(0, 32, 4)) + ",")'
 /// ```
-const COEF: [u128; 19] = [
+const COEF: [u128; 7] = [
     0x2aaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaaa_aaab,
     0x1333_3333_3333_3333_3333_3333_3333_3333,
     0x0b6d_b6db_6db6_db6d_b6db_6db6_db6d_b6db,
@@ -159,18 +148,6 @@ const COEF: [u128; 19] = [
     0x05ba_2e8b_a2e8_ba2e_8ba2_e8ba_2e8b_a2e9,
     0x0471_3b13_b13b_13b1_3b13_b13b_13b1_3b14,
     0x0393_3333_3333_3333_3333_3333_3333_3333,
-    0x02f5_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f,
-    0x027f_bca1_af28_6bca_1af2_86bc_a1af_286c,
-    0x0225_de79_e79e_79e7_9e79_e79e_79e7_9e7a,
-    0x01df_3bd3_7a6f_4de9_bd37_a6f4_de9b_d37a,
-    0x01a6_863d_70a3_d70a_3d70_a3d7_0a3d_70a4,
-    0x0178_2dda_12f6_84bd_a12f_684b_da12_f685,
-    0x0151_ba30_8d3d_cb08_d3dc_b08d_3dcb_08d4,
-    0x0131_683b_def7_bdef_7bde_f7bd_ef7b_def8,
-    0x0115_ee9d_45d1_745d_1745_d174_5d17_45d1,
-    0x00fe_57c7_db6d_b6db_6db6_db6d_b6db_6db7,
-    0x00e9_e954_706e_b3e4_5306_eb3e_4530_6eb4,
-    0x00d8_137a_bd89_d89d_89d8_9d89_d89d_89d9,
 ];
 
 /// The shared pipeline for `0 < |x| < 1`: `x = m·2^(e−112)`, with `sign`
@@ -195,9 +172,9 @@ fn fast_frame(m: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
     if ex <= BAND {
         let (f, et) = series(fx, ex, |v| {
             if ex <= NARROW_BAND {
-                taylor_14(v)
+                minimax_11(v)
             } else {
-                taylor_19(v)
+                minimax_14(v)
             }
         });
 
@@ -367,20 +344,17 @@ fn sub_abs_256(a: [u128; 2], b: [u128; 2]) -> ([u128; 2], bool) {
 /// `et ≤ BAND`.
 ///
 /// The reduced argument *is* `x`, so the whole reduction collapses to the
-/// series: with `u = x²` rounded into a 2^-128 word and `v = u²`, the even and
-/// odd halves of `Σ A_k·u^k` are two independent Horner chains in `v` — half
+/// polynomial: with `u = x²` rounded into a 2^-128 word and `v = u²`, its even
+/// and odd halves are two independent Horner chains in `v` — half
 /// the serial depth — and `x³` multiplies in while they run.  Each half closes
 /// on a 64-bit tail whose slack sits far below `Q`; the correction itself is
 /// only 2^-8.6 of the result, so `Q` never needs more than 113 bits.
 ///
-/// The chains below are the same series truncated per band: `taylor` maps
-/// `v = x⁴` to the even and odd halves.  Only the series band's top binade
-/// needs nineteen terms (and full-width coefficients out to `A_10`);
-/// everything under 2^-4 is served by [`taylor_14`] at five terms and three
-/// levels less, which is the whole reason the band is split rather than run
-/// wide throughout, and the root band's `|t| < 2^-7.4` by [`taylor_7`].
+/// The small-argument bands use eleven- and fourteen-term minimax fits; the
+/// root band's `|t| < 2^-7.4` keeps the seven-term Taylor approximation. The
+/// supplied polynomial maps `v = x⁴` to its even and odd halves.
 #[inline]
-fn series(t1: u128, et: i32, taylor: impl Fn(u128) -> (u128, u128)) -> (u128, i32) {
+fn series(t1: u128, et: i32, polynomial: impl Fn(u128) -> (u128, u128)) -> (u128, i32) {
     let sh = (-2 * et) as u32;
     // `x² < 2^-128` of `x`: `asin(x) − x < ½ulp`, and the series is exactly `x`.
     if sh >= 128 {
@@ -389,7 +363,7 @@ fn series(t1: u128, et: i32, taylor: impl Fn(u128) -> (u128, u128)) -> (u128, i3
     let u = shr_round(mhi_approx(t1, t1), sh);
     let cube = mhi_approx(t1, u);
     let v = mhi_approx(u, u);
-    let (even, odd) = taylor(v);
+    let (even, odd) = polynomial(v);
     let (f, carry) = t1.overflowing_add(mhi_approx(cube, even + mhi_approx(u, odd)));
 
     // `asin(x)/x < 1 + 2^-8.6` carries out of the frame only just below 2^128.
@@ -418,90 +392,62 @@ fn taylor_7(v: u128) -> (u128, u128) {
     (even, odd)
 }
 
-/// The even and odd halves of `Σ A_k·v^k` for `|x| < 2^-4`: fourteen terms,
-/// the last seven of them 64-bit — `x^14` already buries a half coefficient's
-/// own slack below `Q` there.
-fn taylor_14(v: u128) -> (u128, u128) {
+/// The eleven-term minimax on `|x| < 2^-4`, split into even and odd halves
+/// in `v = x^4`. The last four coefficients need only their top 64 bits.
+/// [`ASIN_NARROW`] records the fit and its exact rational error certificate.
+fn minimax_11(v: u128) -> (u128, u128) {
+    let c = ASIN_NARROW;
     let vh = (v >> 64) as u64;
-    let narrow = |k: usize| (COEF[k] >> 64) as u64;
-    let tail_even = narrow(8) + mul_hi_64(vh, narrow(10) + mul_hi_64(vh, narrow(12)));
-    let tail_odd = narrow(7)
-        + mul_hi_64(
-            vh,
-            narrow(9) + mul_hi_64(vh, narrow(11) + mul_hi_64(vh, narrow(13))),
-        );
-    let even = COEF[0]
+    let narrow = |k: usize| (c[k] >> 64) as u64;
+    let tail_even = narrow(8) + mul_hi_64(vh, narrow(10));
+    let tail_odd = narrow(7) + mul_hi_64(vh, narrow(9));
+    let even = c[0]
         + mhi_approx(
             v,
-            COEF[2]
-                + mhi_approx(
-                    v,
-                    COEF[4] + mhi_approx(v, COEF[6] + mhi_approx(v, u128::from(tail_even) << 64)),
-                ),
+            c[2] + mhi_approx(
+                v,
+                c[4] + mhi_approx(v, c[6] + mhi_approx(v, u128::from(tail_even) << 64)),
+            ),
         );
-    let odd = COEF[1]
+    let odd = c[1]
         + mhi_approx(
             v,
-            COEF[3] + mhi_approx(v, COEF[5] + mhi_approx(v, u128::from(tail_odd) << 64)),
+            c[3] + mhi_approx(v, c[5] + mhi_approx(v, u128::from(tail_odd) << 64)),
         );
 
     (even, odd)
 }
 
-/// [`taylor_14`] for the band's top binade, `2^-4 ≤ |x| < 2^-3`: nineteen
-/// terms, and the 64-bit tails cannot start before `A_11` — at `x = 2^-3` a
-/// half `A_8` would slip 2^11 units of the frame, where a half `A_11` slips
-/// 2^-7.
-fn taylor_19(v: u128) -> (u128, u128) {
+/// The fourteen-term minimax on `2^-4 ≤ |x| < 2^-3`, split in `v = x^4`.
+/// The last four coefficients are 64-bit; [`ASIN_BROAD`] certifies that actual
+/// mixed-width polynomial on this binade's squared interval `[2^-8, 2^-6]`.
+fn minimax_14(v: u128) -> (u128, u128) {
+    let c = ASIN_BROAD;
     let vh = (v >> 64) as u64;
-    let narrow = |k: usize| (COEF[k] >> 64) as u64;
-    let tail_even = narrow(10)
-        + mul_hi_64(
-            vh,
-            narrow(12)
-                + mul_hi_64(
-                    vh,
-                    narrow(14) + mul_hi_64(vh, narrow(16) + mul_hi_64(vh, narrow(18))),
-                ),
-        );
-    let tail_odd = narrow(11)
-        + mul_hi_64(
-            vh,
-            narrow(13) + mul_hi_64(vh, narrow(15) + mul_hi_64(vh, narrow(17))),
-        );
-    let even = COEF[0]
+    let narrow = |k: usize| (c[k] >> 64) as u64;
+    let tail_even = narrow(10) + mul_hi_64(vh, narrow(12));
+    let tail_odd = narrow(11) + mul_hi_64(vh, narrow(13));
+    let even = c[0]
         + mhi_approx(
             v,
-            COEF[2]
-                + mhi_approx(
+            c[2] + mhi_approx(
+                v,
+                c[4] + mhi_approx(
                     v,
-                    COEF[4]
-                        + mhi_approx(
-                            v,
-                            COEF[6]
-                                + mhi_approx(
-                                    v,
-                                    COEF[8] + mhi_approx(v, u128::from(tail_even) << 64),
-                                ),
-                        ),
+                    c[6] + mhi_approx(v, c[8] + mhi_approx(v, u128::from(tail_even) << 64)),
                 ),
+            ),
         );
-    let odd = COEF[1]
+    let odd = c[1]
         + mhi_approx(
             v,
-            COEF[3]
-                + mhi_approx(
+            c[3] + mhi_approx(
+                v,
+                c[5] + mhi_approx(
                     v,
-                    COEF[5]
-                        + mhi_approx(
-                            v,
-                            COEF[7]
-                                + mhi_approx(
-                                    v,
-                                    COEF[9] + mhi_approx(v, u128::from(tail_odd) << 64),
-                                ),
-                        ),
+                    c[7] + mhi_approx(v, c[9] + mhi_approx(v, u128::from(tail_odd) << 64)),
                 ),
+            ),
         );
 
     (even, odd)
@@ -903,6 +849,7 @@ mod tests {
 #[cfg(all(test, feature = "mpfr"))]
 mod ziv_soundness {
     use super::super::MANTISSA_MASK;
+    use super::super::asin_tables::{ASIN_BROAD_EXTREMA, ASIN_NARROW_EXTREMA};
     use super::super::atan2::ZIV_GATE;
     use super::*;
     use rug::{Float, ops::Pow};
@@ -930,8 +877,8 @@ mod ziv_soundness {
             0..3 => 0x3ffe,
             3..5 => 0x3ffe - (bits >> 115) % 8,
             5 => 0x3ffe - (bits >> 115) % 64,
-            // The series band's own top binades, where its truncated Taylor
-            // tail is worst; the arm below reaches the rest, subnormals
+            // The series band's own top binades, where its polynomial
+            // error is largest; the arm below reaches the rest, subnormals
             // included.
             6 => 0x3ffc - (bits >> 115) % 4,
             _ => 1 + (bits >> 115) % 0x3ffe,
@@ -986,6 +933,24 @@ mod ziv_soundness {
                 if ratio > worst {
                     worst = ratio;
                     worst_at = (x, acos, xneg);
+                }
+            }
+        }
+        // Pin every fitted extremum and both band edges, including adjacent
+        // floats on either side so the polynomial handovers are covered too.
+        for x in ASIN_NARROW_EXTREMA
+            .into_iter()
+            .chain(ASIN_BROAD_EXTREMA)
+            .chain([0.0625, 0.125])
+        {
+            for bits in x.to_bits() - 4..=x.to_bits() + 4 {
+                for (acos, xneg) in [(false, false), (true, false), (true, true)] {
+                    let x = f128::from_bits(bits);
+                    let ratio = slip(x, acos, xneg);
+                    if ratio > worst {
+                        worst = ratio;
+                        worst_at = (x, acos, xneg);
+                    }
                 }
             }
         }

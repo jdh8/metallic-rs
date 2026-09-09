@@ -7,10 +7,9 @@
 //! differs is everything after:
 //!
 //! 1. **Evaluate.** `tan θ = θ·(1 + u·P(u))` for `u = θ²`, with `P` the
-//!    Taylor sum `Σ T_{k+1}·u^k` of the tangent's all-positive coefficients
-//!    `T_k = 2^(2k+2)·(2^(2k+2) − 1)·|B_{2k+2}|/(2k+2)!`: eight terms at the
-//!    fast width as two even/odd chains in `v = u²`, twenty-five at the
-//!    accurate one.  The sum keeps `θ`'s floating form, one carry at most.
+//!    degree-six minimax polynomial at the fast width, as two even/odd
+//!    chains in `v = u²`. The accurate leg keeps twenty-five Taylor terms.
+//!    The sum keeps `θ`'s floating form, one carry at most.
 //! 2. **Recombine.** With `A = j·π/256 + θ`, the addition formula
 //!    `tan A = (T_j + tan θ)/(1 − T_j·tan θ)` needs one table of
 //!    `T_j = tan(j·π/256) < 2^7` and one product.  Numerator and
@@ -37,10 +36,10 @@
 
 use super::atan2::{add_signed_256, place_256, recip_128, round_384, round_fast, top_256};
 use super::trig::{DIRECT, TINY, edge, reduce, reduce_wide, squares};
-use super::trig_tables::{TAN, TAN_COEF};
+use super::trig_tables::{TAN, TAN_COEF, TAN_FAST};
 use super::uint::{
-    add_256, add_384, leading_zeros_384, mhi_approx, mul_hi_384, shl_384, shr_256_sat, shr_384_sat,
-    sub_256, sub_384, wmul, wmul_128x384,
+    add_256, add_384, leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_384, shl_384, shr_256_sat,
+    shr_384_sat, sub_256, sub_384, wmul, wmul_128x384,
 };
 use super::{EXP_MASK, SIGN_MASK, split};
 
@@ -71,14 +70,18 @@ const fn flip(negative: bool) -> u128 {
 }
 
 /// `tan θ` in `θ`'s own floating form: `t1·(1 + u·P)` with the even and odd
-/// halves of `Σ TAN_COEF[k]·u^k` as two chains in `v`.  Eight terms: the
-/// ninth is below 2^-144 for `u < 2^-14.69`.  `tan θ > θ` can carry into the
-/// next binade, which only the top of the direct band reaches.
+/// halves of the degree-six minimax [`TAN_FAST`] as two chains in `v`.
+/// The polynomial's ratio error is below `u·2^-120 < 2^-134.69`. `tan θ > θ`
+/// can carry into the next binade, which only the top of the direct band reaches.
 #[inline]
 fn tan_frac(t1: u128, et: i32, u: u128, v: u128) -> (u128, i32) {
-    let c = |k: usize| TAN_COEF[k][2];
-    let a = c(0) + mhi_approx(v, c(2) + mhi_approx(v, c(4) + mhi_approx(v, c(6))));
-    let b = c(1) + mhi_approx(v, c(3) + mhi_approx(v, c(5) + mhi_approx(v, c(7))));
+    let c = |k: usize| TAN_FAST[k];
+    // Coefficients from u^4 on need only 64 bits: their contribution to
+    // tan(theta)/theta slips by less than u^5*2^-64 < 2^-137.
+    let narrow = |k: usize| (c(k) >> 64) as u64;
+    let tail = narrow(4) + mul_hi_64((v >> 64) as u64, narrow(6));
+    let a = c(0) + mhi_approx(v, c(2) + mhi_approx(v, u128::from(tail) << 64));
+    let b = c(1) + mhi_approx(v, c(3) + mhi_approx(v, u128::from(narrow(5)) << 64));
     let p = a + mhi_approx(u, b);
     let (s, carry) = t1.overflowing_add(mhi_approx(mhi_approx(t1, u), p));
     let shift = u32::from(carry);
@@ -420,5 +423,25 @@ mod ziv_soundness {
             "tanq gate covers only {:.2}× the slip at {worst_at:?}",
             1.0 / worst
         );
+    }
+
+    #[test]
+    fn reduced_kernel_is_sound() {
+        let mut worst: f64 = 0.0;
+        // Cover the full reduction interval, including its endpoint: the
+        // public direct band alone stops below pi/512.
+        for i in 1..=8192u32 {
+            let x = (Float::with_val(PRECISION, Constant::Pi) * i / (512u32 * 8192))
+                .to_f128_round(rug::float::Round::Nearest);
+            let (m, e) = split(x.to_bits());
+            let (u, v, _) = squares(m << 15, e + 1);
+            let (frac, e2) = tan_frac(m << 15, e + 1, u, v);
+            let unit = Float::with_val(PRECISION, 2).pow(e2 - 128);
+            let frame = Float::with_val(PRECISION, frac) * &unit;
+            let error = (Float::with_val(PRECISION, x).tan() - frame).abs() / unit;
+            worst = worst.max(error.to_f64() / ZIV_GATE as f64);
+        }
+        println!("tanq reduced kernel: worst |err|/gate = {worst:.4}");
+        assert!(worst < 0.5);
     }
 }
