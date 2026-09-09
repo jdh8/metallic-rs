@@ -1,0 +1,145 @@
+default-tests-final
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.27s
+test result: ok. 207 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 159.54s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+nextest-f128
+     Summary [ 115.687s] 345 tests run: 345 passed (13 slow), 0 skipped
+
+nextest-mpfr
+     Summary [ 870.644s] 477 tests run: 477 passed (37 slow), 1 skipped
+
+perf-trig-soundness
+sinq/cosq fast leg: worst |err|/gate = 0.2334 at (0x40180076243896c61d61300fa40d8105, true) (5238 handed over)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 134 filtered out; finished in 20.04s
+
+fix-soundness
+atanq fast leg: worst |err|/gate = 0.0543 at 0x3ff7391dd73fcf4ffe0f222c441c4189
+tanq fast leg: worst |err|/gate = 0.1184 at 0x441254d5000000000000000000000000 (2619 handed over)
+sinq/cosq fast leg: worst |err|/gate = 0.0584 at (0x40180076243896c61d61300fa40d8105, true) (5238 handed over)
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 108 filtered out; finished in 280.10s
+
+pow-sampler-fix
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 132 filtered out; finished in 2.35s
+
+Running worst cases check in --rndn mode...
+98017 tests passed, 0 failure(s)
+Running worst cases check in --rndz mode...
+98017 tests passed, 0 failure(s)
+Running worst cases check in --rndu mode...
+98017 tests passed, 0 failure(s)
+Running worst cases check in --rndd mode...
+98017 tests passed, 0 failure(s)
+
+
+Running special checks in --rndn mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+Completed successfully (the harness advanced to rndz).
+sinq rndn: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running special checks in --rndz mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+sinq rndz: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running special checks in --rndu mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+sinq rndu: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running special checks in --rndd mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+sinq rndd: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running worst cases check in --rndn mode...
+98961 tests passed, 0 failure(s)
+Running worst cases check in --rndz mode...
+98961 tests passed, 0 failure(s)
+Running worst cases check in --rndu mode...
+98961 tests passed, 0 failure(s)
+Running worst cases check in --rndd mode...
+98961 tests passed, 0 failure(s)
+
+
+Running special checks in --rndn mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+cosq rndn: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running special checks in --rndz mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+cosq rndz: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running special checks in --rndu mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+cosq rndu: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+Running special checks in --rndd mode...
+Checking special values
+Checking random values in the full range
+Checking random values with exponent in [-60,20]
+Checking random values near multiples of pi/2
+cosq rndd: exit 0; CORE_MATH_TESTS=100000000 (three loops of 33333333 draws).
+
+
+clippy
+src/f32_/gamma.rs:537:13: multiply and add expressions may be calculated more efficiently and accurately
+src/f32_/gamma.rs:541:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:1961:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:2113:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:2250:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:2315:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/erf.rs:3383:13: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:8984:19: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:9004:19: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:10028:23: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:10028:48: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/misc.rs:60:15: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/misc.rs:354:13: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/trig.rs:1276:25: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/trig.rs:2110:25: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/trig.rs:2316:46: multiply and add expressions may be calculated more efficiently and accurately
+
+clippy-baseline
+src/f32_/gamma.rs:537:13: multiply and add expressions may be calculated more efficiently and accurately
+src/f32_/gamma.rs:541:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:1961:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:2113:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:2250:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/atan.rs:2315:17: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/erf.rs:3383:13: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:8984:19: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:9004:19: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:10028:23: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/gamma.rs:10028:48: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/misc.rs:60:15: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/misc.rs:354:13: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/trig.rs:1276:25: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/trig.rs:2110:25: multiply and add expressions may be calculated more efficiently and accurately
+src/f64_/trig.rs:2316:46: multiply and add expressions may be calculated more efficiently and accurately

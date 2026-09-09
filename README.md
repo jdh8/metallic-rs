@@ -246,7 +246,8 @@ significand leaves the quadrant and a fraction — 192 bits on the fast leg,
 quadrant and a breakpoint `j·π/256`, and the residual `|g| ≤ 1/256`
 normalizes into a floating fraction at its own exponent, so `θ = g·π/2`
 keeps full relative precision however close `x` sits to a multiple of π/2.
-Six Taylor terms in `θ²` (eighteen on the accurate leg) and a 128-entry
+A degree-four minimax for sine and six Taylor terms for cosine in `θ²`
+(eighteen Taylor coefficients each on the accurate leg) and a 128-entry
 `sin`/`cos(j·π/256)` table recombine in `atan2q`'s frames; below 2^-8 the
 argument is its own reduced angle, below 2^-57 the results are `x` and 1.
 

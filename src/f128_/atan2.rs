@@ -87,7 +87,7 @@ pub fn atanq(x: f128) -> f128 {
     let reduction = atan_reduce(ax);
     let (frac, e2) = atan_fast(&reduction);
 
-    round_fast(frac, e2, sign).unwrap_or_else(|| match &reduction {
+    round_fast(frac, e2, sign, ZIV_GATE).unwrap_or_else(|| match &reduction {
         Err((t1, et)) => accurate_exact(*t1, *et, sign),
         Ok(r) => accurate(r, sign),
     })
@@ -205,7 +205,7 @@ pub fn atan2q(y: f128, x: f128) -> f128 {
     let r = reduce(ay, ax, xbits >> 127 != 0);
     let (frac, e2) = fast(&r);
 
-    round_fast(frac, e2, sign).unwrap_or_else(|| accurate(&r, sign))
+    round_fast(frac, e2, sign, ZIV_GATE).unwrap_or_else(|| accurate(&r, sign))
 }
 
 /// The arguments with nothing to approximate: zero, infinite, or NaN.
@@ -574,13 +574,13 @@ pub(super) fn add_signed_256(a: [u128; 2], b: [u128; 2], negative: bool) -> [u12
 /// Round the fast frame on its fixed 15-bit guard; `None` hands ties and the
 /// subnormal range to the accurate leg.
 #[inline]
-pub(super) fn round_fast(frac: u128, e2: i32, sign: u128) -> Option<f128> {
+pub(super) fn round_fast(frac: u128, e2: i32, sign: u128, gate: u128) -> Option<f128> {
     if e2 < f128::MIN_EXP {
         return None;
     }
     let rest = frac & GUARD_MASK;
 
-    if rest.abs_diff(GUARD_HALF) <= ZIV_GATE {
+    if rest.abs_diff(GUARD_HALF) <= gate {
         return None;
     }
     // The gate has already ruled out a tie: the guard's top bit decides, and

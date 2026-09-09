@@ -18,8 +18,9 @@
 //!    ([`MAX_LZ`]) and hands anything closer to a multiple of π/2 over.
 //! 3. **Evaluate.** `sin θ = θ·(1 − u·(A − u·B))` and `1 − cos θ = u·(½ −
 //!    u·(E − u·O))` for `u = θ²`, with `A, B, E, O` the even and odd halves
-//!    of the Taylor sums in `v = u²`: six terms each at the fast width,
-//!    eighteen at the accurate one, in the family's tiered fixed point.
+//!    of polynomials in `v = u²`: a degree-four minimax for sine and six
+//!    Taylor terms for cosine at the fast width, eighteen Taylor coefficients
+//!    each at the accurate width.
 //! 4. **Recombine.** With `A = j·π/256 + θ`, `sin |x|` is `±sin A` or
 //!    `±cos A` by quadrant, and `sin A = S_j·cos θ + C_j·sin θ`, `cos A =
 //!    C_j·cos θ − S_j·sin θ` from tables of `sin(j·π/256)` and `cos(j·π/256)`:
@@ -28,9 +29,8 @@
 //!    unless `j = 0` and the sine is wanted — then `sin A = sin θ` keeps its
 //!    floating form the whole way, like `atan2q`'s sectorless band.
 //! 5. **Round.** `atan2q`'s rounders: the fast leg on a fixed 15-bit guard,
-//!    the tie window ([`ZIV_GATE`](super::atan2::ZIV_GATE)) to the accurate
-//!    leg, which decides on 384
-//!    bits.
+//!    the tie window ([`ZIV_GATE`]) to the accurate leg, which decides on
+//!    384 bits.
 //!
 //! Below `|x| = 2^-8` ([`DIRECT`]) there is nothing to reduce: `θ = x`
 //! exactly, and the series alone is the fast leg.  Below 2^-57 ([`TINY`]) the
@@ -41,7 +41,7 @@
 //! squares; the items below are `pub(super)` for it.
 
 use super::atan2::{add_signed_256, place_256, round_384, round_fast, shr_round, top_256};
-use super::trig_tables::{COS_COEF, FRAC_2_PI, PIO2_128, PIO2_384, SIN_COEF, SINCOS};
+use super::trig_tables::{COS_COEF, FRAC_2_PI, PIO2_128, PIO2_384, SIN_COEF, SIN_FAST, SINCOS};
 use super::uint::{
     add_384, funnel_down, leading_zeros_384, mhi_approx, mul_hi_384, shl_384, shr_384_sat, sub_256,
     sub_384, wmul,
@@ -59,6 +59,10 @@ pub(super) const DIRECT: i32 = -8;
 /// Leading zeros of the fast leg's 192-bit residual past which it gives up:
 /// 136 bits are left at the limit, against a relative need of about 130.
 const MAX_LZ: u32 = 56;
+
+/// Half-width of the refused tie window, in units of the 15-bit guard.
+/// The in-source MPFR certification requires at least 2× error margin.
+pub(super) const ZIV_GATE: u128 = 16;
 
 /// The sine.
 #[must_use]
@@ -87,7 +91,7 @@ fn trig(x: f128, cosine: bool) -> f128 {
     let (m, e) = split(ax);
 
     fast(m, e, cosine)
-        .and_then(|(frac, e2, flip)| round_fast(frac, e2, sign ^ flip))
+        .and_then(|(frac, e2, flip)| round_fast(frac, e2, sign ^ flip, ZIV_GATE))
         .unwrap_or_else(|| accurate(m, e, cosine, sign))
 }
 
@@ -223,25 +227,25 @@ pub(super) const fn squares(t1: u128, et: i32) -> (u128, u128, u128) {
 }
 
 /// `sin θ` in `θ`'s own floating form: `t1·(1 − u·(A − u·B))` with the even
-/// and odd halves of `Σ (−1)^k u^k/(2k+3)!` as two short chains in `v`.  Six
-/// terms: the seventh is below 2^-143 for `u < 2^-14.69`.
+/// and odd halves of the degree-four minimax [`SIN_FAST`] in `v`.
+/// Its error in the ratio is below `u·2^-114 < 2^-128.69`.
 #[inline]
 fn sin_frac(t1: u128, u: u128, v: u128) -> u128 {
-    let s = |k: usize| SIN_COEF[k][2];
+    let s = |k: usize| SIN_FAST[k];
     let a = s(0) + mhi_approx(v, s(2) + mhi_approx(v, s(4)));
-    let b = s(1) + mhi_approx(v, s(3) + mhi_approx(v, s(5)));
+    let b = s(1) + mhi_approx(v, s(3));
 
     t1 - mhi_approx(mhi_approx(t1, u), a - mhi_approx(u, b))
 }
 
 /// `1 − cos θ` as the floating fraction `c1·2^(2·et−128)`: `θ²·(½ − u·W)`
-/// with `W` the even and odd halves of `Σ (−1)^k u^k/(2k+4)!` in `v`.  Seven
-/// terms: the eighth is below 2^-146 of the correction.
+/// with `W` the even and odd halves of `Σ (−1)^k u^k/(2k+4)!` in `v`. Six
+/// terms: the omitted seventh contributes less than 2^-139 to `cos θ`.
 #[inline]
 fn cos_corr(u1: u128, u: u128, v: u128) -> u128 {
     let c = |k: usize| COS_COEF[k][2];
     let e = c(1) + mhi_approx(v, c(3) + mhi_approx(v, c(5)));
-    let o = c(2) + mhi_approx(v, c(4) + mhi_approx(v, c(6)));
+    let o = c(2) + mhi_approx(v, c(4));
 
     mhi_approx(u1, c(0) - mhi_approx(u, e - mhi_approx(u, o)))
 }
@@ -487,13 +491,12 @@ mod tests {
     }
 }
 
-/// MPFR certification that `atan2q`'s [`ZIV_GATE`] covers the fast leg's
+/// MPFR certification that [`ZIV_GATE`] covers the fast leg's
 /// true error with the 2× margin the project requires.  Run with
 /// `CC=clang cargo +nightly test --release --features "f128 mpfr"`.
 #[cfg(all(test, feature = "mpfr"))]
 pub(super) mod ziv_soundness {
     use super::super::MANTISSA_MASK;
-    use super::super::atan2::ZIV_GATE;
     use super::*;
     use rug::{Float, float::Constant, ops::Pow};
 

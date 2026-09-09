@@ -60,7 +60,7 @@ pub fn tanq(x: f128) -> f128 {
     let (m, e) = split(ax);
 
     fast(m, e)
-        .and_then(|(frac, e2, flip)| round_fast(frac, e2, sign ^ flip))
+        .and_then(|(frac, e2, flip)| round_fast(frac, e2, sign ^ flip, super::atan2::ZIV_GATE))
         .unwrap_or_else(|| accurate(m, e, sign))
 }
 

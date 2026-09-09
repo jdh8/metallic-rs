@@ -230,8 +230,8 @@ Newton reciprocal, both legs run the Taylor sum on exact bits.  Its own
 `ziv_soundness` test certifies that folded path separately.
 
 `sinq`/`cosq` reduce by Payne–Hanek on 64-bit limbs of 2/π
-(`tools/gen_trig_f128.py`), six limbs fast and ten accurate: the window starts at limb `(e − 114)/64`, so
-everything above the units bit but its two low bits is a multiple of 4 and
+(`tools/gen_trig_f128.py`), six limbs fast and ten accurate. The window starts
+at limb `(e − 114)/64`, so everything above the units bit but its two low bits is a multiple of 4 and
 drops, and the product with the 113-bit significand yields the quadrant and a
 192-bit (fast) or 448-bit (accurate) fraction, cut out by four `funnel_down`s
 at one offset.  The fraction rounds to `n = round(256·x/π) mod 512` —
@@ -242,9 +242,10 @@ to a multiple of π/2.  The fast leg insists on 136 of its 192 bits (`MAX_LZ`)
 and hands the rest over; no binary128 comes within 2^-124 of a multiple of
 π/2 (the per-binade convergent families in `tests/cases/{sinq,cosq}.wc` reach
 2^-123.9), so the 448-bit residual keeps over 300 bits there.  `sin θ` and
-`1 − cos θ` are even/odd-split Taylor sums in `θ²` (six terms fast, eighteen
-accurate) and `sin(jπ/256 + θ)`, `cos(jπ/256 + θ)` recombine from a
-128-entry table of `sin`/`cos(jπ/256)` in `atan2q`'s 256/384-bit frames;
+`1 − cos θ` use an even/odd-split degree-four minimax and six Taylor terms,
+respectively, on the fast leg (gate 16); the accurate leg keeps eighteen
+Taylor coefficients each. `sin(jπ/256 + θ)`, `cos(jπ/256 + θ)` recombine from
+a 128-entry table of `sin`/`cos(jπ/256)` in `atan2q`'s 256/384-bit frames;
 `j = 0` with the sine wanted is the relative band, like `atan2q`'s sectorless
 one.  Below 2^-8 the argument is its own reduced angle (no window, no table);
 below 2^-57 `sin x = x` and `cos x = 1`.

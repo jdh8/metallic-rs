@@ -178,7 +178,7 @@ const COEF: [u128; 19] = [
 fn arc(m: u128, e: i32, sign: u128, acos: bool, xneg: bool) -> f128 {
     let (frac, e2) = fast_frame(m, e, acos, xneg);
 
-    round_fast(frac, e2, sign)
+    round_fast(frac, e2, sign, super::atan2::ZIV_GATE)
         .unwrap_or_else(|| accurate(m << 15, e + 1, &wide_sqrt(m, e), acos, xneg, sign))
 }
 
@@ -873,7 +873,7 @@ mod tests {
             let exponent = 0x3ffc + (bits >> 112) % 3;
             let (m, e) = split(exponent << EXP_SHIFT | bits & super::super::MANTISSA_MASK);
             let (frac, e2) = fast_frame(m, e, false, false);
-            refused += u32::from(round_fast(frac, e2, 0).is_none());
+            refused += u32::from(round_fast(frac, e2, 0, super::super::atan2::ZIV_GATE).is_none());
         }
         println!("root band fallback: {refused} of {N}");
         assert!(refused < N / 100);
