@@ -955,7 +955,13 @@ mod ziv_soundness {
 
     /// `⌊log2 |log2 x|⌋`, for the sampler's choice of `y`.
     fn log2_log2(x: f128) -> i32 {
-        Float::with_val(64, x).log2().abs().to_f64().log2().floor() as i32
+        Float::with_val(113, x).log2().abs().to_f64().log2().floor() as i32
+    }
+
+    #[test]
+    fn sampler_keeps_neighbours_of_one() {
+        assert_eq!(log2_log2(f128::from_bits(1.0_f128.to_bits() + 1)), -112);
+        assert_eq!(log2_log2(f128::from_bits(1.0_f128.to_bits() - 1)), -113);
     }
 
     /// `x^y` at 800 bits.
