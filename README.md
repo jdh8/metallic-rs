@@ -1,4 +1,4 @@
-# metallic
+# Metallic
 
 [![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
@@ -16,6 +16,21 @@ started in 2017.  Its most wanted feature turned out to be math functions I
 wrote from scratch, so I decided to rewrite them in Rust.
 
 [Metallic]: https://github.com/jdh8/metallic
+
+## Development story
+
+In 2021, I published my methods for implementing math functions in
+[how to program math functions](https://jdh8.org/how-to-program-math-functions/).
+In 2026, I turned those methods into agent skills and started vibe
+optimizations.  Since April, nearly all new code has been AI-generated
+under my direction.  The methods guiding that work are available as the
+[Rust agent skill](https://github.com/jdh8/metallic-rs/blob/main/.claude/skills/program-math-functions/SKILL.md)
+and the [C agent skill](https://github.com/jdh8/metallic/blob/main/.claude/skills/program-math-functions/SKILL.md).
+
+Thanks to Paul Zimmermann and the other [CORE-MATH] contributors for their
+pioneering work.  CORE-MATH demonstrates that a fast correctly rounded math
+library is feasible.  CORE-MATH acts as both a correctness oracle and a
+performance baseline.  Its algorithms are a valuable structural reference.
 
 ## Usage
 
