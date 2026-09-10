@@ -6,10 +6,12 @@
 
 A fast correctly rounded math library in Rust!
 
-See [ANALYSIS.md](ANALYSIS.md) for a deterministic per-function report on
-every public math function beside CORE-MATH: fast-path cycle estimates from
-llvm-mca at several x86-64 levels, the measured fraction of inputs that reach
-each accurate leg, and the accurate leg's own cost, with the regenerate command.
+See [BENCHMARKS.md](BENCHMARKS.md) for archived measurements on Apple M4 and
+AMD Ryzen 9 7950X3D, with same-run CORE-MATH ratios and recorded source/toolchain
+provenance. [ANALYSIS.md](ANALYSIS.md) complements them with static path costs,
+accurate-leg coverage and table footprints; measured workloads support performance
+claims. The [measurement policy](benchmarks/README.md) describes refresh cadence
+and hardware coverage.
 
 This library is a successor to [Metallic], my C library for WebAssembly
 started in 2017.  Its most wanted feature turned out to be math functions I
@@ -200,8 +202,10 @@ Each function is done when both gates hold:
   binding yet: their strict gate replays a home-grown corpus that carries its
   MPFR answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/
   `log1p`/`pow` cross-check them oracle-free.
-- **Perf** — the static per-function comparison with CORE-MATH in
-  [ANALYSIS.md](ANALYSIS.md); to time one function on your own machine run
+- **Perf** — measured same-run median ratio `metallic::<fn>q / core_math::<fn>q`
+  ≈ 1× or better on the recorded workload and hardware. Archived results are in
+  [BENCHMARKS.md](BENCHMARKS.md); [ANALYSIS.md](ANALYSIS.md) helps diagnose costs.
+  To time one function on your own machine run
   `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench --features f128
   --bench <fn>q`, then `python3 tools/bench_ratio.py median`.  Each bench also
   carries a `f128::` lane (nightly `std`) and, where CORE-MATH has no binding,

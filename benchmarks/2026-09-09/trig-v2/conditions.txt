@@ -1,0 +1,17 @@
+ 19:23:09 up 8 days, 13:02,  8 users,  load average: 57.65, 61.45, 55.89
+               total        used        free      shared  buff/cache   available
+Mem:            61Gi        20Gi       4.2Gi       9.0Mi        37Gi        40Gi
+Swap:             0B          0B          0B
+CLS %CPU %MEM COMMAND
+IDL 2733  7.2 dump-teacher
+ TS  0.2  2.0 rust-analyzer
+ TS  0.1  2.0 node
+ TS  0.7  1.7 node
+ TS  0.6  1.4 clangd.main
+ TS  0.9  1.4 node
+ TS  0.7  1.0 MainThread
+ TS  1.4  0.8 2.1.259
+ TS  0.0  0.8 node
+
+C pinned rerun: CORE_MATH_LAUNCHER="taskset -c 0".
+Hardware perf counters unavailable (perf_event_paranoid=4); C measurements use RDTSC.
