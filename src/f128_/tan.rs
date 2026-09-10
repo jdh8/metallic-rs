@@ -38,8 +38,8 @@ use super::atan2::{add_signed_256, place_256, recip_128, round_384, round_fast, 
 use super::trig::{DIRECT, TINY, edge, reduce, reduce_wide, squares};
 use super::trig_tables::{TAN, TAN_COEF, TAN_FAST};
 use super::uint::{
-    add_256, add_384, leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_384, shl_384, shr_256_sat,
-    shr_384_sat, sub_256, sub_384, wmul, wmul_128x384,
+    add_256, add_384, leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_256, mul_hi_384, shl_384,
+    shr_256_sat, shr_384_sat, sub_256, sub_384, wmul, wmul_128x384,
 };
 use super::{EXP_MASK, SIGN_MASK, split};
 
@@ -162,13 +162,25 @@ fn fast(m: u128, e: i32) -> Option<(u128, i32, u128)> {
 }
 
 /// `tan θ` at 384 bits as a normalized floating fraction: twenty-five Taylor
-/// terms by Horner (every step positive), on `θ/2` so the sum cannot carry
+/// terms by Horner (every step positive) in the three tiers of the sine's
+/// `alternating` — terms 11..24 at 128 bits, 2..10 at 256, 0..1 at 384, the
+/// same slack bound since `u` is the same — on `θ/2` so the sum cannot carry
 /// out of the frame — the halving drops one bit at 2^-384, far below what
 /// the residual resolves.
 fn tan_384(t: [u128; 3], et: i32, u: [u128; 3]) -> ([u128; 3], i32) {
-    let mut q = TAN_COEF[TAN_COEF.len() - 1];
+    let mut narrow = TAN_COEF[24][2];
 
-    for c in TAN_COEF[..TAN_COEF.len() - 1].iter().rev() {
+    for c in TAN_COEF[11..24].iter().rev() {
+        narrow = c[2] + mhi_approx(u[2], narrow);
+    }
+    let mut middle = [0, narrow];
+
+    for c in TAN_COEF[2..11].iter().rev() {
+        middle = add_256([c[1], c[2]], mul_hi_256([u[1], u[2]], middle));
+    }
+    let mut q = [0, middle[0], middle[1]];
+
+    for c in TAN_COEF[..2].iter().rev() {
         q = add_384(*c, mul_hi_384(u, q));
     }
     let half = shr_384_sat(t, 1);

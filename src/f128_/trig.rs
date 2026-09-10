@@ -20,7 +20,9 @@
 //!    u·(E − u·O))` for `u = θ²`, with `A, B, E, O` the even and odd halves
 //!    of polynomials in `v = u²`: a degree-four minimax for sine and six
 //!    Taylor terms for cosine at the fast width, eighteen Taylor coefficients
-//!    each at the accurate width.
+//!    each at the accurate width, summed in three tiers (128, 256 and 384
+//!    bits) since the high-order terms ride powers of `u` that bury a
+//!    narrower width's slack.
 //! 4. **Recombine.** With `A = j·π/256 + θ`, `sin |x|` is `±sin A` or
 //!    `±cos A` by quadrant, and `sin A = S_j·cos θ + C_j·sin θ`, `cos A =
 //!    C_j·cos θ − S_j·sin θ` from tables of `sin(j·π/256)` and `cos(j·π/256)`:
@@ -43,8 +45,8 @@
 use super::atan2::{add_signed_256, place_256, round_384, round_fast, shr_round, top_256};
 use super::trig_tables::{COS_COEF, FRAC_2_PI, PIO2_128, PIO2_384, SIN_COEF, SIN_FAST, SINCOS};
 use super::uint::{
-    add_384, funnel_down, leading_zeros_384, mhi_approx, mul_hi_384, shl_384, shr_384_sat, sub_256,
-    sub_384, wmul,
+    add_384, funnel_down, leading_zeros_384, mhi_approx, mul_hi_256, mul_hi_384, shl_384,
+    shr_384_sat, sub_256, sub_384, wmul,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, QUIET_BIT, SIGN_MASK, split};
 
@@ -363,12 +365,27 @@ fn shl_limbs<const N: usize>(x: [u64; N], shift: u32) -> [u64; N] {
     result
 }
 
-/// `Σ_{k≥0} (−1)^k COEF[k]·u^k` at 384 bits by Horner: every step stays
-/// positive because `u·COEF[k+1] < COEF[k]`.
-fn alternating(u: [u128; 3], coef: &[[u128; 3]]) -> [u128; 3] {
-    let mut q = coef[coef.len() - 1];
+/// `Σ_{k≥0} (−1)^k COEF[k]·u^k`, eighteen terms by Horner in three tiers —
+/// terms 11..17 at 128 bits, 2..10 at 256, 0..1 at 384 — like `atan2q`'s
+/// `correction_384`.  Every step stays positive because `u·COEF[k+1] <
+/// COEF[k]`, and each tier's slack (under 2^-126 narrow, 2^-253 middle)
+/// rides `u^11 < 2^-161` or `u² < 2^-29` (`u < 2^-14.68`) into the sum, so
+/// the result is within 2^-282 of exact and the caller's multiply by `u`
+/// puts that below 2^-296.
+fn alternating(u: [u128; 3], coef: &[[u128; 3]; 18]) -> [u128; 3] {
+    let mut narrow = coef[17][2];
 
-    for c in coef[..coef.len() - 1].iter().rev() {
+    for c in coef[11..17].iter().rev() {
+        narrow = c[2] - mhi_approx(u[2], narrow);
+    }
+    let mut middle = [0, narrow];
+
+    for c in coef[2..11].iter().rev() {
+        middle = sub_256([c[1], c[2]], mul_hi_256([u[1], u[2]], middle));
+    }
+    let mut q = [0, middle[0], middle[1]];
+
+    for c in coef[..2].iter().rev() {
         q = sub_384(*c, mul_hi_384(u, q));
     }
     q
