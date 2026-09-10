@@ -14,6 +14,8 @@ env:
   # ISA extensions than the bench host. `x86-64-v3` (AVX2 + FMA) is supported by
   # every current GitHub-hosted Ubuntu runner and exercises metallic's FMA path.
   RUSTFLAGS: -Ctarget-cpu=x86-64-v3
+  # core-math-sys compiles C separately and otherwise defaults to -march=native.
+  TARGET_CPU: x86-64-v3
 
 defaults:
   run:
@@ -54,7 +56,7 @@ jobs:
     - name: Restore Rust cache
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: bench-${{ hashFiles('**/Cargo.lock') }}
+        shared-key: bench-v3-${{ hashFiles('**/Cargo.lock') }}
         save-if: false
 
     - name: Run benchmark
@@ -82,7 +84,7 @@ jobs:
     - name: Restore Rust cache
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: bench-${{ hashFiles('**/Cargo.lock') }}
+        shared-key: bench-v3-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build benchmark binaries
       run: cargo bench --no-run --benches
