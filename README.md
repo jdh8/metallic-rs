@@ -3,7 +3,6 @@
 [![Crates.io](https://img.shields.io/crates/v/metallic.svg)](https://crates.io/crates/metallic)
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
 [![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jdh8/metallic-rs)
-[![Benchmark status](https://github.com/jdh8/metallic-rs/actions/workflows/bench.yml/badge.svg)](https://jdh8.github.io/metallic-rs/dev/bench/)
 
 A fast correctly rounded math library in Rust!
 

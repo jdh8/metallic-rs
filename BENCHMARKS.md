@@ -341,3 +341,39 @@ python3 tools/benchmark_report.py --snapshots benchmarks/2026-09-05
 ```
 
 [The report generator](tools/benchmark_report.py) validates 92/92/20 public-function coverage, all nine supplementary bands in each default run, archived lock hashes, matching source files, and consumption of every recorded lane. Raw Criterion files and build/run logs remain in the target directories recorded in each snapshot.
+
+## Static estimate
+
+Cycle counts inferred from the emitted assembly by [llvm-mca](https://llvm.org/docs/CommandGuide/llvm-mca.html) are deterministic: they depend only on the code and LLVM's scheduling model for the chosen `-mcpu`, so one host can rank microarchitectures it does not own, and no CI runner noise enters. The public functions are `#[inline]`, so the crate's own assembly never contains them; a probe crate pins one function out of line. Run from the repository root with `llvm-mca` on `PATH` (Debian and Ubuntu install it under `/usr/lib/llvm-*/bin`).
+
+```sh
+d=$(mktemp -d) && mkdir "$d/src" && cat > "$d/Cargo.toml" <<EOF
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2021"
+[lib]
+crate-type = ["cdylib"]
+[dependencies]
+metallic = { path = "$PWD" }
+[profile.release]
+codegen-units = 1
+lto = "fat"
+EOF
+echo '#[no_mangle] #[inline(never)] pub extern "C" fn probe(x: f64) -> f64 { metallic::exp(x) }' > "$d/src/lib.rs"
+RUSTFLAGS="-Ctarget-cpu=x86-64-v3 --emit=asm" cargo build --release --manifest-path "$d/Cargo.toml"
+awk '/^probe:/{p=1;next} p&&/^\s*\./{next} p{print} p&&/retq/{exit}' "$d/target/release/deps/probe.s" > fast.s
+for cpu in haswell skylake znver2 znver3; do echo "$cpu $(llvm-mca -mcpu=$cpu -iterations=1000 fast.s | awk '/Total Cycles/{print $3/1000}')"; done
+```
+
+The cut keeps the straight-line code up to the first return, which for `exp` is the fast leg with every branch falling through; inspect `fast.s` before trusting it for a function whose first return is a special-case exit. Chaining 1000 iterations models a dependent call sequence (each call's input is the previous output through `xmm0`), so the figure is latency per call, not throughput. Change `-Ctarget-cpu` and `-mcpu` together to compare ISA levels: `x86-64-v2` emits no FMA, so its assembly differs, not only its model.
+
+| Model (LLVM 15) | Cycles per dependent `exp` |
+| --- | --- |
+| haswell | 64 |
+| skylake, icelake-server | 67 |
+| znver2 | 69 |
+| znver3 | 17 |
+| Measured, Ryzen 9 7950X3D at ~4.4 GHz | ~57 |
+
+The Intel and Zen 2 models land within 15% of the hardware. LLVM 15's Zen 3 model is incomplete and underestimates by 4×, and it is the closest model to the measured core: the estimate is only as good as the scheduling model, and AMD models have historically been the weaker ones. Zen 4 and Zen 5 models need LLVM 18 or newer. What the estimate cannot see: branch outcomes (the accurate-leg fallback rate must be measured and folded in as probability times accurate-leg cycles), cache misses (table loads are assumed L1 hits, which holds for these tables), and the random-input generation that the Criterion figures above include.
