@@ -107,9 +107,11 @@ tax that can be >10% of the function. Fixes, cheapest first:
 
 **2. Fallback-bound or fast-leg-bound?** Estimate the Ziv fallback rate before
 touching either tier: `fallback ≈ 2 · gate / ulp(result)`. Measure it directly
-with a temporary `static AtomicU64` counter in the gate plus a dense sweep
-test, or bench a forced-fallback stub (make the gate always fail). Instrument,
-measure, revert.
+with `python3 tools/analysis.py legs --only <fn>` (LLVM source coverage on the
+leg's entry line over a finite-input sweep, exhaustive for f32 univariate; no
+source edits, CORE-MATH's rate comes out of the same run), or bench a
+forced-fallback stub (make the gate always fail). `ANALYSIS.md` carries the
+committed rates for every function.
 
 - **Tier-trim leverage rule**: cheapening the accurate tier only moves the mean
   when the fallback rate is non-trivial. Measured rates: trig ~2.4%, cosh/sinh

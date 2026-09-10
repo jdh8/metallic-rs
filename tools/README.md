@@ -6,6 +6,7 @@ generator — regenerate with the script, never edit the table by hand.
 
 | Script | What it emits | Consumed by |
 | --- | --- | --- |
+| `analysis.py` | `ANALYSIS.md` and raw artefacts under `analysis/`: llvm-mca cycles, v2 FMA calls, coverage-counted accurate-leg rates, precision, table bytes and Criterion calibration. Run `python3 tools/analysis.py all`, or `legs --only <fn>` for one function. Requires x86-64 GNU/Linux, nightly Rust, clang, GDB, nm, llvm-objdump, llvm-mca and matching LLVM coverage tools. Parser/path checks: `python3 tools/test_analysis.py`. | `ANALYSIS.md`, perf triage (issue #5) |
 | `bench_ratio.py` | metallic-vs-CORE-MATH ratio table from `target/criterion/*/new/estimates.json` (arg: `mean`/`median`) | perf triage (issue #5) |
 | `gen_atan_f64.py` | `ATAN_COEFFS`, `ATAN_TABLE` (atan(k/8) double-double) | `src/f64_/atan.rs` |
 | `gen_atan_fast_f64.py` | `ATAN_FAST_*` fast-path tables (from CORE-MATH `atan.c` hex floats) | `src/f64_/atan.rs` |

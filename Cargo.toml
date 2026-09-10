@@ -9,7 +9,7 @@ repository = "https://github.com/jdh8/metallic-rs"
 license = "MIT"
 categories = ["mathematics"]
 keywords = ["floating-point", "trigonometry", "exponential", "logarithm", "special-functions"]
-exclude = ["/tests/cases"]
+exclude = ["/tests/cases", "/analysis"]
 autobenches = false
 
 [package.metadata.docs.rs]

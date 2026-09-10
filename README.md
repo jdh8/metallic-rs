@@ -6,9 +6,10 @@
 
 A fast correctly rounded math library in Rust!
 
-See [BENCHMARKS.md](BENCHMARKS.md) for measurements of every public math
-function on Apple M4 and AMD Ryzen 9 7950X3D, including same-run CORE-MATH
-comparisons and reproduction commands.
+See [ANALYSIS.md](ANALYSIS.md) for a deterministic per-function report on
+every public math function beside CORE-MATH: fast-path cycle estimates from
+llvm-mca at several x86-64 levels, the measured fraction of inputs that reach
+each accurate leg, and the accurate leg's own cost, with the regenerate command.
 
 This library is a successor to [Metallic], my C library for WebAssembly
 started in 2017.  Its most wanted feature turned out to be math functions I
@@ -199,35 +200,36 @@ Each function is done when both gates hold:
   binding yet: their strict gate replays a home-grown corpus that carries its
   MPFR answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/
   `log1p`/`pow` cross-check them oracle-free.
-- **Perf** — same-run median ratio `metallic::<fn>q / core_math::<fn>q` ≈ 1×
-  or better (`RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench
-  --features f128 --bench <fn>q`, then `python3 tools/bench_ratio.py median`).
-  Each bench also carries a `f128::` lane (nightly `std`) and, where CORE-MATH
-  has no binding, a `quadmath::` one; both are faithful-only, so they are
-  context rather than the headline — see [Baselines](#baselines).
+- **Perf** — the static per-function comparison with CORE-MATH in
+  [ANALYSIS.md](ANALYSIS.md); to time one function on your own machine run
+  `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench --features f128
+  --bench <fn>q`, then `python3 tools/bench_ratio.py median`.  Each bench also
+  carries a `f128::` lane (nightly `std`) and, where CORE-MATH has no binding,
+  a `quadmath::` one; both are faithful-only, so they are context rather than
+  the headline — see [Baselines](#baselines).
 
-| Function | CR | Perf (ratio vs CORE-MATH) |
-|----------|:--:|:--|
-| `acosq`  | ✅ | 0.81× |
-| `asinq`  | ✅ | 0.84× |
-| `atanq`  | ✅ | 1.02× |
-| `atan2q` | ✅ | 1.01× |
-| `cbrtq`  | ✅ | 0.89× |
-| `cosq`   | ✅ | n/a — CORE-MATH has no `cosq`; 8× faster than glibc's and libquadmath's faithful `cosq` |
-| `exp10q` | ✅ | 0.93× |
-| `exp2q`  | ✅ | 0.94× |
-| `expm1q` | ✅ | 0.94× |
-| `expq`   | ✅ | 0.96× |
-| `hypotq` | ✅ | 0.97× |
-| `log2q`  | ✅ | n/a — CORE-MATH has no `log2q`; 15× faster than glibc's and libquadmath's faithful `log2q` |
-| `log10q` | ✅ | n/a — CORE-MATH has no `log10q`; 15× faster than glibc's and libquadmath's faithful `log10q` |
-| `log1pq` | ✅ | n/a — CORE-MATH has no `log1pq`; 20× faster than glibc's and libquadmath's faithful `log1pq` |
-| `logq`   | ✅ | 1.00× |
-| `powq`   | ✅ | n/a — CORE-MATH has no `powq`; 17× faster than glibc's and libquadmath's faithful `powq` |
-| `rsqrtq` | ✅ | 0.76× |
-| `sinq`   | ✅ | n/a — CORE-MATH has no `sinq`; 8× faster than glibc's and libquadmath's faithful `sinq` |
-| `sqrtq`  | ✅ | 0.87× |
-| `tanq`   | ✅ | n/a — CORE-MATH has no `tanq`; 8.5× faster than glibc's and libquadmath's faithful `tanq` |
+| Function | CR |
+|----------|:--:|
+| `acosq`  | ✅ |
+| `asinq`  | ✅ |
+| `atanq`  | ✅ |
+| `atan2q` | ✅ |
+| `cbrtq`  | ✅ |
+| `cosq`   | ✅ |
+| `exp10q` | ✅ |
+| `exp2q`  | ✅ |
+| `expm1q` | ✅ |
+| `expq`   | ✅ |
+| `hypotq` | ✅ |
+| `log2q`  | ✅ |
+| `log10q` | ✅ |
+| `log1pq` | ✅ |
+| `logq`   | ✅ |
+| `powq`   | ✅ |
+| `rsqrtq` | ✅ |
+| `sinq`   | ✅ |
+| `sqrtq`  | ✅ |
+| `tanq`   | ✅ |
 
 `atanq` rides `atan2q` — `atan2(x, 1)` is exactly `atan(x)` — but folds the
 unit operand through its own reduction: the sector is an integer shift

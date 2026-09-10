@@ -50,7 +50,10 @@ Always bench with `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo bench --bench <fn>`
 (the host default has no FMA) and compare `metallic::<fn>` against
 `core_math::<fn>` — not `f64::<fn>`, which benchmarks std. f32 benches carry
 the `f` suffix (`metallic::expf`). `python3 tools/bench_ratio.py median` turns
-the criterion output into the paired ratio table.
+the criterion output into the paired ratio table. `ANALYSIS.md` (regenerated
+by `python3 tools/analysis.py all`) is the committed static view: llvm-mca
+fast-path cycles per ISA level, coverage-counted accurate-leg rates, and the
+accurate leg's cycles, metallic beside CORE-MATH for every function.
 
 A real function ties together five ideas, each with a reference file:
 
