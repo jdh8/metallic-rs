@@ -456,36 +456,41 @@ const ATAN2_POLY: [f64; 16] = [
 /// Plain-f64 angle for positive, finite, nonzero f32 magnitudes. Their ratio
 /// lies above 2^-277, so both the ratio and its square stay normal in f64.
 /// The polynomial avoids a second division, then folds about π/2 and π (or
-/// exact 1/2 and 1). Conditional selects fold the quadrants; x86 uses opaque
-/// integer masks to prevent LLVM from turning those selects into branches.
+/// exact 1/2 and 1). A quadrant table combines both reflections in one final
+/// multiply-add. The sign flip is exact; the half-turn scale multiplies the
+/// quotient so it can overlap the polynomial. The lookup has no quadrant branch.
 #[inline]
 fn atan2_fast<const HALF_TURNS: bool>(a: f64, b: f64, x_negative: bool) -> f64 {
-    let q = a.min(b) / a.max(b);
-    let r = q * crate::poly(q * q, &ATAN2_POLY);
-    let (r, half, full) = if HALF_TURNS {
-        (r * core::f64::consts::FRAC_1_PI, 0.5_f64, 1.0_f64)
+    // The public dispatch already excludes NaNs. Ordered selects avoid the
+    // NaN propagation checks in `min`/`max` on the quotient's critical path.
+    let swap = b > a;
+    let small = if swap { a } else { b };
+    let large = if swap { b } else { a };
+    let q = small / large;
+    let p = crate::poly(q * q, &ATAN2_POLY);
+    let q = if HALF_TURNS {
+        q * core::f64::consts::FRAC_1_PI
     } else {
-        (r, core::f64::consts::FRAC_PI_2, core::f64::consts::PI)
+        q
     };
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        // LLVM recognizes transparent masks as selects and reintroduces two
-        // unpredictable branches on x86. Opaque masks retain integer bit ops;
-        // the Ryzen benchmark drops atan2pif from 28.5 to 24.5 ns. AArch64's
-        // native fsub/fcsel pairs are cheaper than these opaque masks.
-        let swap = core::hint::black_box(u64::from(b > a).wrapping_neg());
-        let phi = f64::from_bits(r.to_bits() ^ (swap & (1 << 63)))
-            + f64::from_bits(half.to_bits() & swap);
-        let negative = core::hint::black_box(u64::from(x_negative).wrapping_neg());
-        f64::from_bits(phi.to_bits() ^ (negative & (1 << 63)))
-            + f64::from_bits(full.to_bits() & negative)
-    }
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-    {
-        let phi = if b > a { half - r } else { r };
-        if x_negative { full - phi } else { phi }
-    }
+    // Named constant tables keep the lookup in read-only memory. Constructing
+    // `[0.0, half, full, half]` from local values copies it to the stack on x86.
+    const RADIANS: [f64; 4] = [
+        0.0,
+        core::f64::consts::FRAC_PI_2,
+        core::f64::consts::PI,
+        core::f64::consts::FRAC_PI_2,
+    ];
+    const TURNS: [f64; 4] = [0.0, 0.5, 1.0, 0.5];
+    let index = 2 * usize::from(x_negative) + usize::from(swap);
+    let offset = if HALF_TURNS {
+        TURNS[index]
+    } else {
+        RADIANS[index]
+    };
+    let sign = u64::from(swap ^ x_negative) << 63;
+    crate::fast_mul_add(f64::from_bits(q.to_bits() ^ sign), p, offset)
 }
 
 #[inline]
@@ -955,7 +960,8 @@ mod ziv_soundness {
     /// Certify the exact scalar and relative gate seen by each public function.
     /// The dense ratio sweep resolves the polynomial; representation-uniform
     /// pairs exercise quotient rounding and the entire f32 exponent span. Both
-    /// signs of x cover every quadrant (the final sign of y is exact).
+    /// signs of x cover every quadrant of the single table fold, including the
+    /// half-turn scale on the quotient (the final sign of y is exact).
     #[test]
     fn atan2_fast_legs_are_sound() {
         let pi = Float::with_val(250, Constant::Pi);

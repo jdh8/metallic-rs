@@ -27,9 +27,7 @@ pub fn cbrt(x: f64) -> f64 {
     // old full-magnitude inverse-seed path) no magnitude-scaling branch to mispredict
     // on the full-range benchmark.  `normalize` folds subnormals into a virtual
     // exponent, so this one reduction covers the whole domain.
-    let e = (magnitude >> EXP_SHIFT) - 1023;
-    let it = e.rem_euclid(3) as usize;
-    let et = e.div_euclid(3);
+    let (it, et) = cbrt_exponents(magnitude);
     let z = f64::from_bits((magnitude as u64 & MANTISSA_MASK) | 0x3ff0_0000_0000_0000);
     let zz = f64::from_bits(z.to_bits() + ((it as u64) << EXP_SHIFT)); // z·2^it ∈ [1, 8)
 
@@ -85,6 +83,17 @@ pub fn cbrt(x: f64) -> f64 {
         low: quotient.low + sum.low,
     } / 3.0;
     round_general64(sum, et).copysign(x)
+}
+
+/// Split the normalized exponent `e = 3·et + it`, with `it ∈ {0,1,2}`.
+/// Bias by 1074 (a multiple of three) so even the smallest subnormal has a
+/// nonnegative exponent. The biased exponent lies in `0..=2097`, so unsigned
+/// division needs no signed quotient/remainder corrections; subtracting 358
+/// from the quotient removes the bias exactly.
+#[inline]
+fn cbrt_exponents(magnitude: i64) -> (usize, i64) {
+    let e = ((magnitude >> EXP_SHIFT) + 51) as u32;
+    ((e % 3) as usize, i64::from(e / 3) - 358)
 }
 
 /// Ziv gate for `cbrt`'s fast leg, a *relative* bound on the result.  The forward
@@ -705,9 +714,7 @@ mod ziv_soundness {
     /// scaled by the exact `2^et`.
     fn cbrt_fast_dd(x: f64) -> DoubleDouble {
         let magnitude = x.to_bits() as i64; // x > 0 in the test range
-        let e = (magnitude >> EXP_SHIFT) - 1023;
-        let it = e.rem_euclid(3) as usize;
-        let et = e.div_euclid(3);
+        let (it, et) = cbrt_exponents(magnitude);
         let z = f64::from_bits((magnitude as u64 & MANTISSA_MASK) | 0x3ff0_0000_0000_0000);
         let zz = f64::from_bits(z.to_bits() + ((it as u64) << EXP_SHIFT));
         let r = 1.0 / z;

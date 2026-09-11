@@ -1,0 +1,2839 @@
+{
+  "baseline_commit": "0736813215013afe936f0ff4ad8e24047efbea6f",
+  "date": "2026-09-11",
+  "statistic": "Criterion median nanoseconds per iteration, including random-input generation",
+  "parameters": {
+    "warmup_seconds": 1,
+    "measurement_seconds": 2,
+    "samples": 100,
+    "bootstrap_resamples": 100000
+  },
+  "host": {
+    "cpu": "Intel Core i9-14900K",
+    "pinned_cpu": 14,
+    "rustflags": "-Ctarget-cpu=x86-64-v3",
+    "c_target_cpu": "native (core-math-sys default; matches issue #9)",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "c_compiler": "GCC 15.2.0 (Ubuntu 15.2.0-16ubuntu1); verified in executable ELF .comment"
+  },
+  "source_sha256": {
+    "before": {
+      "src/f32_/atan.rs": "7696f7c556a583570364e1530bbfb8cb52a9b77f8c7db75c7c6080f22569f604",
+      "src/f64_/misc.rs": "5908ee89fc4df6baec4fa7ec60190212a8efd1d09fc1c5618aaf1847a9405aa2"
+    },
+    "after": {
+      "src/f32_/atan.rs": "deb4787fdafc17e6a0ace1823ac1320edebade220b5be606085b0d6999808b61",
+      "src/f64_/misc.rs": "c9edb209d5c8dc70b5f662e679a644ede182a6611a1eb2207dd3db9db316a617"
+    }
+  },
+  "cargo_lock_sha256": "45c7b42a8caa7d844843db211be079c076b016c8f0448bff1291b2790c9f91db",
+  "runs": [
+    {
+      "round": 1,
+      "function": "atan2f",
+      "arm": "before",
+      "binary_sha256": "48962f38d01ab4579f385a768c899213c243eb9c88a363bdcb04937de9c43d63",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/before-atan2f",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-1-before"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:09+00:00",
+        "load_average": [
+          1.6318359375,
+          1.40966796875,
+          1.26220703125
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4406004,
+          "MemAvailable": 9167972,
+          "Buffers": 0,
+          "Cached": 5056860,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.20 avg60=0.31 avg300=0.29 total=59755001535\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 185875,
+            "cpu_percent": 5.0,
+            "memory_percent": 0.0,
+            "rss_kib": 16428,
+            "executable": "python3"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 637596,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 201888,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 637596,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:23:17+00:00",
+        "load_average": [
+          1.66162109375,
+          1.419921875,
+          1.2666015625
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4409204,
+          "MemAvailable": 9171172,
+          "Buffers": 0,
+          "Cached": 5056860,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.09 avg60=0.27 avg300=0.28 total=59755016242\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 637596,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202144,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 637596,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10.881329112448004,
+            "upper_bound": 10.906691170400132
+          },
+          "point_estimate": 10.895274089707604,
+          "standard_error": 0.006983831067764436
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.694120472066789,
+            "upper_bound": 8.709477354626731
+          },
+          "point_estimate": 8.702980763292047,
+          "standard_error": 0.003382225800082317
+        }
+      }
+    },
+    {
+      "round": 1,
+      "function": "atan2f",
+      "arm": "after",
+      "binary_sha256": "e6da0500e556447960db383d2896bd650161fc90b3218dba57e3c7a30735680d",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/after-atan2f",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-1-after"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:17+00:00",
+        "load_average": [
+          1.66162109375,
+          1.419921875,
+          1.2666015625
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4409472,
+          "MemAvailable": 9171440,
+          "Buffers": 0,
+          "Cached": 5056860,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.09 avg60=0.27 avg300=0.28 total=59755016274\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 637596,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202144,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 637596,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:23:25+00:00",
+        "load_average": [
+          1.79443359375,
+          1.4560546875,
+          1.28076171875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4403824,
+          "MemAvailable": 9165800,
+          "Buffers": 0,
+          "Cached": 5056868,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.05 avg60=0.25 avg300=0.27 total=59755033239\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 642460,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202144,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 642460,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 9.472839667703715,
+            "upper_bound": 9.486039530432118
+          },
+          "point_estimate": 9.476107369503445,
+          "standard_error": 0.0036662310049136704
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.730305057672743,
+            "upper_bound": 8.738557477960963
+          },
+          "point_estimate": 8.733962905522883,
+          "standard_error": 0.0019404802731088867
+        }
+      }
+    },
+    {
+      "round": 1,
+      "function": "atan2pif",
+      "arm": "before",
+      "binary_sha256": "3570848a6ec650bc816159c6f880a2b16aaad6aee2604a288dccb7eb7efa985a",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/before-atan2pif",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-1-before"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:25+00:00",
+        "load_average": [
+          1.79443359375,
+          1.4560546875,
+          1.28076171875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4398424,
+          "MemAvailable": 9160400,
+          "Buffers": 0,
+          "Cached": 5056868,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.05 avg60=0.25 avg300=0.27 total=59755033252\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 642460,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202144,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 642460,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:23:32+00:00",
+        "load_average": [
+          1.81103515625,
+          1.46533203125,
+          1.28466796875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386224,
+          "MemAvailable": 9148236,
+          "Buffers": 0,
+          "Cached": 5056904,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.02 avg60=0.21 avg300=0.27 total=59755063742\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203640,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10.907523141426946,
+            "upper_bound": 10.935776961660162
+          },
+          "point_estimate": 10.920697262372585,
+          "standard_error": 0.006939637297917683
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.942578230555103,
+            "upper_bound": 8.955983210240497
+          },
+          "point_estimate": 8.949734504738029,
+          "standard_error": 0.0033644612618578987
+        }
+      }
+    },
+    {
+      "round": 1,
+      "function": "atan2pif",
+      "arm": "after",
+      "binary_sha256": "ffc553addee9da355c3d3bb2afc208f8a0614c864639471e639d47601fc092ba",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/after-atan2pif",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-1-after"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:32+00:00",
+        "load_average": [
+          1.81103515625,
+          1.46533203125,
+          1.28466796875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386184,
+          "MemAvailable": 9148196,
+          "Buffers": 0,
+          "Cached": 5056904,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.02 avg60=0.21 avg300=0.27 total=59755063791\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203640,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:23:40+00:00",
+        "load_average": [
+          1.84033203125,
+          1.4833984375,
+          1.29248046875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4388284,
+          "MemAvailable": 9150296,
+          "Buffers": 0,
+          "Cached": 5056904,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.19 avg300=0.26 total=59755079947\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203240,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 9.49767238491691,
+            "upper_bound": 9.531563791334252
+          },
+          "point_estimate": 9.510423609312603,
+          "standard_error": 0.008048944530895476
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.969561136836374,
+            "upper_bound": 8.996497345614593
+          },
+          "point_estimate": 8.98028713085544,
+          "standard_error": 0.006161778689406212
+        }
+      }
+    },
+    {
+      "round": 1,
+      "function": "cbrt",
+      "arm": "before",
+      "binary_sha256": "beebd629845bdba57dcf1aa93644c16fb88bbcdf830a975ccd97f9011caa9ae9",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/before-cbrt",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-1-before"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:40+00:00",
+        "load_average": [
+          1.84033203125,
+          1.4833984375,
+          1.29248046875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4387684,
+          "MemAvailable": 9149696,
+          "Buffers": 0,
+          "Cached": 5056904,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.19 avg300=0.26 total=59755079970\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203240,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:23:47+00:00",
+        "load_average": [
+          1.853515625,
+          1.4921875,
+          1.29638671875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4387280,
+          "MemAvailable": 9149300,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.16 avg300=0.25 total=59755098233\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 205260,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 9.220825971885773,
+            "upper_bound": 9.239951953879405
+          },
+          "point_estimate": 9.229753715688432,
+          "standard_error": 0.004958946387346868
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 7.940019222656691,
+            "upper_bound": 7.949458284912426
+          },
+          "point_estimate": 7.945516894367815,
+          "standard_error": 0.0028053585588391308
+        }
+      }
+    },
+    {
+      "round": 1,
+      "function": "cbrt",
+      "arm": "after",
+      "binary_sha256": "99c8cfd8bd8cc3074c031c8fc666450dff6084aa7f2ea699110aec05bd9a4f23",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/after-cbrt",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-1-after"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:47+00:00",
+        "load_average": [
+          1.853515625,
+          1.4921875,
+          1.29638671875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386620,
+          "MemAvailable": 9148640,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.16 avg300=0.25 total=59755098254\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 205260,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:23:54+00:00",
+        "load_average": [
+          1.79638671875,
+          1.4921875,
+          1.29833984375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386928,
+          "MemAvailable": 9148948,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.14 avg300=0.24 total=59755119736\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 205260,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.456942005586479,
+            "upper_bound": 8.488850628688109
+          },
+          "point_estimate": 8.473661686413976,
+          "standard_error": 0.008060338866069298
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 7.830160035522255,
+            "upper_bound": 7.866080159453896
+          },
+          "point_estimate": 7.844968345045606,
+          "standard_error": 0.008928306438653513
+        }
+      }
+    },
+    {
+      "round": 2,
+      "function": "atan2f",
+      "arm": "after",
+      "binary_sha256": "e6da0500e556447960db383d2896bd650161fc90b3218dba57e3c7a30735680d",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/after-atan2f",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-2-after"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:23:54+00:00",
+        "load_average": [
+          1.79638671875,
+          1.4921875,
+          1.29833984375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386500,
+          "MemAvailable": 9148520,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.14 avg300=0.24 total=59755119766\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288528,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 205260,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:24:02+00:00",
+        "load_average": [
+          1.81298828125,
+          1.5009765625,
+          1.30224609375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386896,
+          "MemAvailable": 9148916,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.12 avg300=0.24 total=59755136031\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289040,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 204836,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 9.471562200956939,
+            "upper_bound": 9.487824984147116
+          },
+          "point_estimate": 9.477054769684745,
+          "standard_error": 0.004110867943484302
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.638349981421172,
+            "upper_bound": 8.653748131608724
+          },
+          "point_estimate": 8.646929889924579,
+          "standard_error": 0.0036432011543588356
+        }
+      }
+    },
+    {
+      "round": 2,
+      "function": "atan2f",
+      "arm": "before",
+      "binary_sha256": "48962f38d01ab4579f385a768c899213c243eb9c88a363bdcb04937de9c43d63",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/before-atan2f",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-2-before"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:24:02+00:00",
+        "load_average": [
+          1.81298828125,
+          1.5009765625,
+          1.30224609375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386364,
+          "MemAvailable": 9148384,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465485\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498818",
+        "cpu_pressure": "some avg10=0.00 avg60=0.12 avg300=0.24 total=59755136049\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289040,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 204836,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:24:09+00:00",
+        "load_average": [
+          1.84228515625,
+          1.517578125,
+          1.31005859375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4387176,
+          "MemAvailable": 9149196,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465522\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498855",
+        "cpu_pressure": "some avg10=0.00 avg60=0.11 avg300=0.23 total=59755155783\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289040,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 204836,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10.873866028489175,
+            "upper_bound": 10.92367679220016
+          },
+          "point_estimate": 10.88780142007958,
+          "standard_error": 0.015191750992097446
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.684933189089728,
+            "upper_bound": 8.70057048945645
+          },
+          "point_estimate": 8.692046873432574,
+          "standard_error": 0.0037006482703624013
+        }
+      }
+    },
+    {
+      "round": 2,
+      "function": "atan2pif",
+      "arm": "after",
+      "binary_sha256": "ffc553addee9da355c3d3bb2afc208f8a0614c864639471e639d47601fc092ba",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/after-atan2pif",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-2-after"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:24:10+00:00",
+        "load_average": [
+          1.84228515625,
+          1.517578125,
+          1.31005859375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4386748,
+          "MemAvailable": 9148768,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465522\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159498855",
+        "cpu_pressure": "some avg10=0.00 avg60=0.11 avg300=0.23 total=59755155802\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289040,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 204836,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:24:17+00:00",
+        "load_average": [
+          1.7744140625,
+          1.5087890625,
+          1.30810546875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4387804,
+          "MemAvailable": 9149824,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465735\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499068",
+        "cpu_pressure": "some avg10=0.00 avg60=0.09 avg300=0.22 total=59755175504\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289040,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202756,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 9.489081861772236,
+            "upper_bound": 9.512803901740192
+          },
+          "point_estimate": 9.506388571623297,
+          "standard_error": 0.0064506653361443966
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.974939577591911,
+            "upper_bound": 9.006276575589157
+          },
+          "point_estimate": 8.988528949316795,
+          "standard_error": 0.007305620969319974
+        }
+      }
+    },
+    {
+      "round": 2,
+      "function": "atan2pif",
+      "arm": "before",
+      "binary_sha256": "3570848a6ec650bc816159c6f880a2b16aaad6aee2604a288dccb7eb7efa985a",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/before-atan2pif",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-2-before"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:24:17+00:00",
+        "load_average": [
+          1.7744140625,
+          1.5087890625,
+          1.30810546875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4387404,
+          "MemAvailable": 9149424,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465735\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499068",
+        "cpu_pressure": "some avg10=0.00 avg60=0.09 avg300=0.22 total=59755175542\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289040,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202756,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.4,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:24:25+00:00",
+        "load_average": [
+          1.8154296875,
+          1.52490234375,
+          1.3154296875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4389096,
+          "MemAvailable": 9151116,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465745\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499078",
+        "cpu_pressure": "some avg10=0.00 avg60=0.08 avg300=0.21 total=59755191683\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288492,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203268,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10.933068286396818,
+            "upper_bound": 10.957199778486865
+          },
+          "point_estimate": 10.938302286188694,
+          "standard_error": 0.005733606480542877
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.939605428028884,
+            "upper_bound": 8.962398082533397
+          },
+          "point_estimate": 8.949169486886504,
+          "standard_error": 0.006380408353669104
+        }
+      }
+    },
+    {
+      "round": 2,
+      "function": "cbrt",
+      "arm": "after",
+      "binary_sha256": "99c8cfd8bd8cc3074c031c8fc666450dff6084aa7f2ea699110aec05bd9a4f23",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/after-cbrt",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-2-after"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:24:25+00:00",
+        "load_average": [
+          1.8154296875,
+          1.52490234375,
+          1.3154296875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4388908,
+          "MemAvailable": 9150928,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465745\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499078",
+        "cpu_pressure": "some avg10=0.00 avg60=0.08 avg300=0.21 total=59755191704\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 288492,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203268,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:24:32+00:00",
+        "load_average": [
+          1.83056640625,
+          1.533203125,
+          1.3193359375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4389444,
+          "MemAvailable": 9151464,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465761\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499094",
+        "cpu_pressure": "some avg10=0.00 avg60=0.07 avg300=0.21 total=59755207338\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289004,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203236,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8.459740361154694,
+            "upper_bound": 8.487690987030012
+          },
+          "point_estimate": 8.473471407631617,
+          "standard_error": 0.007161593966494193
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 7.840291067336826,
+            "upper_bound": 7.866204261743987
+          },
+          "point_estimate": 7.854529564535956,
+          "standard_error": 0.0066632040665647995
+        }
+      }
+    },
+    {
+      "round": 2,
+      "function": "cbrt",
+      "arm": "before",
+      "binary_sha256": "beebd629845bdba57dcf1aa93644c16fb88bbcdf830a975ccd97f9011caa9ae9",
+      "command": [
+        "taskset",
+        "-c",
+        "14",
+        "/tmp/metallic-issue9/before-cbrt",
+        "--bench",
+        "^(metallic|core_math)::",
+        "--noplot",
+        "--warm-up-time",
+        "1",
+        "--measurement-time",
+        "2",
+        "--save-baseline",
+        "issue9-repeat-2-before"
+      ],
+      "before": {
+        "utc": "2026-09-11T05:24:32+00:00",
+        "load_average": [
+          1.83056640625,
+          1.533203125,
+          1.3193359375
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4388736,
+          "MemAvailable": 9150756,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465761\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499094",
+        "cpu_pressure": "some avg10=0.00 avg60=0.07 avg300=0.21 total=59755207365\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289004,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 203236,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 227536,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "after": {
+        "utc": "2026-09-11T05:24:39+00:00",
+        "load_average": [
+          1.7021484375,
+          1.51513671875,
+          1.3154296875
+        ],
+        "memory_kib": {
+          "MemTotal": 16777216,
+          "MemFree": 4389948,
+          "MemAvailable": 9151968,
+          "Buffers": 0,
+          "Cached": 5056912,
+          "SwapTotal": 0,
+          "SwapFree": 0,
+          "Dirty": 0
+        },
+        "memory_pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=160465761\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=159499094",
+        "cpu_pressure": "some avg10=0.00 avg60=0.06 avg300=0.20 total=59755228527\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "top_cpu": [
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 132315,
+            "cpu_percent": 0.4,
+            "memory_percent": 1.7,
+            "rss_kib": 289004,
+            "executable": "claude"
+          },
+          {
+            "pid": 176603,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.2,
+            "rss_kib": 202604,
+            "executable": "codex"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 178474,
+            "cpu_percent": 0.3,
+            "memory_percent": 1.3,
+            "rss_kib": 228048,
+            "executable": "claude"
+          }
+        ],
+        "top_memory": [
+          {
+            "pid": 123523,
+            "cpu_percent": 0.0,
+            "memory_percent": 7.0,
+            "rss_kib": 1178956,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 176930,
+            "cpu_percent": 0.3,
+            "memory_percent": 6.5,
+            "rss_kib": 1096508,
+            "executable": "rust-analyzer"
+          },
+          {
+            "pid": 122958,
+            "cpu_percent": 0.2,
+            "memory_percent": 4.3,
+            "rss_kib": 733432,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 176507,
+            "cpu_percent": 1.3,
+            "memory_percent": 3.8,
+            "rss_kib": 650652,
+            "executable": "MainThread"
+          },
+          {
+            "pid": 126574,
+            "cpu_percent": 0.0,
+            "memory_percent": 2.4,
+            "rss_kib": 418792,
+            "executable": "MainThread"
+          }
+        ]
+      },
+      "estimates": {
+        "metallic": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 9.221131047827216,
+            "upper_bound": 9.231068469341627
+          },
+          "point_estimate": 9.227310428143083,
+          "standard_error": 0.0026385451239921295
+        },
+        "core_math": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 7.924521443930831,
+            "upper_bound": 7.93888777110475
+          },
+          "point_estimate": 7.929482893576441,
+          "standard_error": 0.0031284165886165337
+        }
+      }
+    }
+  ],
+  "dependencies": {
+    "core-math": "1.3.0",
+    "core-math-sys": "1.3.0",
+    "fast_polynomial": "0.4.0",
+    "criterion": "0.8.2"
+  },
+  "validation": {
+    "test-soundness-v3": {
+      "summary": [
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 72 filtered out; finished in 30.47s"
+      ],
+      "soundness": [
+        "cbrt fast leg: worst |err|/gate = 0.0624 at x=7.269969134787415e-1",
+        "atan2f fast leg: worst |err|/gate = 0.103668 (9.6x margin), x=1.9478920457668126e-28, y=9.842072130578924e-32",
+        "atan2pif fast leg: worst |err|/gate = 0.103530 (9.7x margin), x=1.5613142323336968e-15, y=3.2071131347297453e-19"
+      ]
+    },
+    "test-soundness-default": {
+      "summary": [
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 72 filtered out; finished in 27.22s"
+      ],
+      "soundness": [
+        "cbrt fast leg: worst |err|/gate = 0.0624 at x=7.269969134787415e-1",
+        "atan2f fast leg: worst |err|/gate = 0.103668 (9.6x margin), x=1.9478920457668126e-28, y=9.842072130578924e-32",
+        "atan2pif fast leg: worst |err|/gate = 0.103530 (9.7x margin), x=1.5613142323336968e-15, y=3.2071131347297453e-19"
+      ]
+    },
+    "test-soundness-baseline": {
+      "summary": [
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 72 filtered out; finished in 31.11s"
+      ],
+      "soundness": [
+        "atan2f fast leg: worst |err|/gate = 0.103668 (9.6x margin), x=1.9478920457668126e-28, y=9.842072130578924e-32",
+        "atan2pif fast leg: worst |err|/gate = 0.103530 (9.7x margin), x=1.5613142323336968e-15, y=3.2071131347297453e-19",
+        "cbrt fast leg: worst |err|/gate = 0.0624 at x=7.269969134787415e-1"
+      ]
+    },
+    "test-targeted-v3": {
+      "summary": [
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 233 filtered out; finished in 1.92s"
+      ],
+      "soundness": []
+    },
+    "test-targeted-baseline": {
+      "summary": [
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 233 filtered out; finished in 3.30s"
+      ],
+      "soundness": []
+    },
+    "default_rustflags": "-Ctarget-cpu=native from /home/jdh8/.cargo/config.toml",
+    "cargo_test": {
+      "summary": [
+        "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.41s",
+        "test result: ok. 208 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 461.29s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    }
+  }
+}

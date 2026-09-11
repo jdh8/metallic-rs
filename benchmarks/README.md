@@ -10,6 +10,7 @@ Later campaigns:
 - [f32 optimizations, September 5](2026-09-05/f32-optimization/README.md)
 - [f64 optimizations, September 5](2026-09-05/f64-optimization/README.md)
 - [binary128 trig, September 9](2026-09-09/trig-v2/README.md)
+- [Intel atan2f and cbrt, September 11](2026-09-11/intel-issue9/README.md)
 
 ## Measurement policy
 

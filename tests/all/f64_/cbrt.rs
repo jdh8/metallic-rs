@@ -15,6 +15,19 @@ fn test_cbrt() {
     );
 }
 
+/// Every normal exponent and every subnormal leading-bit position exercises
+/// the biased division by three, with neighbours and both signs at each seam.
+#[test]
+fn test_cbrt_exponent_seams() {
+    let powers = (1..2047_u64)
+        .map(|e| e << 52)
+        .chain((0..52).map(|bit| 1_u64 << bit));
+    let cases = powers
+        .flat_map(|bits| [bits - 1, bits, bits + 1])
+        .flat_map(|bits| [f64::from_bits(bits), -f64::from_bits(bits)]);
+    common::test_univariate_cases(metallic::cbrt, core_math::cbrt, cases);
+}
+
 /// Independent confirmation of correct rounding against MPFR.  Run with
 /// `cargo test --release --features mpfr`.  Representation-uniform over all `f64`.
 #[cfg(feature = "mpfr")]
