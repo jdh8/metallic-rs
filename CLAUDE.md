@@ -382,7 +382,10 @@ pattern (`src/f64_/log.rs` has the model modules).
 
 ## Performance
 
-Performance work is tracked in **issue #5** (#6 was correctness).  Bench with
+Performance work was tracked in issue #5 (closed 2026-06-26; #6 was
+correctness); ongoing performance findings now get their own issue as they
+turn up (e.g. #8, #9) rather than one perpetually-open tracker — check
+open issues for the current laggards before starting new work.  Bench with
 `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo bench --bench <fn>` (the CI-canonical
 flag — the host default has **no FMA**), then run `python3
 tools/bench_ratio.py median` for the paired table.  The headline number is the
