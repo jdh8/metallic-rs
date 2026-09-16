@@ -643,3 +643,17 @@ required-features = ["f128"]
 name = "tanhq"
 harness = false
 required-features = ["f128"]
+
+[[example]]
+name = "gen_f128_invhyp_cases"
+required-features = ["f128", "mpfr"]
+
+[[bench]]
+name = "asinhq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "acoshq"
+harness = false
+required-features = ["f128"]

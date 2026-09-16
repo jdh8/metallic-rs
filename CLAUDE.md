@@ -104,6 +104,23 @@ sweeps, CORE-MATH f64 cross-checks, and standalone libquadmath/std benches
 follow the other unbound q functions. Keep them out of `FUNCS128` until
 upstream binds them.
 
+`asinhq`/`acoshq` share `invhyp.rs`: an alternating asinh Taylor ratio
+below 2^-4, `2*asinh(sqrt((x-1)/2))` for acosh below `1+2^-7`, and
+unrounded `log(x+sqrt(x²±1))` elsewhere. `roots::sqrt_wide_seeded` plus
+one Newton correction supplies the fast root; `log::reduce_significand`
+and `log::fast::<Natural>` share the logarithm reduction and polynomial.
+The accurate leg uses 384-bit roots and series on the existing logarithm
+tables, with a 2^-320 relative precision policy. Root iterates saturate
+when approaching the frame's upper endpoint; forced-fallback tests cover
+powers of two and neighbors in every exponent. Exact Taylor rationals
+come from `tools/gen_invhyp_f128.py`. The million-input certifications
+measure worst |err|/gate 0.250035 / 0.250010 (about 4× margin).
+`examples/gen_f128_invhyp_cases.rs` generates MPFR-answer corpora from
+edges, inverse midpoints, half-ulp cubic corrections and 20M scan inputs
+per function. Full-representation MPFR sweeps, CORE-MATH f64 cross-checks,
+libquadmath/std benches and accuracy surveys follow the other unbound q
+functions. Leave them out of `FUNCS128` until upstream binds them.
+
 `logq` reduces in *log space*, which is why it needs no reciprocal-indexed log
 table: a per-bucket linear fit (`CRUDE`) estimates `j ≈ 2^18·log2(m)` to within
 0.9 of a unit, the three 6-bit slices of `j` index 31-bit reciprocals whose

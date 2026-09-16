@@ -110,7 +110,7 @@ pub(super) trait Base {
 }
 
 /// The natural logarithm's constants.
-struct Natural;
+pub(super) struct Natural;
 
 impl Base for Natural {
     const UNIT_SLOPE: bool = true;
@@ -366,6 +366,12 @@ fn edge1p(bits: u128) -> f128 {
 fn reduce1p(bits: u128) -> (i32, u32, [u128; 3]) {
     let (m, e) = split(bits & !SIGN_MASK);
     let (big, e) = one_plus(m, e, bits >> 127 != 0);
+    reduce_significand(big, e)
+}
+
+/// Reduce a normalized 256-bit significand with its unbiased exponent.
+#[inline]
+pub(super) fn reduce_significand(big: [u128; 2], e: i32) -> (i32, u32, [u128; 3]) {
     let j = crude_log2_top((big[1] >> 64) as u64);
     let r = reciprocal(j);
 

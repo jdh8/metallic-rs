@@ -16,6 +16,8 @@ assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
 assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
 assert_eq!(metallic::sinhq(-0.0_f128).to_bits(), (-0.0_f128).to_bits());
 assert_eq!(metallic::coshq(0.0_f128), 1.0);
+assert_eq!(metallic::asinhq(-0.0_f128).to_bits(), (-0.0_f128).to_bits());
+assert_eq!(metallic::acoshq(1.0_f128), 0.0);
 assert_eq!(metallic::tanhq(f128::INFINITY), 1.0);
 assert_eq!(metallic::exp2q(10.0_f128), 1024.0);
 assert_eq!(metallic::exp2m1q(10.0_f128), 1023.0);
@@ -53,7 +55,7 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinhq`/`coshq`/`tanhq`/`exp2m1q`/`exp10m1q`/
+  `asinhq`/`acoshq`/`sinhq`/`coshq`/`tanhq`/`exp2m1q`/`exp10m1q`/
   `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
   `asinpiq`/`acospiq`/`atanpiq`/`atan2piq`/`log1pq`/`log2p1q`/`log10p1q`/`powq`
   have no CORE-MATH binding yet:
@@ -72,8 +74,10 @@ Each function is done when both gates hold:
 
 | Function | CR |
 |----------|:--:|
+| `acoshq` | ✅ |
 | `acospiq` | ✅ |
 | `acosq`  | ✅ |
+| `asinhq` | ✅ |
 | `asinpiq` | ✅ |
 | `asinq`  | ✅ |
 | `atanpiq` | ✅ |
@@ -156,7 +160,7 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Eight `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+Six `f64` entry points have no binary128 counterpart yet.  `fmaq`,
 `frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
 written already, `roundq` is the few lines of bit manipulation its row
 promised, and `sincosq` hoisted `trig::reduce` once across both legs as
@@ -164,7 +168,6 @@ planned.  For the rest, what follows is the plan, not a status report.
 
 | to do | rides on |
 |-------|----------|
-| `asinhq`, `acoshq` | `log.rs` plus `roots::sqrt_wide_seeded` |
 | `atanhq` | `log1pq`'s front end and `SMALL_GATE` band |
 | `compoundq` | `pow.rs`'s three tiers with `log::one_plus` in front |
 | `erfq`, `erfcq`, `tgammaq`, `lgammaq` | nothing yet — new tables, new generators |
@@ -213,12 +216,11 @@ quarter-integer values explicitly, including IEEE signed-zero and pole parity.
 Their corpora cover those seams and their neighbors through the all-integer
 range above 2^112.
 
-**Phase 3 — the hyperbolics (direct functions done).**
-`sinhq`, `coshq`, and `tanhq` share the new `hyp.rs` family described below.
-The remaining `asinhq`/`acoshq` are
-`log(x + √(x² ± 1))` with `x² ± 1` formed exactly — `log::one_plus` is that
-primitive and `sqrt_wide_seeded` is the root.  `atanhq` is
-`½·log1p(2x/(1 − x))` and is nearly free once `log1pq`'s small band is reused.
+**Phase 3 — the hyperbolics (`atanhq` remains).**
+`sinhq`, `coshq`, and `tanhq` share `hyp.rs`; `asinhq` and `acoshq`
+share `invhyp.rs`, combining integer roots with the logarithm tables and
+using direct series near their zeros. `atanhq` is
+`½·log1p(2x/(1 − x))`, sharing `log1pq`'s small band.
 
 **Phase 4 — `compoundq`.**  `powq`'s engine with `log::one_plus` ahead of the
 logarithm.  The `exact` tier needs its own analysis (`(1+x)^y`'s exact cases
@@ -448,6 +450,54 @@ cycles; the tanh trace also calls the integer division helper. Regenerate
 with `python3 tools/analysis.py asm --only sinhq,coshq,tanhq --isa v3`, then
 `python3 tools/analysis.py mca --only sinhq,coshq,tanhq`.
 
+`asinhq` and `acoshq` share `invhyp.rs`. For `|x| < 2^-4`, asinh
+uses the alternating Taylor ratio `asinh(x)/x`, multiplying the input
+significand last; below `2^-57` it returns x, including signed zero and
+subnormals. Near one (`1 < x < 1 + 2^-7`), acosh uses
+`2*asinh(sqrt((x-1)/2))`, with the subtraction exact in integer arithmetic.
+Elsewhere both compute `log(x + sqrt(x² ± 1))` on unrounded significands:
+`sqrt_wide_seeded` plus one wider Newton correction supplies the root, and
+`log.rs` supplies the reduction and fast logarithm. The large-input leg
+uses `log(2x)` only once its omitted correction fits the error budget.
+
+The fallback uses 384-bit roots and series with the existing logarithm
+tables at `2^-342`. `tools/gen_invhyp_f128.py` generates exact rational
+Taylor coefficients for asinh and the extended logarithm residual. Its
+relative precision policy is `2^-320`, checked separately from the fast
+gate. Newton roots saturate at the upper endpoint of their integer frame
+when they approach one, preventing an intermediate overshoot from wrapping.
+Forced-fallback tests cover powers of two and their neighbors over every
+exponent. The million-input certifications measure worst `|err|/gate`
+0.250035 / 0.250010 (asinh/acosh), about 4× margin; fallback errors stay
+below 0.00183 of the stated relative bound.
+
+`examples/gen_f128_invhyp_cases.rs` freezes MPFR answers from domain edges,
+series and logarithm seams, inverse 114-bit output midpoints, inputs whose
+asinh cubic correction approaches a half ulp, and 20 million midpoint-scan
+inputs per function. Parser-count guards prevent an absent or truncated
+corpus from passing: the frozen gates hold 713 262 / 387 906 cases
+(asinh/acosh). Optional MPFR sweeps cover all exponent fields,
+subnormals, the neighborhood of one, and every branch boundary. Both
+functions have CORE-MATH f64 cross-checks and libquadmath/std benchmarks;
+neither has a CORE-MATH binary128 binding.
+
+On 2026-09-16, the Intel Core i9-14900K with x86-64-v3 measured same-run
+medians of 54.11 / 59.03 ns (asinh/acosh), or 0.0610× / 0.0708×
+libquadmath. These are timing comparisons with a weaker accuracy contract;
+CORE-MATH ratios remain unavailable. The exhaustive tests were paused for
+these serial runs, with 8.6 GiB memory available. Reproduce with:
+
+```sh
+CC=clang RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench --features f128 \
+  --bench asinhq --bench acoshq -- \
+  --warm-up-time 1 --measurement-time 3 --sample-size 50
+```
+
+Their initial fast-path traces at `x = 1.7` cost 436 / 424 llvm-mca cycles
+(asinh/acosh), with no out-of-line calls. Reproduce with
+`python3 tools/analysis.py asm --only asinhq,acoshq --isa v3`, followed by
+`python3 tools/analysis.py mca --only asinhq,acoshq`.
+
 ## Baselines
 
 Three other binary128 implementations are within reach on a GNU/Linux box, and
@@ -527,6 +577,17 @@ benchmark bands (`Exponents(-20..=13)` for sinh/cosh, `-20..=5` for tanh):
 
 Reproduce with `CC=clang cargo +nightly run --release --features "f128 mpfr"
 --example f128_ulp_survey -- 200000 sinhq coshq tanhq`.
+
+The inverse hyperbolics' 200 000-draw survey uses their benchmark bands
+(`Exponents(-20..=20)` for asinh, `PositiveExponents(0..=10)` for acosh):
+
+| function | metallic | glibc | libquadmath |
+|----------|:--------:|:-----:|:-----------:|
+| `asinhq` | **0.5000** | 2.7504 | 2.7504 |
+| `acoshq` | **0.5000** | 2.6463 | 2.6463 |
+
+Reproduce with `CC=clang cargo +nightly run --release --features "f128 mpfr"
+--example f128_ulp_survey -- 200000 asinhq acoshq`.
 
 The share of draws whose last bit comes out wrong spans four orders of
 magnitude: 0.006% for glibc's `logq`, ~1% for the exponentials and the sine,

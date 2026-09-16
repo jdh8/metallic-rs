@@ -125,9 +125,15 @@ mod common128_atanpi;
 mod common128_hyp;
 
 #[cfg(feature = "f128")]
+#[path = "common/f128_invhyp.rs"]
+mod common128_invhyp;
+
+#[cfg(feature = "f128")]
 mod f128_ {
+    mod acoshq;
     mod acospiq;
     mod acosq;
+    mod asinhq;
     mod asinpiq;
     mod asinq;
     mod atan2piq;
