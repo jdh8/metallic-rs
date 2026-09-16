@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acospiq acosq asinpiq asinq atan2piq atan2q atanpiq atanq cbrtq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
-        log2p1q log2q log10p1q log10q logq powq rsqrtq sinpiq sinq sqrtq tanpiq tanq""".split(),
+    "f128": """acospiq acosq asinpiq asinq atan2piq atan2q atanpiq atanq cbrtq coshq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
+        log2p1q log2q log10p1q log10q logq powq rsqrtq sinhq sinpiq sinq sqrtq tanhq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
-    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
+    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -611,6 +611,18 @@ FN = {
         "m": {"cov": ["f128_/tan.rs: fn accurate(m: u128, e: i32, sign: u128) -> f128 {"], "leg": "sym:tan::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": None,
     },
+    "sinhq": {
+        "m": {"cov": ["f128_/hyp.rs: fn accurate<const KIND: u8>("], "leg": "sym:hyp::accurate<0u8>", "prec": "128-bit fixed → 384-bit fixed"},
+        "c": None,
+    },
+    "coshq": {
+        "m": {"cov": ["f128_/hyp.rs: fn accurate<const KIND: u8>("], "leg": "sym:hyp::accurate<1u8>", "prec": "128-bit fixed → 384-bit fixed"},
+        "c": None,
+    },
+    "tanhq": {
+        "m": {"cov": ["f128_/hyp.rs: fn accurate<const KIND: u8>("], "leg": "sym:hyp::accurate<2u8>", "prec": "128-bit fixed → 384-bit fixed"},
+        "c": None,
+    },
 }
 # END FN
 
@@ -932,7 +944,8 @@ def symbol_matcher(leg):
     `sym:a::b` matches a Rust label containing `1a1b`-style `<len><ident>`
     segments back to back (legacy and v0 mangling both keep them), `sym:a::b<T>`
     one whose generic argument `1T` follows; `<true>`/`<false>` select a v0
-    boolean const argument (`Kb1_`/`Kb0_`). Also matches a C label equal to the
+    boolean const argument (`Kb1_`/`Kb0_`), and `<Nu8>` selects a byte const
+    argument (`Kh` followed by hexadecimal N). Also matches a C label equal to the
     last segment (optionally `@PLT`).
     """
     spec = leg.split(":", 1)[1]
@@ -943,6 +956,8 @@ def symbol_matcher(leg):
     pattern = r"(?<!\d)" + "".join(str(len(p)) + re.escape(p) for p in path)
     if generic in ("true", "false"):
         pattern += "Kb" + ("1" if generic == "true" else "0") + "_"
+    elif generic and re.fullmatch(r"\d+u8", generic):
+        pattern += "Kh" + format(int(generic[:-2]), "x") + "_"
     elif generic:   # v0 spells the argument `<len><Type>` after the path
         pattern += r".*?(?<!\d)" + str(len(generic)) + re.escape(generic)
     mangled = re.compile(pattern)
@@ -2048,7 +2063,7 @@ def cmd_render(args):
         "## Method",
         "**Function.** One row per public function, cells `metallic / CORE-MATH`; `—` where "
         "the `core_math` crate has no binding (`fma*`, `frexp*`, `ldexp*`, `round*`, "
-        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq`).",
+        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq`).",
         "**v3, v4, native.** Cycles of the fast path from `llvm-mca -mcpu=x86-64-v3`, "
         "`x86-64-v4` and the host model (`{}`), each on the assembly rustc and clang emit for "
         "that level. GDB traces one call from the wrapper's entry (`metallic_<fn>`, "

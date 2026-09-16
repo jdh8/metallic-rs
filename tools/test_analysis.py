@@ -15,6 +15,11 @@ def main():
     match = a.symbol_matcher("sym:asinpi_accurate")
     assert match("_RNvNtC123_8metallic15asinpi_accurate")
     assert not match("_RNCNvNtC123_8metallic15asinpi_accurate0B7_")
+    for kind in range(3):
+        match = a.symbol_matcher(f"sym:hyp::accurate<{kind}u8>")
+        for other in range(3):
+            label = f"_RINvNtNtC123_8metallic5f128_3hyp8accurateKh{other:x}_E"
+            assert match(label) == (kind == other)
     program = a.Program("""
 entry:
     cmpl $0, %eax

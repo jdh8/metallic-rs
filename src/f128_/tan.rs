@@ -99,7 +99,7 @@ fn tan_frac(t1: u128, et: i32, u: u128, v: u128) -> (u128, i32) {
 /// correction under 2^3.3 — sits far below one unit.  Only the final cut to
 /// 128 bits costs anything.
 #[inline]
-fn quotient(n: u128, d: u128) -> (u128, i32) {
+pub(super) fn quotient(n: u128, d: u128) -> (u128, i32) {
     let r = recip_128(d);
     let (high, low) = wmul(n, r);
     let q0 = (high << 1) | (low >> 127);
@@ -223,7 +223,7 @@ fn refine(n: [u128; 3], d: [u128; 3], v: [u128; 3], r: u128, margin: u128) -> [u
 /// steps from the top-limb reciprocal, held four units under [`recip_128`]
 /// so it sits below `2^510/d` for the full-width `d` (the top limb alone
 /// overstates the reciprocal by under 2^-127).
-fn quotient_384(n: [u128; 3], d: [u128; 3]) -> ([u128; 3], i32) {
+pub(super) fn quotient_384(n: [u128; 3], d: [u128; 3]) -> ([u128; 3], i32) {
     let r = recip_128(d[2]) - 4;
     let p = wmul_128x384(r, n);
     let v = refine(n, d, [p[1], p[2], p[3]], r, 8);

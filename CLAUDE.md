@@ -87,6 +87,23 @@ base 10 is exact at positive integers through 34. CORE-MATH has no binding:
 slopes on both rounding grids, four near-midpoint scan bands). Keep
 them out of `FUNCS128`; the benchmarks have no external baseline.
 
+`sinhq`/`coshq`/`tanhq` share `hyp.rs`: Taylor ratios in `x²` below
+`|x| = 2^-4`, multiplying the exact input significand last for the odd
+functions; unrounded `(exp(x) ± exp(-x))/2` above, with `tanhq` using
+`tan.rs`'s shared `quotient`/`quotient_384`. Halving in the integer frame
+keeps sinh/cosh finite beyond expq's overflow point. Below 2^-57 the odd
+functions return x and cosh returns 1, including subnormals. The accurate
+leg lifts expq's table engine to 384 bits on its existing 380-bit log2(e)
+constant; `tools/gen_hyp_f128.py` generates mathematical exp2 tables and
+factorial/Bernoulli Taylor constants. Its relative precision policy is
+2^-360. `hyp::ziv_soundness` measures worst |err|/gate 0.321967 / 0.321967 /
+0.071981, at least 3.1× margin. `examples/gen_f128_hyp_cases.rs` freezes MPFR
+answers from edges, inverse output midpoints, half-ulp cubic corrections,
+and 20M scan inputs per function. Corpus guards, full-representation MPFR
+sweeps, CORE-MATH f64 cross-checks, and standalone libquadmath/std benches
+follow the other unbound q functions. Keep them out of `FUNCS128` until
+upstream binds them.
+
 `logq` reduces in *log space*, which is why it needs no reciprocal-indexed log
 table: a per-bucket linear fit (`CRUDE`) estimates `j ≈ 2^18·log2(m)` to within
 0.9 of a unit, the three 6-bit slices of `j` index 31-bit reciprocals whose

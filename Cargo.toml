@@ -624,3 +624,22 @@ required-features = ["f128"]
 name = "atan2piq"
 harness = false
 required-features = ["f128"]
+
+[[example]]
+name = "gen_f128_hyp_cases"
+required-features = ["f128", "mpfr"]
+
+[[bench]]
+name = "sinhq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "coshq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "tanhq"
+harness = false
+required-features = ["f128"]

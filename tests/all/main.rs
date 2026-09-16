@@ -121,6 +121,10 @@ mod common128_arcpi;
 mod common128_atanpi;
 
 #[cfg(feature = "f128")]
+#[path = "common/f128_hyp.rs"]
+mod common128_hyp;
+
+#[cfg(feature = "f128")]
 mod f128_ {
     mod acospiq;
     mod acosq;
@@ -131,6 +135,7 @@ mod f128_ {
     mod atanpiq;
     mod atanq;
     mod cbrtq;
+    mod coshq;
     mod cospiq;
     mod cosq;
     mod exp10m1q;
@@ -153,9 +158,11 @@ mod f128_ {
     mod roundq;
     mod rsqrtq;
     mod sincosq;
+    mod sinhq;
     mod sinpiq;
     mod sinq;
     mod sqrtq;
+    mod tanhq;
     mod tanpiq;
     mod tanq;
 }

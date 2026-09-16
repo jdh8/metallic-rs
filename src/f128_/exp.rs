@@ -196,7 +196,7 @@ const fn trailing_zeros(head: [u128; 2]) -> u32 {
 /// sign of a random argument is unpredictable, and a mispredict here costs more
 /// than the whole negation.
 #[inline]
-fn frame(m: u128, e: i32, l: &Reduction, negative: bool) -> (i32, u128) {
+pub(super) fn frame(m: u128, e: i32, l: &Reduction, negative: bool) -> (i32, u128) {
     let (top, middle) = wmul(m, l.head[1]);
     let (middle, carry) = mhi(m, l.head[0]).overflowing_add(middle);
     let top = top + u128::from(carry);

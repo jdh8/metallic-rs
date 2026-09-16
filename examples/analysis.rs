@@ -593,6 +593,9 @@ probes! {
         sinpiq = metallic_sinpiq: unary;
         sqrtq = metallic_sqrtq: unary + core_math;
         tanq = metallic_tanq: unary;
+        sinhq = metallic_sinhq: unary;
+        coshq = metallic_coshq: unary;
+        tanhq = metallic_tanhq: unary;
         tanpiq = metallic_tanpiq: unary;
     }
 }
