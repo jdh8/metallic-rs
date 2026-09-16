@@ -82,9 +82,102 @@ Each function is done when both gates hold:
 nor libquadmath currently provides these entry points. They are not in the
 historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
 
-Remaining coverage relative to f64 includes the six hyperbolic functions,
-`erf`/`erfc`/`tgamma`/`lgamma`, the seven π-scaled trigonometric functions,
-`exp2m1`, `exp10m1`, `compound`, and the combined `sincos` entry point.
+## Coverage gap
+
+Twenty-five `f64` entry points have no binary128 counterpart yet.  The work is
+not started; what follows is the plan, not a status report.
+
+| to do | rides on |
+|-------|----------|
+| `fmaq`, `frexpq`, `ldexpq` | written already — `misc::{fma128, frexp, ldexp}` behind `#[allow(dead_code)]`, wanting only public names and docs |
+| `roundq` | nothing; a few lines of bit manipulation |
+| `sincosq` | `trig::reduce` hoisted once across both legs |
+| `exp2m1q`, `exp10m1q` | `exp.rs`, the `expm1q` structure at a different `L` |
+| `sinpiq`, `cospiq`, `tanpiq` | `trig.rs` / `tan.rs` tables and series — **no Payne–Hanek** |
+| `asinpiq`, `acospiq` | `asin.rs` with `1/π` folded into `PHI` |
+| `atanpiq`, `atan2piq` | `atan2.rs` with `1/π` folded into the tables |
+| `sinhq`, `coshq`, `tanhq` | `exp.rs` both legs; `tanhq` also `tan.rs`'s `quotient`/`refine` |
+| `asinhq`, `acoshq` | `log.rs` plus `roots::sqrt_wide_seeded` |
+| `atanhq` | `log1pq`'s front end and `SMALL_GATE` band |
+| `compoundq` | `pow.rs`'s three tiers with `log::one_plus` in front |
+| `erfq`, `erfcq`, `tgammaq`, `lgammaq` | nothing yet — new tables, new generators |
+
+`sqrtq` is the one entry point that goes the other way: `f64` defers to
+`f64::sqrt`, while binary128 needs its own because no `f128::` method is an
+oracle.
+
+### What every one of them costs
+
+`FUNCS128` in `tools/sync-worst-cases.sh` is `sqrt rsqrt cbrt hypot exp exp2
+exp10 expm1 log asin acos atan atan2`.  **None of the twenty-five has a
+CORE-MATH binding**, so none of them gets the cheap gate.  Each follows the
+`sinq`/`powq` route from CLAUDE.md — an `examples/gen_f128_*_cases.rs`
+generator producing a corpus that carries its own MPFR answers, the
+`--features mpfr` sweep, the matching `f64` CORE-MATH function as the
+oracle-free cross-check, and `mod ziv_soundness` in the same commit as the
+fast leg it certifies.  Budget the generator at roughly half the work of the
+function.
+
+Benchmark baselines split three ways.  libquadmath binds the hyperbolics,
+`erfq`, `lgammaq` and `tgammaq`; it has no entry point at all for the seven
+π-scaled functions, `exp2m1q`, `exp10m1q` or `compoundq`, which therefore get
+no external lane (as `log2p1q` and `log10p1q` already do not) and fall back to
+`tools/analysis.py` cycles as the headline.
+
+### Order
+
+**Phase 0 — exports.** `fmaq`, `frexpq`, `ldexpq`, `roundq`, `sincosq`.  Five
+of the twenty-five at almost no risk; only `sincosq` is real work, and there
+the point is to share one `reduce` rather than call `trig` twice.
+
+**Phase 1 — `exp2m1q`, `exp10m1q`.** `expm1q` already solved the hard half:
+riding the fast leg above `2^-6` and normalizing the subtracted 1 into a
+widened Ziv gate.  What changes is the near-zero branch.  `INV_FACT` sums
+`e^a − 1` on the *exact input significand*; for base 2 the argument is `x·ln2`,
+which is not exact, so the small branch needs its own `(b^x − 1)/x`
+coefficients from `tools/gen_exp_f128.py` to keep the property that settled
+`x = 2^-112`.
+
+**Phase 2 — the π-scaled seven.**  The best return in the list, and worth
+taking before the hyperbolics.  `sinpiq`/`cospiq`/`tanpiq` need no argument
+reduction machinery whatsoever: `n = round(256x)` and the residual are exact
+splits of the input significand, so the Payne–Hanek window, the `MAX_LZ` bail
+and the 448-bit accurate fraction all disappear, leaving the existing
+breakpoint tables and series with the residual scaled by π inside the frame.
+They should land *faster* than `sinq`.  For the inverse four, folding `1/π`
+into the constants makes the quadrant offsets dyadic — `atan2piq` adds 0, ½, 1
+instead of 0, π/2, π, so those additions become exact and an error term
+vanishes; the tables become `atan(i/64)/π` and `asin(j/128)/π`, regenerated
+with a `--pi` flag on the existing generators, still mathematical constants and
+not fits.  The risk to design for first is exactness at the seams: `sinpiq`'s
+zeros at every integer and `tanpiq`'s poles at every half-integer must come out
+by construction, and the corpus has to hammer their ±1-ulp neighbourhoods
+across the whole exponent range.
+
+**Phase 3 — the hyperbolics.**  The bulk of the remaining line count.
+`sinhq`/`coshq` are `(e^x ∓ e^-x)/2` on `exp.rs`'s fast leg with `expm1q`'s
+small series covering `sinh`'s cancellation near zero; `f64`'s `hyp.rs`
+(`combine`, `two_over`) is the structural template.  `tanhq` wants `tan.rs`'s
+Newton quotient, not a soft-float divide.  `asinhq`/`acoshq` are
+`log(x + √(x² ± 1))` with `x² ± 1` formed exactly — `log::one_plus` is that
+primitive and `sqrt_wide_seeded` is the root.  `atanhq` is
+`½·log1p(2x/(1 − x))` and is nearly free once `log1pq`'s small band is reused.
+
+**Phase 4 — `compoundq`.**  `powq`'s engine with `log::one_plus` ahead of the
+logarithm.  The `exact` tier needs its own analysis (`(1+x)^y`'s exact cases
+are not `pow`'s); the 640-bit `wide` tier is untouched.
+
+**Phase 5 — `erfq`, `erfcq`, then `tgammaq`, `lgammaq`.**  Each larger than
+everything above it combined — `f64`'s `gamma.rs` alone is 11 000 lines — with
+no table, no generator and no upstream oracle.  `lgammaq`'s reflection formula
+needs `sinpiq`, so Phase 2 is a hard prerequisite.  Treat it as a separate
+project, and split `erfq`/`erfcq` off from the gamma pair: one minimax family
+per band, no reflection, no poles.
+
+One decision worth making before Phase 2 starts: the π-scaled inverses can
+fold `1/π` into the tables (exact dyadic offsets, more generated table files)
+or divide by π at the end (no new tables, one more rounding to certify).
+Folding is the recommendation — it is what makes the offsets exact.
 
 ## How the functions work
 
