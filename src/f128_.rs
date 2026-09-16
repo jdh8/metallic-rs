@@ -37,7 +37,7 @@ pub use misc::{fmaq, frexpq, ldexpq, roundq};
 pub use pow::powq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 pub use tan::tanq;
-pub use trig::{cosq, sinq};
+pub use trig::{cosq, sincosq, sinq};
 
 // Internal binary128 primitives shared by the function implementations.
 #[allow(unused_imports)]

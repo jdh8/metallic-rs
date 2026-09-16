@@ -133,6 +133,7 @@ mod f128_ {
     mod powq;
     mod roundq;
     mod rsqrtq;
+    mod sincosq;
     mod sinq;
     mod sqrtq;
     mod tanq;

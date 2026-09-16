@@ -1,4 +1,4 @@
-//! The binary128 sine and cosine.
+//! The binary128 sine and cosine, separately and as a pair.
 //!
 //! Both are one pipeline on `|x|` — the sine is odd and the cosine even, so
 //! the sign of `x` is peeled off and, for the sine, put back at the end:
@@ -39,6 +39,11 @@
 //! cubic and quadratic terms sit under half an ulp, so `sin x = x` and
 //! `cos x = 1` outright, subnormals and zero included.
 //!
+//! [`sincosq`] is that pipeline run once for both results: steps 1 to 3 are
+//! shared outright, and only step 4 happens twice, on the two quadrants the
+//! pair asks for.  Step 5 is joint — either half landing in the tie window
+//! sends both to the accurate leg, which likewise reduces once.
+//!
 //! [`tanq`](super::tan::tanq) shares the reduction, the bands, and the
 //! squares; the items below are `pub(super)` for it.
 
@@ -76,6 +81,36 @@ pub fn sinq(x: f128) -> f128 {
 #[must_use]
 pub fn cosq(x: f128) -> f128 {
     trig(x, true)
+}
+
+/// The sine and the cosine together.
+///
+/// Both come off one Payne–Hanek reduction and one pair of series — the two
+/// results differ only in which quadrant and which breakpoint product they
+/// recombine from — so the pair costs little more than the sine alone.  Each
+/// half is rounded on its own; if either lands in the tie window, the 384-bit
+/// leg recomputes both off a single wide reduction.
+#[must_use]
+pub fn sincosq(x: f128) -> (f128, f128) {
+    let bits = x.to_bits();
+    let ax = bits & !SIGN_MASK;
+
+    if ax >= EXP_MASK {
+        let nan = edge(bits, ax);
+        return (nan, nan);
+    }
+    if ax < TINY {
+        return (x, 1.0);
+    }
+    let sign = bits & SIGN_MASK;
+    let (m, e) = split(ax);
+    let rounded = fast_both(m, e).and_then(|[s, c]| {
+        let sin = round_fast(s.0, s.1, sign ^ s.2, ZIV_GATE)?;
+        let cos = round_fast(c.0, c.1, c.2, ZIV_GATE)?;
+        Some((sin, cos))
+    });
+
+    rounded.unwrap_or_else(|| accurate_both(m, e, sign))
 }
 
 #[inline]
@@ -252,6 +287,50 @@ fn cos_corr(u1: u128, u: u128, v: u128) -> u128 {
     mhi_approx(u1, c(0) - mhi_approx(u, e - mhi_approx(u, o)))
 }
 
+/// `sin θ` normalized into a floating fraction: `sin θ < θ` drops a leading
+/// bit when `t1` starts a binade.
+#[inline]
+const fn normalize(s1: u128, et: i32) -> (u128, i32, u128) {
+    let lz = s1.leading_zeros();
+
+    (s1 << lz, et - lz as i32, 0)
+}
+
+/// `cos θ = 1 − c1·2^(2·et−128)` as a 128-bit fraction just below one.
+#[inline]
+fn below_one(c1: u128, et: i32) -> (u128, i32, u128) {
+    let c = place_256(c1, (2 * et + 128) as u32);
+
+    (sub_256([u128::MAX; 2], c)[1], 0, 0)
+}
+
+/// `sin |x|` or `cos |x|` from the residual and the two series, as a floating
+/// 128-bit fraction with the sign it contributes.  The cosine is the sine a
+/// quadrant on: the top bit of the quadrant is the sign, the low bit which of
+/// `sin A` and `cos A` is wanted.
+#[inline]
+fn combine(r: &Residual, s1: u128, c1: u128, cosine: bool) -> (u128, i32, u128) {
+    let k = (r.n >> 7) + usize::from(cosine);
+    let want_cos = k & 1 != 0;
+    let flip = if k & 2 == 0 { 0 } else { SIGN_MASK };
+    let j = r.n & 127;
+
+    if j == 0 && !want_cos {
+        let (frac, e2, _) = normalize(s1, r.et);
+
+        return (frac, e2, flip ^ if r.negative { SIGN_MASK } else { 0 });
+    }
+    let first = &SINCOS[j][usize::from(want_cos)];
+    let second = &SINCOS[j][usize::from(!want_cos)];
+    let base = [first[1], first[2]];
+    let c = place_256(mhi_approx(first[2], c1), (2 * r.et + 128) as u32);
+    let s = place_256(mhi_approx(second[2], s1), (r.et + 128) as u32);
+    let f = add_signed_256(sub_256(base, c), s, r.negative != want_cos);
+    let lz = f[1].leading_zeros();
+
+    (top_256(f, lz), -(lz as i32), flip)
+}
+
 /// The fast leg: the magnitude as a floating 128-bit fraction `frac·2^(e2−128)`
 /// with the sign it contributes, or `None` when the reduction cannot vouch for
 /// it.  Shared with [`ziv_soundness`].
@@ -263,40 +342,43 @@ fn fast(m: u128, e: i32, cosine: bool) -> Option<(u128, i32, u128)> {
         let (u, v, u1) = squares(t1, et);
 
         return Some(if cosine {
-            let c = place_256(cos_corr(u1, u, v), (2 * et + 128) as u32);
-            (sub_256([u128::MAX; 2], c)[1], 0, 0)
+            below_one(cos_corr(u1, u, v), et)
         } else {
-            // `sin θ < θ` drops a leading bit when `t1` starts a binade.
-            let s1 = sin_frac(t1, u, v);
-            let lz = s1.leading_zeros();
-            (s1 << lz, et - lz as i32, 0)
+            normalize(sin_frac(t1, u, v), et)
         });
     }
     let r = reduce(m, e)?;
     let (u, v, u1) = squares(r.t1, r.et);
-    let s1 = sin_frac(r.t1, u, v);
-    // The cosine is the sine a quadrant on; the top bit of the quadrant is
-    // the sign, the low bit which of `sin A` and `cos A` is wanted.
-    let k = (r.n >> 7) + usize::from(cosine);
-    let want_cos = k & 1 != 0;
-    let flip = if k & 2 == 0 { 0 } else { SIGN_MASK };
-    let j = r.n & 127;
 
-    if j == 0 && !want_cos {
-        let lz = s1.leading_zeros();
-        let flip = flip ^ if r.negative { SIGN_MASK } else { 0 };
-        return Some((s1 << lz, r.et - lz as i32, flip));
+    Some(combine(
+        &r,
+        sin_frac(r.t1, u, v),
+        cos_corr(u1, u, v),
+        cosine,
+    ))
+}
+
+/// Both fast legs off one reduction and one pair of series, for [`sincosq`]:
+/// `None` when the reduction cannot vouch for either, which is the same
+/// condition for both since they share it.
+#[inline]
+fn fast_both(m: u128, e: i32) -> Option<[(u128, i32, u128); 2]> {
+    if e < DIRECT {
+        let t1 = m << 15;
+        let et = e + 1;
+        let (u, v, u1) = squares(t1, et);
+
+        return Some([
+            normalize(sin_frac(t1, u, v), et),
+            below_one(cos_corr(u1, u, v), et),
+        ]);
     }
+    let r = reduce(m, e)?;
+    let (u, v, u1) = squares(r.t1, r.et);
+    let s1 = sin_frac(r.t1, u, v);
     let c1 = cos_corr(u1, u, v);
-    let first = &SINCOS[j][usize::from(want_cos)];
-    let second = &SINCOS[j][usize::from(!want_cos)];
-    let base = [first[1], first[2]];
-    let c = place_256(mhi_approx(first[2], c1), (2 * r.et + 128) as u32);
-    let s = place_256(mhi_approx(second[2], s1), (r.et + 128) as u32);
-    let f = add_signed_256(sub_256(base, c), s, r.negative != want_cos);
-    let lz = f[1].leading_zeros();
 
-    Some((top_256(f, lz), -(lz as i32), flip))
+    Some([combine(&r, s1, c1, false), combine(&r, s1, c1, true)])
 }
 
 /// [`reduce`] on ten limbs of 2/π and a 448-bit fraction, the residual as a
@@ -391,32 +473,48 @@ fn alternating(u: [u128; 3], coef: &[[u128; 3]; 18]) -> [u128; 3] {
     q
 }
 
-/// The 384-bit leg: everything the fast leg would not decide.
-#[cold]
-#[inline(never)]
-fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {
+/// The accurate leg's shared work: the reduction, `u = θ²`, the normalized
+/// `sin θ = θ·(1 − u·Q)` (which keeps `θ`'s floating form, at most one bit
+/// short) and `1 − cos θ = u·Q`.
+fn series_384(m: u128, e: i32) -> (usize, bool, [u128; 3], i32, [u128; 3]) {
     let (n, negative, t, et) = if e < DIRECT {
         (0, false, [0, 0, m << 15], e + 1)
     } else {
         reduce_wide(m, e)
     };
     let u = shr_384_sat(mul_hi_384(t, t), (-2 * et) as u32);
+    let s = sub_384(t, mul_hi_384(t, mul_hi_384(u, alternating(u, &SIN_COEF))));
+    let lzs = leading_zeros_384(s);
+
+    (
+        n,
+        negative,
+        shl_384(s, lzs),
+        et - lzs as i32,
+        mul_hi_384(u, alternating(u, &COS_COEF)),
+    )
+}
+
+/// [`combine`] at 384 bits, rounded: `sin |x|` or `cos |x|` from the
+/// breakpoint tables and the two series.
+fn combine_384(
+    n: usize,
+    negative: bool,
+    s: [u128; 3],
+    es: i32,
+    c: [u128; 3],
+    cosine: bool,
+    sign: u128,
+) -> f128 {
     let k = (n >> 7) + usize::from(cosine);
     let want_cos = k & 1 != 0;
     let sign = sign ^ if k & 2 == 0 { 0 } else { SIGN_MASK };
     let j = n & 127;
 
-    // `sin θ = θ·(1 − u·Q)` keeps `θ`'s floating form, at most one bit short.
-    let s = sub_384(t, mul_hi_384(t, mul_hi_384(u, alternating(u, &SIN_COEF))));
-    let lzs = leading_zeros_384(s);
-    let s = shl_384(s, lzs);
-    let es = et - lzs as i32;
-
     if j == 0 && !want_cos {
         return round_384(s, es, sign ^ if negative { SIGN_MASK } else { 0 });
     }
-    // `1 − cos θ = u·Q`, so `T·cos θ = T − T·(u·Q)` never overflows the frame.
-    let c = mul_hi_384(u, alternating(u, &COS_COEF));
+    // `T·cos θ = T − T·(u·Q)` never overflows the frame.
     let first = SINCOS[j][usize::from(want_cos)];
     let second = SINCOS[j][usize::from(!want_cos)];
     let base = sub_384(first, mul_hi_384(first, c));
@@ -429,6 +527,27 @@ fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {
     let lz = leading_zeros_384(f);
 
     round_384(shl_384(f, lz), -(lz as i32), sign)
+}
+
+/// The 384-bit leg: everything the fast leg would not decide.
+#[cold]
+#[inline(never)]
+fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {
+    let (n, negative, s, es, c) = series_384(m, e);
+
+    combine_384(n, negative, s, es, c, cosine, sign)
+}
+
+/// Both 384-bit legs off one reduction and one pair of series.
+#[cold]
+#[inline(never)]
+fn accurate_both(m: u128, e: i32, sign: u128) -> (f128, f128) {
+    let (n, negative, s, es, c) = series_384(m, e);
+
+    (
+        combine_384(n, negative, s, es, c, false, sign),
+        combine_384(n, negative, s, es, c, true, 0),
+    )
 }
 
 #[cfg(test)]

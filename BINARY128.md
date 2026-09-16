@@ -41,8 +41,8 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq`/`tanq`/`log2q`/`log10q`/`log1pq`/`log2p1q`/`log10p1q`/`powq`
-  have no CORE-MATH
+  `sinq`/`cosq`/`sincosq`/`tanq`/`log2q`/`log10q`/`log1pq`/`log2p1q`/
+  `log10p1q`/`powq` have no CORE-MATH
   binding yet: their strict gate replays a home-grown corpus that carries its
   MPFR answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/
   `log1p`/`log2p1`/`log10p1`/`pow` cross-check them oracle-free.
@@ -81,9 +81,15 @@ Each function is done when both gates hold:
 | `powq`   | ✅ |
 | `roundq` | ✅ |
 | `rsqrtq` | ✅ |
+| `sincosq` | ✅ |
 | `sinq`   | ✅ |
 | `sqrtq`  | ✅ |
 | `tanq`   | ✅ |
+
+`sincosq` returns the pair off one reduction and one pair of series, so both
+halves are the separately gated `sinq` and `cosq` bit for bit — that identity,
+replayed over both corpora, is its gate; libquadmath binds it, `f128::` does
+not.
 
 `log2p1q` and `log10p1q` have standalone benchmarks; neither CORE-MATH
 nor libquadmath currently provides these entry points. They are not in the
@@ -102,14 +108,14 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Twenty-one `f64` entry points have no binary128 counterpart yet.  `fmaq`,
-`frexpq`, `ldexpq` and `roundq` are done — the first three were written
-already, and `roundq` is the few lines of bit manipulation its row promised.
-For the rest, what follows is the plan, not a status report.
+Twenty `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+`frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
+written already, `roundq` is the few lines of bit manipulation its row
+promised, and `sincosq` hoisted `trig::reduce` once across both legs as
+planned.  For the rest, what follows is the plan, not a status report.
 
 | to do | rides on |
 |-------|----------|
-| `sincosq` | `trig::reduce` hoisted once across both legs |
 | `exp2m1q`, `exp10m1q` | `exp.rs`, the `expm1q` structure at a different `L` |
 | `sinpiq`, `cospiq`, `tanpiq` | `trig.rs` / `tan.rs` tables and series — **no Payne–Hanek** |
 | `asinpiq`, `acospiq` | `asin.rs` with `1/π` folded into `PHI` |
@@ -127,7 +133,7 @@ oracle.
 ### What every one of them costs
 
 `FUNCS128` in `tools/sync-worst-cases.sh` is `sqrt rsqrt cbrt hypot exp exp2
-exp10 expm1 log asin acos atan atan2`.  **None of the twenty-two has a
+exp10 expm1 log asin acos atan atan2`.  **None of the twenty has a
 CORE-MATH binding**, so none of them gets the cheap gate.  Each follows the
 `sinq`/`powq` route from CLAUDE.md — an `examples/gen_f128_*_cases.rs`
 generator producing a corpus that carries its own MPFR answers, the
@@ -144,9 +150,10 @@ no external lane (as `log2p1q` and `log10p1q` already do not) and fall back to
 
 ### Order
 
-**Phase 0 — exports.**  ~~`fmaq`, `frexpq`, `ldexpq`, `roundq`~~ (done),
-`sincosq`.  Almost no risk; only `sincosq` is real work, and there the point is
-to share one `reduce` rather than call `trig` twice.
+**Phase 0 — exports.**  ~~`fmaq`, `frexpq`, `ldexpq`, `roundq`, `sincosq`~~
+(done).  `sincosq` was the only real work of the five, and the point was to
+share one `reduce` rather than call `trig` twice: the pair costs about what
+the sine alone does, against the two calls' sum.
 
 **Phase 1 — `exp2m1q`, `exp10m1q`.** `expm1q` already solved the hard half:
 riding the fast leg above `2^-6` and normalizing the subtracted 1 into a
@@ -274,6 +281,12 @@ A degree-four minimax for sine and six Taylor terms for cosine in `θ²`
 `sin`/`cos(j·π/256)` table recombine in `atan2q`'s frames; below 2^-8 the
 argument is its own reduced angle, below 2^-57 the results are `x` and 1.
 
+`sincosq` is that same pipeline run once: one Payne–Hanek reduction, one
+`sin θ` and one `1 − cos θ`, and only the breakpoint recombination happens
+twice — the two results differ solely in which quadrant and which table
+product they take.  Each half is rounded on its own; if either lands in the
+tie window, one wide reduction feeds both accurate legs.
+
 `tanq` shares that reduction and evaluates `tan θ` with a degree-six minimax
 polynomial, generated independently with rminimax and certified after fixed-point
 rounding. The accurate leg keeps twenty-five Taylor terms from exact Bernoulli
@@ -292,7 +305,7 @@ they are not interchangeable:
 
 - **[CORE-MATH]** shares metallic's ≤ 0.5 ulp contract, so it is the only fair
   performance baseline — it is the only one doing the same work.  It binds
-  thirteen of the twenty-two functions above.
+  thirteen of the twenty-three functions above.
 - **nightly Rust** adds no binary128 math of its own.  `f128::sin`,
   `f128::powf` and the rest are `extern "C"` calls into **glibc**'s
   `_Float128` libm (`sinf128`, `powf128`, …), and `std` documents their

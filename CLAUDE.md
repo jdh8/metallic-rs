@@ -267,7 +267,19 @@ two such steps reach 2^-377 at 384 bits, every iterate held below the ratio
 so the unsigned residuals never wrap (`quotient`, `quotient_384`, `refine`).
 `j = 0` is the relative band — `tan θ` outright, or `1/tan θ` a quadrant on.
 
-CORE-MATH has no `sinq`/`cosq`/`tanq` yet, so all three are gated on a
+`sincosq` is `sinq` and `cosq` off *one* reduction: `fast_both` reduces once
+and evaluates `sin θ` and `1 − cos θ` once, and only `combine` runs twice, on
+the two quadrants the pair asks for (`fast` itself now goes through the same
+`combine`, computing the cosine correction unconditionally — it only ever
+went unused in the `j = 0` sine band).  The Ziv gate is joint: either half
+landing in the tie window sends both to `accurate_both`, one `reduce_wide`
+and one `series_384` feeding two `combine_384`s.  Both legs being correctly
+rounded, each half must equal the separate function bit for bit, and that
+identity replayed over both `.wc` corpora is the gate — `sincosq` needs no
+corpus of its own.  libquadmath binds it; nightly `std` has no binary128
+`sin_cos`, so that bench has no `f128::` lane.
+
+CORE-MATH has no `sinq`/`cosq`/`sincosq`/`tanq` yet, so all four are gated on a
 home-grown corpus carrying MPFR answers (`examples/gen_f128_trig_cases.rs`:
 edges, the per-binade convergents of `2^(e−111)/π` for both parities of the
 multiple, an MPFR near-midpoint scan) plus CORE-MATH's f64 `sin`/`cos`/`tan`
