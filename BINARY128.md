@@ -79,6 +79,7 @@ Each function is done when both gates hold:
 | `log1pq` | ✅ |
 | `logq`   | ✅ |
 | `powq`   | ✅ |
+| `roundq` | ✅ |
 | `rsqrtq` | ✅ |
 | `sinq`   | ✅ |
 | `sqrtq`  | ✅ |
@@ -88,11 +89,12 @@ Each function is done when both gates hold:
 nor libquadmath currently provides these entry points. They are not in the
 historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
 
-`fmaq`, `frexpq` and `ldexpq` are exact operations rather than approximations,
-so neither column means what it does for the rest of the table.  `frexpq` and
-`ldexpq` are bit manipulation, gated on their defining invariants — the
-exponent-field identity, the subnormal ladder, the exact round trip — plus an
-MPFR sweep; neither has an interesting cost.  `fmaq` is the *platform's*
+`fmaq`, `frexpq`, `ldexpq` and `roundq` are exact operations rather than
+approximations, so neither column means what it does for the rest of the
+table.  `frexpq`, `ldexpq` and `roundq` are bit manipulation, gated on their
+defining invariants — the exponent-field identity, the subnormal ladder, the
+exact round trip, an independent integer reconstruction — plus an MPFR sweep;
+none has an interesting cost.  `fmaq` is the *platform's*
 binary128 fused multiply-add, not metallic's: it is glibc's `fmaf128` wherever
 `long double` is binary128, and on a target where it is narrower LLVM lowers it
 to `fmal`, which computes the narrow function of the low half of each operand.
@@ -100,14 +102,13 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Twenty-two `f64` entry points have no binary128 counterpart yet.  `fmaq`,
-`frexpq` and `ldexpq` are done — they were written already, and publishing them
-was the whole of the work.  For the rest, what follows is the plan, not a status
-report.
+Twenty-one `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+`frexpq`, `ldexpq` and `roundq` are done — the first three were written
+already, and `roundq` is the few lines of bit manipulation its row promised.
+For the rest, what follows is the plan, not a status report.
 
 | to do | rides on |
 |-------|----------|
-| `roundq` | nothing; a few lines of bit manipulation |
 | `sincosq` | `trig::reduce` hoisted once across both legs |
 | `exp2m1q`, `exp10m1q` | `exp.rs`, the `expm1q` structure at a different `L` |
 | `sinpiq`, `cospiq`, `tanpiq` | `trig.rs` / `tan.rs` tables and series — **no Payne–Hanek** |
@@ -143,7 +144,7 @@ no external lane (as `log2p1q` and `log10p1q` already do not) and fall back to
 
 ### Order
 
-**Phase 0 — exports.**  ~~`fmaq`, `frexpq`, `ldexpq`~~ (done), `roundq`,
+**Phase 0 — exports.**  ~~`fmaq`, `frexpq`, `ldexpq`, `roundq`~~ (done),
 `sincosq`.  Almost no risk; only `sincosq` is real work, and there the point is
 to share one `reduce` rather than call `trig` twice.
 

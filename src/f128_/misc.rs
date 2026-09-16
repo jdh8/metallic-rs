@@ -1,6 +1,49 @@
 use crate::Sign;
 use core::num::FpCategory;
 
+/// Round to the nearest integer, with half-way cases rounded away from zero.
+///
+/// The result is exact: zeros, infinities and NaNs come back unchanged, sign
+/// included, and so does every operand that is already integral.
+///
+/// ```
+/// # #![feature(f128)]
+/// assert_eq!(metallic::roundq(2.5_f128), 3.0);
+/// assert_eq!(metallic::roundq(-0.5_f128), -1.0);
+/// ```
+#[must_use]
+#[inline]
+pub const fn roundq(x: f128) -> f128 {
+    let bits = x.to_bits();
+    let exponent = ((bits >> EXP_SHIFT) & 0x7fff) as i32 - BIAS;
+
+    // Every operand of exponent 112 and up is an integer already, infinities
+    // and NaNs (exponent 16384) included.
+    if exponent >= EXP_SHIFT as i32 {
+        return x;
+    }
+    // Below 1 the answer is the sign times 0 or 1, the half-way case `±0.5`
+    // (exponent -1, like the whole binade above it) going to `±1`.
+    if exponent < 0 {
+        let magnitude = if exponent == -1 {
+            1.0_f128.to_bits()
+        } else {
+            0
+        };
+        return f128::from_bits(bits & SIGN_MASK | magnitude);
+    }
+
+    // `0 ≤ exponent ≤ 111`: the fraction occupies the low `shift ≥ 1` bits of
+    // the significand.  Adding half of the unit in the last integral place
+    // carries exactly when the fraction is at least a half — ties away from
+    // zero — and a carry out of the significand increments the exponent field,
+    // which is the encoding of the next power of two.
+    let shift = EXP_SHIFT - exponent as u32;
+    let half = 1 << (shift - 1);
+
+    f128::from_bits((bits + half) & !(half + half - 1))
+}
+
 /// Multiply `x` by 2 raised to the power `n`.
 ///
 /// The scaling is exact unless the result overflows or falls into the
