@@ -67,7 +67,7 @@ assert_eq!(metallic::powq(2.0_f128, 0.5), core::f128::consts::SQRT_2);
 ```
 
 The binary128 functions include `sinpiq`, `cospiq`, `tanpiq`, `asinpiq`,
-`acospiq`, `exp2m1q`, and `exp10m1q`. See
+`acospiq`, `atanpiq`, `atan2piq`, `exp2m1q`, and `exp10m1q`. See
 [BINARY128.md](BINARY128.md) for the full list, how each one works, and how
 metallic compares with glibc and libquadmath.
 

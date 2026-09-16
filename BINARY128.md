@@ -29,6 +29,8 @@ assert_eq!(metallic::cospiq(1.0_f128), -1.0);
 assert_eq!(metallic::tanpiq(0.25_f128), 1.0);
 assert_eq!(metallic::asinpiq(1.0_f128), 0.5);
 assert_eq!(metallic::acospiq(-1.0_f128), 1.0);
+assert_eq!(metallic::atanpiq(1.0_f128), 0.25);
+assert_eq!(metallic::atan2piq(1.0_f128, -1.0), 0.75);
 assert_eq!(metallic::fmaq(3.0_f128, 4.0, 5.0), 17.0);
 assert_eq!(metallic::frexpq(48.0_f128), (0.75, 6));
 assert_eq!(metallic::ldexpq(3.0_f128, 4), 48.0);
@@ -50,8 +52,8 @@ Each function is done when both gates hold:
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
   `exp2m1q`/`exp10m1q`/
   `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
-  `asinpiq`/`acospiq`/`log1pq`/`log2p1q`/`log10p1q`/`powq` have no CORE-MATH
-  binding yet:
+  `asinpiq`/`acospiq`/`atanpiq`/`atan2piq`/`log1pq`/`log2p1q`/`log10p1q`/`powq`
+  have no CORE-MATH binding yet:
   their strict gate replays a home-grown corpus that carries its
   MPFR answers, and the matching CORE-MATH `f64` functions cross-check
   them oracle-free.
@@ -71,7 +73,9 @@ Each function is done when both gates hold:
 | `acosq`  | ✅ |
 | `asinpiq` | ✅ |
 | `asinq`  | ✅ |
+| `atanpiq` | ✅ |
 | `atanq`  | ✅ |
+| `atan2piq` | ✅ |
 | `atan2q` | ✅ |
 | `cbrtq`  | ✅ |
 | `cosq`   | ✅ |
@@ -108,8 +112,8 @@ replayed over both corpora, is its gate; libquadmath binds it, `f128::` does
 not.
 
 `exp2m1q`, `exp10m1q`, `log2p1q`, `log10p1q`, `sinpiq`, `cospiq`,
-`tanpiq`, `asinpiq`, and `acospiq` have standalone benchmarks; neither
-CORE-MATH nor libquadmath currently provides these entry points. They are
+`tanpiq`, `asinpiq`, `acospiq`, `atanpiq`, and `atan2piq` have standalone
+benchmarks; neither CORE-MATH nor libquadmath currently provides these entry points. They are
 not in the historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
 The initial `exp2m1q` / `exp10m1q` x86-64-v3 traces at `x = 1.7` cost
 169 / 183 llvm-mca cycles (2026-09-16); regenerate with
@@ -127,6 +131,12 @@ both cost **441 llvm-mca cycles**; regenerate with
 `python3 tools/analysis.py asm --only asinpiq,acospiq --isa v3` and
 `python3 tools/analysis.py mca --only asinpiq,acospiq`.
 
+The initial `atanpiq` / `atan2piq` medians were **37.83 / 58.69 ns** on
+an Intel Core i9-14900K, x86-64-v3, over `Exponents(-20..=20)` for each
+argument (2026-09-16). In that run the shared radian functions measured
+**0.85× / 1.02× CORE-MATH** (`atanq` / `atan2q`). The pi-scaled functions
+have no external binary128 baseline.
+
 `fmaq`, `frexpq`, `ldexpq` and `roundq` are exact operations rather than
 approximations, so neither column means what it does for the rest of the
 table.  `frexpq`, `ldexpq` and `roundq` are bit manipulation, gated on their
@@ -140,7 +150,7 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Thirteen `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+Eleven `f64` entry points have no binary128 counterpart yet.  `fmaq`,
 `frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
 written already, `roundq` is the few lines of bit manipulation its row
 promised, and `sincosq` hoisted `trig::reduce` once across both legs as
@@ -148,7 +158,6 @@ planned.  For the rest, what follows is the plan, not a status report.
 
 | to do | rides on |
 |-------|----------|
-| `atanpiq`, `atan2piq` | `atan2.rs` with `1/π` folded into the tables |
 | `sinhq`, `coshq`, `tanhq` | `exp.rs` both legs; `tanhq` also `tan.rs`'s `quotient`/`refine` |
 | `asinhq`, `acoshq` | `log.rs` plus `roots::sqrt_wide_seeded` |
 | `atanhq` | `log1pq`'s front end and `SMALL_GATE` band |
@@ -363,6 +372,29 @@ checks the three complete fast legs against MPFR at 300 bits: worst
 `|err|/gate` is 0.206585 / 0.197872 / 0.105193 (sine / cosine / tangent),
 so every gate retains more than 4.8× margin.
 
+`atanpiq` and `atan2piq` share `atanq`/`atan2q`'s exact dyadic-tangent
+reduction and Taylor kernels. The reduced arc is multiplied by `1/π` before
+adding `atan(i/64)/π` and the exact offsets `0, 1/2, 1`, all from the existing
+`asinpi_tables.rs` constants. The relative band keeps its floating integer
+frame through underflow, and the 384-bit fallback rounds directly on the
+binary128 grid. Equal finite magnitudes return exact quarter turns through
+the table sum; the public edge handles zeros, infinities and NaNs.
+
+`examples/gen_f128_atanpi_cases.rs` freezes MPFR answers for exact cases,
+reduction seams, inverse 114-bit output midpoints, 113-bit continued-fraction
+numerator/denominator pairs of `tan(π·midpoint)`, the tiny `1/π` slope on
+both IEEE grids, and 20-million-input scans per function. Independent MPFR
+sweeps cover the full representation and subnormal results. The corpus gates
+run without MPFR, and CORE-MATH's f64 functions supply another cross-check.
+The million-input fast-leg certifications measure worst `|err|/gate` of
+0.0835 / 0.2569 (`atanpiq` / `atan2piq`), retaining about 12× / 3.89× margin.
+Their initial x86-64-v3 traces cost 457 / 404 llvm-mca cycles at
+`x = 1.7` / `(y, x) = (1.7, 0.7)`; regenerate with
+`python3 tools/analysis.py asm --only atanpiq,atan2piq --isa v3`, then
+`python3 tools/analysis.py mca --only atanpiq,atan2piq`.
+The accurate leg uses the existing arctangent precision policy; these checks
+are not an exhaustive binary128 proof.
+
 ## Baselines
 
 Three other binary128 implementations are within reach on a GNU/Linux box, and
@@ -370,7 +402,7 @@ they are not interchangeable:
 
 - **[CORE-MATH]** shares metallic's ≤ 0.5 ulp contract, so it is the only fair
   performance baseline — it is the only one doing the same work.  It binds
-  thirteen of the twenty-three functions above.
+  thirteen of the functions above.
 - **nightly Rust** adds no binary128 math of its own.  `f128::sin`,
   `f128::powf` and the rest are `extern "C"` calls into **glibc**'s
   `_Float128` libm (`sinf128`, `powf128`, …), and `std` documents their

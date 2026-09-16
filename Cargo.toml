@@ -610,3 +610,17 @@ required-features = ["f128"]
 name = "acospiq"
 harness = false
 required-features = ["f128"]
+
+[[example]]
+name = "gen_f128_atanpi_cases"
+required-features = ["f128", "mpfr"]
+
+[[bench]]
+name = "atanpiq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "atan2piq"
+harness = false
+required-features = ["f128"]

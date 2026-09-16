@@ -618,6 +618,21 @@ fn table() -> Vec<Entry> {
                 Some(quadmath::atanq),
             ],
         ),
+        binary(
+            "atan2piq",
+            |i| {
+                let (u, v) = mix128_pair(i);
+                (band(u, -20, 20), band(v, -20, 20))
+            },
+            |y, x| Float::with_val(WORK, y).atan2_pi(x),
+            [Some(metallic::atan2piq), None, None],
+        ),
+        unary(
+            "atanpiq",
+            |i| band(mix128(i), -20, 20),
+            |x| Float::with_val(WORK, x).atan_pi(),
+            [Some(metallic::atanpiq), None, None],
+        ),
         unary(
             "asinpiq",
             arc_argument,

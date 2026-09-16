@@ -37,9 +37,9 @@ pub use f32_::{
 
 #[cfg(feature = "f128")]
 pub use f128_::{
-    acospiq, acosq, asinpiq, asinq, atan2q, atanq, cbrtq, cospiq, cosq, exp2m1q, exp2q, exp10m1q,
-    exp10q, expm1q, expq, fmaq, frexpq, hypotq, ldexpq, log1pq, log2p1q, log2q, log10p1q, log10q,
-    logq, powq, roundq, rsqrtq, sincosq, sinpiq, sinq, sqrtq, tanpiq, tanq,
+    acospiq, acosq, asinpiq, asinq, atan2piq, atan2q, atanpiq, atanq, cbrtq, cospiq, cosq, exp2m1q,
+    exp2q, exp10m1q, exp10q, expm1q, expq, fmaq, frexpq, hypotq, ldexpq, log1pq, log2p1q, log2q,
+    log10p1q, log10q, logq, powq, roundq, rsqrtq, sincosq, sinpiq, sinq, sqrtq, tanpiq, tanq,
 };
 
 /// MPFR bridges for testing binary128 functions.

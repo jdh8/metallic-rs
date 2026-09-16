@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acospiq acosq asinpiq asinq atan2q atanq cbrtq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
+    "f128": """acospiq acosq asinpiq asinq atan2piq atan2q atanpiq atanq cbrtq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
         log2p1q log2q log10p1q log10q logq powq rsqrtq sinpiq sinq sqrtq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
-    acospiq asinpiq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
+    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -503,12 +503,20 @@ FN = {
         "m": {"cov": ["f128_/asin.rs: fn accurate<const PI: bool>("], "leg": "sym:asin::accurate<false>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": {"cov": ["binary128/asin/asinq.c: __float128 as_asinq_accurate(__float128 x){"], "leg": "sym:as_asinq_accurate", "prec": "128-bit fixed (192/256-bit frame) → 320-bit fixed"},
     },
+    "atan2piq": {
+        "m": {"cov": ["f128_/atan2.rs: fn accurate<const PI: bool>("], "leg": "sym:atan2::accurate<true>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "c": None,
+    },
+    "atanpiq": {
+        "m": {"cov": ["f128_/atan2.rs: fn accurate_exact<const PI: bool>(", "f128_/atan2.rs: fn accurate<const PI: bool>("], "leg": "sym:atan2::accurate<true>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "c": None,
+    },
     "atan2q": {
-        "m": {"cov": ["f128_/atan2.rs: fn accurate(r: &Reduction, sign: u128) -> f128 {"], "leg": "sym:atan2::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "m": {"cov": ["f128_/atan2.rs: fn accurate<const PI: bool>(r: &Reduction, sign: u128) -> f128 {"], "leg": "sym:atan2::accurate<false>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": {"cov": ["binary128/atan2/atan2q.c: __float128 as_atan2_accurate(__float128 y, __float128 x){"], "leg": "sym:as_atan2_accurate", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed"},
     },
     "atanq": {
-        "m": {"cov": ["f128_/atan2.rs: fn accurate_exact(t1: u128, et: i32, sign: u128) -> f128 {", "f128_/atan2.rs: fn accurate(r: &Reduction, sign: u128) -> f128 {"], "leg": "sym:atan2::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "m": {"cov": ["f128_/atan2.rs: fn accurate_exact<const PI: bool>(t1: u128, et: i32, sign: u128) -> f128 {", "f128_/atan2.rs: fn accurate<const PI: bool>(r: &Reduction, sign: u128) -> f128 {"], "leg": "sym:atan2::accurate<false>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": {"cov": ["binary128/atan/atanq.c: __float128 as_atanq_accurate(__float128 x){"], "leg": "sym:as_atanq_accurate", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed"},
     },
     "cbrtq": {

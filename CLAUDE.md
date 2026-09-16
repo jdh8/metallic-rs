@@ -263,6 +263,19 @@ breakpoint the reduced tangent *is* the input significand — no quotient, no
 Newton reciprocal, both legs run the Taylor sum on exact bits.  Its own
 `ziv_soundness` test certifies that folded path separately.
 
+`atanpiq`/`atan2piq` use those same reductions and series with a compile-time
+choice of units. The reduced arc multiplies by `asinpi_tables::INV_PI` before
+summing with `ATAN_PHI` and the exact quadrant offsets `0, 1/2, 1`; both
+constants already come from `tools/gen_asin_f128.py --pi`, which also audits
+the pure table sums. The relative band retains the irrational slope through
+the subnormal grid; axes and equal magnitudes produce exact quarter turns.
+`examples/gen_f128_atanpi_cases.rs` freezes MPFR answers from edges, inverse
+114-bit midpoints, 113-bit continued-fraction pairs of `tan(π·midpoint)`,
+continued fractions of the tiny slope, and 20M scan inputs per function.
+Each has its own `atan2::ziv_soundness` certification, MPFR sweeps and a
+CORE-MATH f64 cross-check. Keep standalone benches and leave them out of
+`FUNCS128` until upstream binds them.
+
 `sinq`/`cosq` reduce by Payne–Hanek on 64-bit limbs of 2/π
 (`tools/gen_trig_f128.py`), six limbs fast and ten accurate. The window starts
 at limb `(e − 114)/64`, so everything above the units bit but its two low bits is a multiple of 4 and

@@ -567,6 +567,8 @@ probes! {
         asinq = metallic_asinq: unary + core_math;
         asinpiq = metallic_asinpiq: unary;
         acospiq = metallic_acospiq: unary;
+        atan2piq = metallic_atan2piq: binary;
+        atanpiq = metallic_atanpiq: unary;
         atan2q = metallic_atan2q: binary + core_math;
         atanq = metallic_atanq: unary + core_math;
         cbrtq = metallic_cbrtq: unary + core_math;
