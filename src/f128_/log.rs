@@ -401,7 +401,7 @@ pub(super) fn reduce_significand(big: [u128; 2], e: i32) -> (i32, u32, [u128; 3]
 /// Below 1 the sum needs `113 − e` bits and above it `max(113, e + 1)`, so
 /// only `x ≥ 2^256` loses its 1: a relative slip under 2^-256.
 #[inline]
-fn one_plus(m: u128, e: i32, negative: bool) -> ([u128; 2], i32) {
+pub(super) fn one_plus(m: u128, e: i32, negative: bool) -> ([u128; 2], i32) {
     if e < 0 {
         let t = shl_256([m, 0], (143 + e) as u32);
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact Taylor rationals for asinh and the extended natural-log kernel.
+"""Exact Taylor rationals for asinh, atanh and the extended natural-log kernel.
 
 python3 tools/gen_invhyp_f128.py > src/f128_/invhyp_tables.rs
 """
@@ -29,5 +29,10 @@ c = [Fraction(comb(2*k, k), 4**k*(2*k+1)) for k in range(1, 49)]
 assert c[15] * Fraction(1, 256)**16 < Fraction(1, 2**135)
 assert Fraction(comb(98, 49), 4**49*99) * Fraction(1, 256)**49 < Fraction(1, 2**399)
 table('ASINH', c, 384, 'Magnitudes of asinh terms x^(2k+1), k=1..48, at 2^384.')
+c = [Fraction(1, 2*k+1) for k in range(1, 49)]
+# atanh(x)/x = 1 + u*(c0 + u*(c1 + ...)), u=x²<2^-8.
+assert Fraction(1, 35) * Fraction(1, 256)**17 * Fraction(256, 255) < Fraction(1, 2**141)
+assert Fraction(1, 99) * Fraction(1, 256)**49 * Fraction(256, 255) < Fraction(1, 2**398)
+table('ATANH', c, 384, 'atanh terms x^(2k+1), k=1..48, at 2^384.')
 table('LOG', [Fraction(1, k) for k in range(1, 21)], 383,
       '1/k, k=1..20, at 2^383, for the reduced logarithm |z|<2^-18.')

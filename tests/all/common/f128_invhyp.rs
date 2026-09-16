@@ -6,7 +6,7 @@ const SIGN: u128 = 1 << 127;
 const MASK: u128 = (1 << 112) - 1;
 const ONE: u128 = 16383 << 112;
 const SAMPLES: u64 = 200_000;
-pub const FUNCTIONS: [fn(f128) -> f128; 2] = [metallic::asinhq, metallic::acoshq];
+pub const FUNCTIONS: [fn(f128) -> f128; 3] = [metallic::asinhq, metallic::acoshq, metallic::atanhq];
 
 pub fn domain(i: u64) -> f128 {
     let b = common128::mix128(i);
@@ -28,6 +28,15 @@ pub fn near_one(i: u64) -> f128 {
 pub fn subnormal(i: u64) -> f128 {
     let b = common128::mix128(i);
     f128::from_bits(b & SIGN | b & ((1 << 114) - 1))
+}
+pub fn atanh_band(i: u64) -> f128 {
+    let b = common128::mix128(i);
+    f128::from_bits(b & SIGN | (16383 - 58 + i as u128 % 58) << 112 | b & MASK)
+}
+pub fn atanh_poles(i: u64) -> f128 {
+    let b = common128::mix128(i);
+    let delta = (b & ((1_u128 << (1 + i % 113)) - 1)).max(1);
+    f128::from_bits(b & SIGN | (ONE - delta))
 }
 pub fn seams(i: u64) -> f128 {
     let b = common128::mix128(i);
@@ -60,6 +69,27 @@ pub fn special(kind: usize) {
     ] {
         assert_eq!(f(f128::from_bits(bits)).to_bits(), bits | 1 << 111);
     }
+    if kind == 2 {
+        for x in [
+            0.0_f128,
+            -0.0,
+            f128::from_bits(1),
+            f128::MIN_POSITIVE,
+            metallic::ldexpq(1.0, -57),
+        ] {
+            assert!(f(x).is(&x));
+            assert!(f(-x).is(&-x));
+        }
+        assert_eq!(f(1.0), f128::INFINITY);
+        assert_eq!(f(-1.0), f128::NEG_INFINITY);
+        assert!(f(1.0_f128.next_down()).is_finite());
+        assert!(f((-1.0_f128).next_up()).is_finite());
+        for x in [1.0_f128.next_up(), 2.0, f128::MAX, f128::INFINITY] {
+            assert!(f(x).is_nan());
+            assert!(f(-x).is_nan());
+        }
+        return;
+    }
     assert_eq!(f(f128::INFINITY), f128::INFINITY);
     assert!(f(f128::MAX).is_finite());
     if kind == 0 {
@@ -90,11 +120,17 @@ pub fn special(kind: usize) {
     }
 }
 pub fn vs_f64(kind: usize) {
-    let oracle = [core_math::asinh, core_math::acosh][kind];
+    let oracle = [core_math::asinh, core_math::acosh, core_math::atanh][kind];
     common::truncate_errors((0..SAMPLES).filter_map(|i| {
         let mut x = f64::from_bits(common::mix64(i));
         if kind == 1 && i % 2 == 0 {
             x = 1.0 + x.abs();
+        } else if kind == 2 && i % 2 == 0 {
+            x = if i % 4 == 0 {
+                atanh_band(i)
+            } else {
+                atanh_poles(i)
+            } as f64;
         }
         let got = FUNCTIONS[kind](x as f128) as f64;
         let want = oracle(x);
@@ -105,7 +141,13 @@ pub fn vs_f64(kind: usize) {
 pub fn symmetry_and_monotonicity(kind: usize) {
     let f = FUNCTIONS[kind];
     for i in 0..20_000 {
-        let x = if kind == 0 {
+        let x = if kind == 2 {
+            if i % 2 == 0 {
+                atanh_band(i).abs()
+            } else {
+                atanh_poles(i).abs()
+            }
+        } else if kind == 0 {
             band(i).abs()
         } else if i % 2 == 0 {
             near_one(i).max(1.0_f128.next_up())
@@ -113,7 +155,7 @@ pub fn symmetry_and_monotonicity(kind: usize) {
             positive(i)
         };
         let y = f(x);
-        if kind == 0 {
+        if kind != 1 {
             assert_eq!(f(-x).to_bits(), y.to_bits() | SIGN);
         }
         assert!(f(x.next_down()) <= y && y <= f(x.next_up()));
@@ -122,15 +164,22 @@ pub fn symmetry_and_monotonicity(kind: usize) {
 #[cfg(feature = "mpfr")]
 pub fn vs_mpfr(kind: usize) {
     use rug::float::Round::Nearest;
-    for sample in [domain, band, positive, near_one, subnormal, seams] {
+    let samples = if kind == 2 {
+        [domain, atanh_band, atanh_poles, near_one, subnormal, seams]
+    } else {
+        [domain, band, positive, near_one, subnormal, seams]
+    };
+    for sample in samples {
         common128::mpfr_sweep_univariate_f128(
             FUNCTIONS[kind],
             |x| {
                 metallic::f128_mpfr::cr_unop(x, |y| {
                     if kind == 0 {
                         y.asinh_round(Nearest)
-                    } else {
+                    } else if kind == 1 {
                         y.acosh_round(Nearest)
+                    } else {
+                        y.atanh_round(Nearest)
                     }
                 })
             },

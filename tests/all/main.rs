@@ -138,6 +138,7 @@ mod f128_ {
     mod asinq;
     mod atan2piq;
     mod atan2q;
+    mod atanhq;
     mod atanpiq;
     mod atanq;
     mod cbrtq;

@@ -173,6 +173,7 @@ dynamic_lanes! {
         sinhf128(x: f128);
         asinhf128(x: f128);
         acoshf128(x: f128);
+        atanhf128(x: f128);
         coshf128(x: f128);
         tanhf128(x: f128);
         powf128(x: f128, y: f128);
@@ -203,6 +204,7 @@ dynamic_lanes! {
         sinhq(x: f128);
         asinhq(x: f128);
         acoshq(x: f128);
+        atanhq(x: f128);
         coshq(x: f128);
         tanhq(x: f128);
         powq(x: f128, y: f128);
@@ -731,6 +733,16 @@ fn table() -> Vec<Entry> {
                 Some(metallic::asinhq),
                 Some(glibc::asinhf128),
                 Some(quadmath::asinhq),
+            ],
+        ),
+        unary(
+            "atanhq",
+            |i| band(mix128(i), -20, -1),
+            |x| Float::with_val(WORK, x).atanh(),
+            [
+                Some(metallic::atanhq),
+                Some(glibc::atanhf128),
+                Some(quadmath::atanhq),
             ],
         ),
         unary(

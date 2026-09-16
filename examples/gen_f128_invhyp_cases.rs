@@ -1,9 +1,9 @@
 #![feature(f128)]
-//! Frozen MPFR answers for asinhq and acoshq: mathematical edges, inverse
+//! Frozen MPFR answers for asinhq, acoshq and atanhq: mathematical edges, inverse
 //! output midpoints, half-ulp cubic corrections, and independent midpoint scans.
 //!
 //! CC=clang cargo +nightly run --release --features "f128 mpfr" \
-//!   --example gen_f128_invhyp_cases -- <asinh|acosh> [samples-per-band]
+//!   --example gen_f128_invhyp_cases -- <asinh|acosh|atanh> [samples-per-band]
 
 use metallic::f128_mpfr::cr_unop;
 use rug::{Float, float::Round, ops::Pow};
@@ -35,12 +35,19 @@ fn neighbors(out: &mut Vec<f128>, x: f128, radius: u128) {
 fn evaluate(kind: usize, y: &mut Float) -> std::cmp::Ordering {
     if kind == 0 {
         y.asinh_round(Round::Nearest)
-    } else {
+    } else if kind == 1 {
         y.acosh_round(Round::Nearest)
+    } else {
+        y.atanh_round(Round::Nearest)
     }
 }
 fn inverse(kind: usize, z: Float) -> f128 {
-    if kind == 0 { z.sinh() } else { z.cosh() }.to_f128_round(Round::Nearest)
+    match kind {
+        0 => z.sinh(),
+        1 => z.cosh(),
+        _ => z.tanh(),
+    }
+    .to_f128_round(Round::Nearest)
 }
 fn hex(x: f128) -> String {
     let b = x.to_bits();
@@ -66,7 +73,7 @@ fn edges(kind: usize) -> Vec<f128> {
         f128::MAX,
         -f128::MAX,
     ];
-    // Lindemann-Weierstrass leaves only asinh(0) and acosh(1) exact.
+    // Lindemann-Weierstrass leaves only asinh(0), acosh(1), atanh(0) exact.
     for e in -16494..=16383 {
         let x = metallic::ldexpq(1.0, e);
         out.extend([x, -x]);
@@ -80,6 +87,9 @@ fn edges(kind: usize) -> Vec<f128> {
     }
     for k in 0..=112 {
         neighbors(&mut out, 1.0 + metallic::ldexpq(1.0, k - 112), 8);
+        if kind == 2 {
+            neighbors(&mut out, 1.0 - metallic::ldexpq(1.0, k - 113), 8);
+        }
     }
     for k in 1..=256 {
         neighbors(&mut out, k as f128, 4);
@@ -95,8 +105,9 @@ fn edges(kind: usize) -> Vec<f128> {
 }
 fn midpoints(kind: usize) -> Vec<f128> {
     let mut out = Vec::new();
-    let bottom = if kind == 0 { -120 } else { -57 };
-    for e in bottom..=13 {
+    let bottom = if kind == 1 { -57 } else { -120 };
+    let top = if kind == 2 { 5 } else { 13 };
+    for e in bottom..=top {
         for i in 0..512 {
             let odd = (bits((e as u64).wrapping_mul(1024).wrapping_add(i)) & ((1 << 114) - 1))
                 | 1 << 113
@@ -109,7 +120,7 @@ fn midpoints(kind: usize) -> Vec<f128> {
 }
 
 /// Solve the small-argument Diophantine family directly: the correction
-/// x-asinh(x) equals (j+1/2) ulp(x). The cubic's inverse seeds
+/// x-asinh(x), or atanh(x)-x, equals (j+1/2) ulp(x). The cubic's inverse seeds
 /// Newton, then the entire MPFR correction refines it. Rounding x to the
 /// 113-bit input lattice places its result near an output midpoint.
 fn corrections(kind: usize) -> Vec<f128> {
@@ -122,15 +133,24 @@ fn corrections(kind: usize) -> Vec<f128> {
         for i in 0..256 {
             let m = (bits((e as u64).wrapping_mul(512).wrapping_add(i)) & MASK) | 1 << 112;
             let x = Float::with_val(PREC, m) * power(e - 112);
-            let coefficient: i32 = 6;
+            let coefficient: i32 = if kind == 0 { 6 } else { 3 };
             let c = x.clone().pow(3_u32) / coefficient / &ulp;
             let j = c.to_integer_round(Round::Down).unwrap().0;
             let target = (Float::with_val(PREC, j) + 0.5) * &ulp;
             let mut x = Float::with_val(PREC, &target * coefficient).cbrt();
             for _ in 0..8 {
-                let c = Float::with_val(PREC, &x - x.clone().asinh());
-                let derivative =
-                    Float::with_val(PREC, 1) - (x.clone().square() + 1_u32).sqrt().recip();
+                let (c, derivative) = if kind == 0 {
+                    (
+                        Float::with_val(PREC, &x - x.clone().asinh()),
+                        Float::with_val(PREC, 1) - (x.clone().square() + 1_u32).sqrt().recip(),
+                    )
+                } else {
+                    let u = x.clone().square();
+                    (
+                        Float::with_val(PREC, x.clone().atanh() - &x),
+                        Float::with_val(PREC, &u / (Float::with_val(PREC, 1) - &u)),
+                    )
+                };
                 x -= (c - &target) / derivative;
             }
             let x = x.to_f128_round(Round::Nearest);
@@ -143,6 +163,15 @@ fn corrections(kind: usize) -> Vec<f128> {
 }
 fn sample(i: u64, band: u32, kind: usize) -> f128 {
     let b = bits(i);
+    if kind == 2 {
+        let magnitude = match band {
+            0 => (i as u128 % 16383) << 112 | b & MASK,
+            1 => (16383 - 57 + i as u128 % 57) << 112 | b & MASK,
+            2 => (16383_u128 << 112) - (b & ((1_u128 << (1 + i % 113)) - 1)).max(1),
+            _ => (16383 - 4 + i as u128 % 4) << 112 | b & MASK,
+        };
+        return f128::from_bits(b & SIGN | magnitude);
+    }
     if kind == 1 && band == 2 {
         return f128::from_bits((16383_u128 << 112) + (b & ((1_u128 << (1 + i % 112)) - 1)).max(1));
     }
@@ -221,8 +250,8 @@ fn scan(kind: usize, band: u32, count: u64) -> Vec<f128> {
     out
 }
 fn main() {
-    let name = std::env::args().nth(1).expect("asinh or acosh");
-    let kind = ["asinh", "acosh"]
+    let name = std::env::args().nth(1).expect("asinh, acosh or atanh");
+    let kind = ["asinh", "acosh", "atanh"]
         .iter()
         .position(|&s| s == name)
         .expect("unknown function");

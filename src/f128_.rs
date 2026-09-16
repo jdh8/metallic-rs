@@ -39,7 +39,7 @@ pub use atan2::{atan2piq, atan2q, atanpiq, atanq};
 pub use exp::{exp2m1q, exp2q, exp10m1q, exp10q, expm1q, expq};
 pub use hyp::{coshq, sinhq, tanhq};
 pub use hypot::hypotq;
-pub use invhyp::{acoshq, asinhq};
+pub use invhyp::{acoshq, asinhq, atanhq};
 pub use log::{log1pq, log2p1q, log2q, log10p1q, log10q, logq};
 pub use misc::{fmaq, frexpq, ldexpq, roundq};
 pub use pow::powq;

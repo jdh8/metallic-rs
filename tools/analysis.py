@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acoshq acospiq acosq asinhq asinpiq asinq atan2piq atan2q atanpiq atanq cbrtq coshq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
+    "f128": """acoshq acospiq acosq asinhq asinpiq asinq atan2piq atan2q atanhq atanpiq atanq cbrtq coshq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
         log2p1q log2q log10p1q log10q logq powq rsqrtq sinhq sinpiq sinq sqrtq tanhq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
-    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq""".split())
+    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -617,6 +617,10 @@ FN = {
     },
     "acoshq": {
         "m": {"cov": ["f128_/invhyp.rs: fn wide<const COSH: bool>("], "leg": "sym:invhyp::wide<true>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "c": None,
+    },
+    "atanhq": {
+        "m": {"cov": ["f128_/invhyp.rs: fn wide_atanh(bits: u128)"], "leg": "sym:invhyp::wide_atanh", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": None,
     },
     "sinhq": {
@@ -2071,7 +2075,7 @@ def cmd_render(args):
         "## Method",
         "**Function.** One row per public function, cells `metallic / CORE-MATH`; `—` where "
         "the `core_math` crate has no binding (`fma*`, `frexp*`, `ldexp*`, `round*`, "
-        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq`).",
+        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq`).",
         "**v3, v4, native.** Cycles of the fast path from `llvm-mca -mcpu=x86-64-v3`, "
         "`x86-64-v4` and the host model (`{}`), each on the assembly rustc and clang emit for "
         "that level. GDB traces one call from the wrapper's entry (`metallic_<fn>`, "

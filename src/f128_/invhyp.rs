@@ -3,6 +3,9 @@
 //! asinh(x) = log(x + sqrt(x²+1)) for x>0; acosh(x) replaces +1 by -1.
 //! Small asinh arguments use its alternating Taylor ratio. Near one, acosh
 //! uses 2*asinh(sqrt((x-1)/2)), keeping the exact subtraction in integers.
+//! atanh uses its positive Taylor ratio below 2^-4 and
+//! (log(1+x)-log(1-x))/2 above, with both arguments exact and both logarithms
+//! unrounded. Their opposite signs avoid cancellation in the final difference.
 //! No binary128 operation is needed after decoding, and no intermediate root
 //! or logarithm rounds to binary128. Large inputs use log(2x) only after the
 //! omitted correction fits the active leg's bound.
@@ -15,10 +18,10 @@
 //! the domain heuristic predicts fewer than 2^-78 unresolved inputs.
 //! Lindemann-Weierstrass excludes nonzero algebraic results for these
 //! logarithms of algebraic numbers, so the only exact cases are asinh(0)
-//! and acosh(1); there are no nontrivial dyadic midpoint cases.
+//! and acosh(1), plus atanh(0); there are no nontrivial dyadic midpoint cases.
 
 use super::atan2::{round_384, round_fast};
-use super::invhyp_tables::{ASINH, LOG};
+use super::invhyp_tables::{ASINH, ATANH, LOG};
 use super::log::{self, Natural};
 use super::log_tables::{LN2, LOG0, LOG1, LOG2};
 use super::roots::sqrt_wide_seeded;
@@ -70,6 +73,35 @@ pub fn acoshq(x: f128) -> f128 {
         return x;
     }
     inverse::<true>(bits, 0)
+}
+
+/// The inverse hyperbolic tangent, preserving signed zero.
+///
+/// Returns signed infinity at ±1 and NaN for |x| > 1.
+#[must_use]
+pub fn atanhq(x: f128) -> f128 {
+    let bits = x.to_bits();
+    let a = bits & !SIGN_MASK;
+    if a > EXP_MASK {
+        return f128::from_bits(bits | QUIET_BIT);
+    }
+    if a >= ONE {
+        return if a == ONE {
+            f128::from_bits(EXP_MASK | (bits & SIGN_MASK))
+        } else {
+            f128::NAN
+        };
+    }
+    // atanh(x)-x < x³/(3(1-x²)), below half an ulp through 2^-57.
+    if a <= TINY {
+        return x;
+    }
+    let sign = bits & SIGN_MASK;
+    let (r, e, gate) = fast_atanh(a);
+    round_fast(r, e, sign, gate).unwrap_or_else(|| {
+        let (r, e) = wide_atanh(a);
+        round_384(r, e, sign)
+    })
 }
 
 #[inline]
@@ -127,17 +159,20 @@ fn root(v: [u128; 2]) -> ([u128; 2], u32) {
     (s, parity / 2)
 }
 
-/// asinh(a*2^(e-128)), |x|<2^-4, in the same floating frame.
+/// asinh/atanh(a*2^(e-128)), |x|<2^-4, in the same floating frame.
 /// Integer fixed-point polynomials cannot use the floating poly helper.
 #[inline]
-fn series(a: u128, e: i32) -> (u128, i32) {
+fn series<const TANH: bool>(a: u128, e: i32) -> (u128, i32) {
     let u = mhi(a, a) >> (-2 * e);
     let terms = if e <= -16 { 4 } else { 16 };
-    let mut p = ASINH[terms - 1][2];
-    for c in ASINH[..terms - 1].iter().rev() {
-        p = c[2] - mhi(u, p);
+    let coef = if TANH { &ATANH } else { &ASINH };
+    let mut p = coef[terms - 1][2];
+    for c in coef[..terms - 1].iter().rev() {
+        let t = mhi(u, p);
+        p = if TANH { c[2] + t } else { c[2] - t };
     }
-    let ratio = (1 << 127) - (mhi(u, p) >> 1);
+    let t = mhi(u, p) >> 1;
+    let ratio = if TANH { (1 << 127) + t } else { (1 << 127) - t };
     let (hi, lo) = wmul(a, ratio);
     normalize([lo, hi], e + 1)
 }
@@ -176,14 +211,14 @@ fn argument<const COSH: bool>(m: u128, e: i32) -> ([u128; 2], i32) {
 fn fast<const COSH: bool>(bits: u128) -> (u128, i32, u128) {
     let (m, e) = split(bits);
     if !COSH && e < DIRECT {
-        let (r, e) = series(m << 15, e + 1);
+        let (r, e) = series::<false>(m << 15, e + 1);
         return (r, e, SERIES_GATE);
     }
     if COSH && bits < NEAR_ONE {
         // h=(x-1)/2 is exact; acosh(x)=2*asinh(sqrt(h)).
         let (s, shift) = root(shl_256([bits - ONE, 0], 143));
         let (a, e) = normalize(s, -(shift as i32));
-        let (r, e) = series(a, e);
+        let (r, e) = series::<false>(a, e);
         return (r, e + 1, SERIES_GATE);
     }
     let (big, e) = if e >= 80 {
@@ -226,13 +261,21 @@ fn root_384(v: [u128; 3]) -> ([u128; 3], u32) {
     (s, parity / 2)
 }
 
-fn series_384(a: [u128; 3], e: i32) -> ([u128; 3], i32) {
+fn series_384<const TANH: bool>(a: [u128; 3], e: i32) -> ([u128; 3], i32) {
     let u = shr_384_sat(mul_hi_384(a, a), (-2 * e) as u32);
-    let mut p = ASINH[ASINH.len() - 1];
-    for c in ASINH[..ASINH.len() - 1].iter().rev() {
-        p = sub_384(*c, mul_hi_384(u, p));
+    let coef = if TANH { &ATANH } else { &ASINH };
+    let mut p = coef[coef.len() - 1];
+    for c in coef[..coef.len() - 1].iter().rev() {
+        let t = mul_hi_384(u, p);
+        p = if TANH { add_384(*c, t) } else { sub_384(*c, t) };
     }
-    let ratio = sub_384([0, 0, 1 << 127], shr_384_sat(mul_hi_384(u, p), 1));
+    let t = shr_384_sat(mul_hi_384(u, p), 1);
+    let one = [0, 0, 1 << 127];
+    let ratio = if TANH {
+        add_384(one, t)
+    } else {
+        sub_384(one, t)
+    };
     normalize_384(mul_hi_384(a, ratio), e + 1)
 }
 
@@ -260,6 +303,11 @@ fn argument_384<const COSH: bool>(m: u128, e: i32) -> ([u128; 3], i32) {
 /// Natural log of a 384-bit significand. Reuse logq's reduction and add-back
 /// tables, with a longer residual series to keep the 2^-320 precision policy.
 fn logarithm(big: [u128; 3], e: i32) -> ([u128; 3], i32) {
+    normalize_384(logarithm_raw(big, e), 42)
+}
+
+/// Signed log at 2^342, before normalization or rounding.
+fn logarithm_raw(big: [u128; 3], e: i32) -> [u128; 3] {
     let j = log::crude_log2(big[2] >> 15);
     let p = wmul_128x384(log::reciprocal(j), big);
     // Product at 2^476; cut to 2^333 and subtract one in two's complement.
@@ -297,7 +345,7 @@ fn logarithm(big: [u128; 3], e: i32) -> ([u128; 3], i32) {
     } else {
         add_384(sum, residual)
     };
-    normalize_384(sum, 42)
+    sum
 }
 
 #[cold]
@@ -305,12 +353,12 @@ fn logarithm(big: [u128; 3], e: i32) -> ([u128; 3], i32) {
 fn wide<const COSH: bool>(bits: u128) -> ([u128; 3], i32) {
     let (m, e) = split(bits);
     if !COSH && e < DIRECT {
-        return series_384([0, 0, m << 15], e + 1);
+        return series_384::<false>([0, 0, m << 15], e + 1);
     }
     if COSH && bits < NEAR_ONE {
         let (s, shift) = root_384(shl_384([bits - ONE, 0, 0], 271));
         let (a, e) = normalize_384(s, -(shift as i32));
-        let (r, e) = series_384(a, e);
+        let (r, e) = series_384::<false>(a, e);
         return (r, e + 1);
     }
     let (big, e) = if e >= 192 {
@@ -319,6 +367,41 @@ fn wide<const COSH: bool>(bits: u128) -> ([u128; 3], i32) {
         argument_384::<COSH>(m, e)
     };
     logarithm(big, e)
+}
+
+#[inline]
+fn fast_atanh(bits: u128) -> (u128, i32, u128) {
+    let (m, e) = split(bits);
+    if e < DIRECT {
+        let (r, e) = series::<true>(m << 15, e + 1);
+        return (r, e, SERIES_GATE);
+    }
+    let eval = |negative| {
+        let (big, e) = log::one_plus(m, e, negative);
+        let (e, j, d) = log::reduce_significand(big, e);
+        log::fast::<Natural>(e, j, log::z_fast(d))
+    };
+    let (r, e) = normalize(sub_256(eval(false), eval(true)), 41);
+    // Two log slips below 2^-139, halved, against atanh(x)>2^-4:
+    // <2^-8 normalized units. The final cut adds <1; gate 4 has >2x margin.
+    (r, e, 4)
+}
+
+#[cold]
+#[inline(never)]
+fn wide_atanh(bits: u128) -> ([u128; 3], i32) {
+    let (m, e) = split(bits);
+    if e < DIRECT {
+        return series_384::<true>([0, 0, m << 15], e + 1);
+    }
+    let eval = |negative| {
+        let (big, e) = log::one_plus(m, e, negative);
+        logarithm_raw([0, big[0], big[1]], e)
+    };
+    // The exact arguments need at most 117 significant bits. The residual
+    // cuts at 2^-333 dominate the logs' errors; atanh(x)>2^-4 retains the
+    // family's 2^-320 relative precision policy after the difference.
+    normalize_384(sub_384(eval(false), eval(true)), 41)
 }
 
 #[cfg(all(test, feature = "mpfr"))]
@@ -432,5 +515,100 @@ mod ziv_soundness {
     #[test]
     fn acoshq_fast_legs_are_sound() {
         certify::<true>();
+    }
+
+    #[test]
+    fn atanhq_fast_legs_are_sound() {
+        let mut worst = [0.0_f64; 2];
+        let mut at = [0.0_f128; 2];
+        let mut wide_worst = [0.0_f64; 2];
+        let mut refused = [0_u64; 2];
+        for i in 0..1_000_000_u64 {
+            let b = u128::from(mix(i)) | u128::from(mix(i ^ 0xCAFE)) << 64;
+            let e = match i % 4 {
+                0 => -57 + (i / 4 % 57) as i32,
+                1 => [-57, -56, -17, -16, -5, -4, -3, -2, -1][(i / 4 % 9) as usize],
+                _ => -4 + (i / 4 % 4) as i32,
+            };
+            let bits = if i % 4 == 3 {
+                ONE - (b & ((1_u128 << (1 + i % 113)) - 1)).max(1)
+            } else {
+                ((BIAS + e) as u128) << 112 | b & ((1 << 112) - 1)
+            };
+            let x = f128::from_bits(bits);
+            let truth = Float::with_val(448, x).atanh();
+            let (r, e, gate) = fast_atanh(bits);
+            let unit = Float::with_val(448, 2).pow(e - 128);
+            let error = (Float::with_val(448, &truth / unit) - r).abs().to_f64() / gate as f64;
+            let band = usize::from(bits >= ((BIAS + DIRECT) as u128) << 112);
+            if error > worst[band] {
+                worst[band] = error;
+                at[band] = x;
+            }
+            let got = round_fast(r, e, 0, gate);
+            refused[band] += u64::from(got.is_none());
+            if let Some(got) = got {
+                assert_eq!(
+                    got.to_bits(),
+                    truth.to_f128_round(Nearest).to_bits(),
+                    "fast x={x:?}"
+                );
+            }
+            if i % 127 == 0 || got.is_none() {
+                let (r, e) = wide_atanh(bits);
+                let raw = Float::with_val(448, r[2]) * Float::with_val(448, 2).pow(256)
+                    + Float::with_val(448, r[1]) * Float::with_val(448, 2).pow(128)
+                    + r[0];
+                let actual: Float = raw * Float::with_val(448, 2).pow(e - 384);
+                let ratio: Float =
+                    ((actual - &truth) / &truth).abs() * Float::with_val(448, 2).pow(320);
+                wide_worst[band] = wide_worst[band].max(ratio.to_f64());
+                assert_eq!(
+                    round_384(r, e, 0).to_bits(),
+                    truth.to_f128_round(Nearest).to_bits(),
+                    "wide x={x:?}"
+                );
+            }
+        }
+        println!(
+            "atanhq: worst |err|/gate {worst:?} at {at:?}; wide |relative err|/2^-320 {wide_worst:?}; refused {refused:?}/1000000"
+        );
+        assert!(worst.into_iter().all(|v| v < 0.5));
+        assert!(wide_worst.into_iter().all(|v| v < 0.5));
+    }
+
+    #[test]
+    fn atanhq_accurate_edges() {
+        for e in -57..=0 {
+            for anchor in [((BIAS + e) as u128) << 112, ONE - (1 << (112 + e))] {
+                for offset in -4..=4_i128 {
+                    let bits = anchor.wrapping_add_signed(offset);
+                    if !(TINY..ONE).contains(&bits) {
+                        continue;
+                    }
+                    let x = f128::from_bits(bits);
+                    let (r, e) = wide_atanh(bits);
+                    let want = super::super::mpfr::cr_unop(x, |y| y.atanh_round(Nearest));
+                    assert_eq!(
+                        round_384(r, e, 0).to_bits(),
+                        want.to_bits(),
+                        "atanh wide x={x:?}"
+                    );
+                }
+            }
+        }
+        // Closest representable inputs to either pole, including each
+        // possible leading-bit position of the exact 1-|x| subtraction.
+        for k in 0..113 {
+            for offset in -2..=2_i128 {
+                let bits = (ONE - (1_u128 << k)).wrapping_add_signed(offset);
+                if (TINY..ONE).contains(&bits) {
+                    let x = f128::from_bits(bits);
+                    let (r, e) = wide_atanh(bits);
+                    let want = super::super::mpfr::cr_unop(x, |y| y.atanh_round(Nearest));
+                    assert_eq!(round_384(r, e, 0).to_bits(), want.to_bits());
+                }
+            }
+        }
     }
 }
