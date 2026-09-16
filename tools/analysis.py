@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acosq asinq atan2q atanq cbrtq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
+    "f128": """acospiq acosq asinpiq asinq atan2q atanq cbrtq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
         log2p1q log2q log10p1q log10q logq powq rsqrtq sinpiq sinq sqrtq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
-    cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
+    acospiq asinpiq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -487,12 +487,20 @@ FN = {
         "m": {"cov": ["f64_/gamma.rs: fn tgamma_accurate(z: f64) -> f64 {"], "leg": "sym:tgamma_accurate", "prec": "double-double → triple-double"},
         "c": {"cov": ["binary64/tgamma/tgamma.c: static __attribute__((noinline)) double as_tgamma_accurate(double x){"], "leg": "sym:as_tgamma_accurate", "prec": "double-double → double-double + exceptions"},
     },
+    "acospiq": {
+        "m": {"cov": ["f128_/asin.rs: fn accurate<const PI: bool>("], "leg": "sym:asin::accurate<true>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "c": None,
+    },
+    "asinpiq": {
+        "m": {"cov": ["f128_/asin.rs: fn accurate<const PI: bool>("], "leg": "sym:asin::accurate<true>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "c": None,
+    },
     "acosq": {
-        "m": {"cov": ["f128_/asin.rs: fn accurate(fx: u128, ex: i32, sq: &Sqrt, acos: bool, xneg: bool, sign: u128) -> f128 {"], "leg": "sym:asin::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "m": {"cov": ["f128_/asin.rs: fn accurate<const PI: bool>("], "leg": "sym:asin::accurate<false>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": {"cov": ["binary128/acos/acosq.c: __float128 as_acosq_accurate(__float128 x){"], "leg": "sym:as_acosq_accurate", "prec": "128-bit fixed (192-bit frame) → 320-bit fixed"},
     },
     "asinq": {
-        "m": {"cov": ["f128_/asin.rs: fn accurate(fx: u128, ex: i32, sq: &Sqrt, acos: bool, xneg: bool, sign: u128) -> f128 {"], "leg": "sym:asin::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "m": {"cov": ["f128_/asin.rs: fn accurate<const PI: bool>("], "leg": "sym:asin::accurate<false>", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": {"cov": ["binary128/asin/asinq.c: __float128 as_asinq_accurate(__float128 x){"], "leg": "sym:as_asinq_accurate", "prec": "128-bit fixed (192/256-bit frame) → 320-bit fixed"},
     },
     "atan2q": {
@@ -915,8 +923,9 @@ def symbol_matcher(leg):
 
     `sym:a::b` matches a Rust label containing `1a1b`-style `<len><ident>`
     segments back to back (legacy and v0 mangling both keep them), `sym:a::b<T>`
-    one whose generic argument `1T` follows, or a C label equal to the last
-    segment (optionally `@PLT`).
+    one whose generic argument `1T` follows; `<true>`/`<false>` select a v0
+    boolean const argument (`Kb1_`/`Kb0_`). Also matches a C label equal to the
+    last segment (optionally `@PLT`).
     """
     spec = leg.split(":", 1)[1]
     generic = None
@@ -924,7 +933,9 @@ def symbol_matcher(leg):
         spec, generic = spec[:-1].split("<", 1)
     path = spec.split("::")
     pattern = r"(?<!\d)" + "".join(str(len(p)) + re.escape(p) for p in path)
-    if generic:   # v0 spells the argument `<len><Type>` after the path
+    if generic in ("true", "false"):
+        pattern += "Kb" + ("1" if generic == "true" else "0") + "_"
+    elif generic:   # v0 spells the argument `<len><Type>` after the path
         pattern += r".*?(?<!\d)" + str(len(generic)) + re.escape(generic)
     mangled = re.compile(pattern)
     plain = path[-1]

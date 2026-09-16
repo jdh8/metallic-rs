@@ -565,6 +565,8 @@ probes! {
     f128 => probes_f128 {
         acosq = metallic_acosq: unary + core_math;
         asinq = metallic_asinq: unary + core_math;
+        asinpiq = metallic_asinpiq: unary;
+        acospiq = metallic_acospiq: unary;
         atan2q = metallic_atan2q: binary + core_math;
         atanq = metallic_atanq: unary + core_math;
         cbrtq = metallic_cbrtq: unary + core_math;

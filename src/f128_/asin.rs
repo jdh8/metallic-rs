@@ -1,4 +1,4 @@
-//! The binary128 arc sine and arc cosine.
+//! The binary128 arc sine and arc cosine, in radians or units of π.
 //!
 //! Two legs meet at [`BAND`].  Below `|x| = 2^-3` the arc sine *is* its own
 //! reduced argument: no square root is formed at all and the fast leg is the
@@ -52,11 +52,23 @@
 //! Tiny arguments need no special path either way: once `x² < 2^-128` of `x`
 //! the series is exactly `x`, which is what `asin(x) = x + x³/6 + …` rounds
 //! to, all the way down through the subnormals.
+//!
+//! [`asinpiq`] and [`acospiq`] share both legs with `PI = true`. Their tables
+//! contain `asin(j/128)/π` and `atan(i/64)/π`, their quadrant offsets are the
+//! exact dyadics `0, 1/2, 1`, and only the reduced arc is multiplied by the
+//! independently generated reciprocal of π (128 bits fast, 384 accurate).
+//! No rounded radian result is divided by a rounded π. In the tiny asin band
+//! the irrational slope remains in the floating frame down through underflow;
+//! the accurate leg rounds it once on the subnormal grid. Niven's theorem
+//! leaves only `x = 0, ±1` with dyadic results, all returned explicitly; the
+//! rational values at `x = ±1/2` are non-dyadic and round by margin.
+//! The shared 64-unit gate is certified separately for each unit system.
 
 use super::asin_tables::{ASIN_BROAD, ASIN_NARROW, COS, PHI};
+use super::asinpi_tables;
 use super::atan2::{
-    add_signed_256, assemble_384, atan_frac_384, combine, combine_phi, place, recip_128, round_384,
-    round_fast, shr_round, top_256,
+    add_signed_256, assemble_384, assemble_offset_384, atan_frac_384, combine_offset, combine_phi,
+    place, recip_128, round_384, round_fast, shr_round, top_256,
 };
 use super::hypot::rsqrt_step;
 use super::roots::sqrt_wide_seeded;
@@ -88,7 +100,7 @@ pub fn asinq(x: f128) -> f128 {
         );
     }
     let (m, e) = split(ax);
-    arc(m, e, sign, false, false)
+    arc::<false>(m, e, sign, false, false)
 }
 
 /// The arc cosine.
@@ -105,7 +117,45 @@ pub fn acosq(x: f128) -> f128 {
         return edge(bits, ax, if xneg { consts::PI } else { 0.0 });
     }
     let (m, e) = split(ax);
-    arc(m, e, 0, true, xneg)
+    arc::<false>(m, e, 0, true, xneg)
+}
+
+/// The arc sine divided by π, rounded once to binary128.
+///
+/// Returns a value in `[-0.5, 0.5]`, preserves signed zero, and returns NaN
+/// for `|x| > 1`.
+#[must_use]
+pub fn asinpiq(x: f128) -> f128 {
+    let bits = x.to_bits();
+    let ax = bits & !SIGN_MASK;
+    let sign = bits & SIGN_MASK;
+    if ax == 0 {
+        return x;
+    }
+    if ax >= ONE {
+        return edge(bits, ax, f128::from_bits(sign | 0.5_f128.to_bits()));
+    }
+    let (m, e) = split(ax);
+    arc::<true>(m, e, sign, false, false)
+}
+
+/// The arc cosine divided by π, rounded once to binary128.
+///
+/// Returns a value in `[0, 1]`, with exact values at `x = -1, ±0, 1`, and
+/// returns NaN for `|x| > 1`.
+#[must_use]
+pub fn acospiq(x: f128) -> f128 {
+    let bits = x.to_bits();
+    let ax = bits & !SIGN_MASK;
+    let xneg = bits >> 127 != 0;
+    if ax == 0 {
+        return 0.5;
+    }
+    if ax >= ONE {
+        return edge(bits, ax, if xneg { 1.0 } else { 0.0 });
+    }
+    let (m, e) = split(ax);
+    arc::<true>(m, e, 0, true, xneg)
 }
 
 /// `|x| ≥ 1`: the exact endpoints, NaN passthrough, and the out-of-domain NaN.
@@ -152,11 +202,65 @@ const COEF: [u128; 7] = [
 
 /// The shared pipeline for `0 < |x| < 1`: `x = m·2^(e−112)`, with `sign`
 /// applied to the result (asin only) and `xneg` steering the acos quadrant.
-fn arc(m: u128, e: i32, sign: u128, acos: bool, xneg: bool) -> f128 {
-    let (frac, e2) = fast_frame(m, e, acos, xneg);
+fn arc<const PI: bool>(m: u128, e: i32, sign: u128, acos: bool, xneg: bool) -> f128 {
+    let (frac, e2) = fast_frame::<PI>(m, e, acos, xneg);
 
     round_fast(frac, e2, sign, super::atan2::ZIV_GATE)
-        .unwrap_or_else(|| accurate(m << 15, e + 1, &wide_sqrt(m, e), acos, xneg, sign))
+        .unwrap_or_else(|| accurate::<PI>(m << 15, e + 1, &wide_sqrt(m, e), acos, xneg, sign))
+}
+
+/// Convert a reduced arc before the table sum, retaining its floating scale
+/// through tiny/subnormal results. Multiplying by the Q128 reciprocal costs
+/// under two units before normalization; at most two left shifts put it back
+/// into `[2^127, 2^128)`. The shared 64-unit gate covers this and the series.
+#[inline]
+fn scale<const PI: bool>(f: u128, e: i32) -> (u128, i32) {
+    if PI {
+        let p = mhi(f, asinpi_tables::INV_PI[2]);
+        let lz = p.leading_zeros();
+        (p << lz, e - lz as i32)
+    } else {
+        (f, e)
+    }
+}
+
+/// Add a breakpoint and quadrant offset in either radians or units of π.
+#[inline]
+fn combine_arc<const PI: bool>(
+    phi: [u128; 2],
+    theta: [u128; 2],
+    negative: bool,
+    quadrant: usize,
+    negate: bool,
+) -> (u128, i32) {
+    if PI {
+        combine_offset(phi, theta, negative, [0, (quadrant as u128) << 124], negate)
+    } else {
+        combine_phi(phi, theta, negative, quadrant, negate)
+    }
+}
+
+/// The accurate leg's table sum. Pi-scaled offsets are exactly `0, 1/2, 1`.
+fn assemble_arc<const PI: bool>(
+    theta: [u128; 3],
+    negative: bool,
+    sector: usize,
+    quadrant: usize,
+    negate: bool,
+    sign: u128,
+) -> f128 {
+    if PI {
+        assemble_offset_384(
+            theta,
+            negative,
+            asinpi_tables::ATAN_PHI[sector],
+            [0, 0, (quadrant as u128) << 124],
+            negate,
+            sign,
+        )
+    } else {
+        assemble_384(theta, negative, sector, quadrant, negate, sign)
+    }
 }
 
 /// The fast leg's floating frame, shared with [`ziv_soundness`].
@@ -165,7 +269,7 @@ fn arc(m: u128, e: i32, sign: u128, acos: bool, xneg: bool) -> f128 {
 /// its own reduced argument, so the series is the whole leg — in floating form
 /// for `asin`, summed into `π/2 ∓ ·` in `atan2q`'s 2^-253 frame for `acos`.
 #[inline]
-fn fast_frame(m: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
+fn fast_frame<const PI: bool>(m: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
     let fx = m << 15;
     let ex = e + 1;
 
@@ -177,14 +281,15 @@ fn fast_frame(m: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
                 minimax_14(v)
             }
         });
+        let (f, et) = scale::<PI>(f, et);
 
         return if acos {
-            combine(place(f, et), 0, false, 1, !xneg)
+            combine_arc::<PI>([0, 0], place(f, et), false, 1, !xneg)
         } else {
             (f, et)
         };
     }
-    root_frame(fx >> ex.unsigned_abs(), e, acos, xneg)
+    root_frame::<PI>(fx >> ex.unsigned_abs(), e, acos, xneg)
 }
 
 /// The significand of `√2/2` rounded to nearest: `x` above it (in the binade
@@ -199,7 +304,7 @@ const DENOM_BITS: u32 = 7;
 /// in the module docs.  `xs = x·2^128` exactly (the band's three binades all
 /// fit: the significand has fifteen spare bits), `x = m·2^(e−112)`.
 #[inline]
-fn root_frame(xs: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
+fn root_frame<const PI: bool>(xs: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
     let (s, sh) = root_256(xs);
     // `x > √2/2` makes the root the smaller side; the constant compare keeps
     // the sort off the root's critical path.  Then `x` sits in `[½, 1)`, so
@@ -252,12 +357,15 @@ fn root_frame(xs: u128, e: i32, acos: bool, xneg: bool) -> (u128, i32) {
             shl_256(mag, lz)[1],
             -(lz as i32) - sh as i32,
             negative,
-            PHI[j],
+            if PI { asinpi_tables::PHI[j] } else { PHI[j] },
         )
     };
     let (f, et) = series(t1, et, taylor_7);
+    // An exactly zero difference contributes nothing; its exponent is already
+    // clamped so placement drops it, and it has no leading bit to normalize.
+    let (f, et) = if f == 0 { (0, et) } else { scale::<PI>(f, et) };
 
-    combine_phi(phi, place(f, et), negative, quadrant, negate)
+    combine_arc::<PI>(phi, place(f, et), negative, quadrant, negate)
 }
 
 /// `√(1 − x²)` for the fast leg from `xs = x·2^128`: `(S, sh)` with `√(1−x²) = S·2^-256·2^-sh`,
@@ -641,7 +749,14 @@ fn recip_wide(d: [u128; 3]) -> [u128; 3] {
 /// `atan2q`'s own series, tables, and rounder.
 #[cold]
 #[inline(never)]
-fn accurate(fx: u128, ex: i32, sq: &Sqrt, acos: bool, xneg: bool, sign: u128) -> f128 {
+fn accurate<const PI: bool>(
+    fx: u128,
+    ex: i32,
+    sq: &Sqrt,
+    acos: bool,
+    xneg: bool,
+    sign: u128,
+) -> f128 {
     let (s3, es3) = sqrt_384(sq);
     let x3 = [0, 0, fx];
     let x_big = ex > es3 || (ex == es3 && cmp_384(x3, s3).is_gt());
@@ -685,7 +800,7 @@ fn accurate(fx: u128, ex: i32, sq: &Sqrt, acos: bool, xneg: bool, sign: u128) ->
         }
     };
     if kn == [0; 3] {
-        return assemble_384([0; 3], negative, i, quadrant, negate, sign);
+        return assemble_arc::<PI>([0; 3], negative, i, quadrant, negate, sign);
     }
     // The truncated quotient of two normalized fractions lands in
     // (2^382·(1 − ε), 2^384): usually one leading zero, two exactly at ½.
@@ -694,6 +809,11 @@ fn accurate(fx: u128, ex: i32, sq: &Sqrt, acos: bool, xneg: bool, sign: u128) ->
     let tn = shl_384(t, lz);
     let et = scale + 1 - lz as i32;
     let f = atan_frac_384(tn, et);
+    let f = if PI {
+        mul_hi_384(f, asinpi_tables::INV_PI)
+    } else {
+        f
+    };
 
     if i == 0 && quadrant == 0 {
         let lzf = f[2].leading_zeros();
@@ -702,7 +822,7 @@ fn accurate(fx: u128, ex: i32, sq: &Sqrt, acos: bool, xneg: bool, sign: u128) ->
     #[allow(clippy::cast_sign_loss)]
     let theta = shr_384_sat(f, (3 - et) as u32);
 
-    assemble_384(theta, negative, i, quadrant, negate, sign)
+    assemble_arc::<PI>(theta, negative, i, quadrant, negate, sign)
 }
 
 #[cfg(test)]
@@ -818,7 +938,7 @@ mod tests {
             let bits = u128::from(next()) << 64 | u128::from(next());
             let exponent = 0x3ffc + (bits >> 112) % 3;
             let (m, e) = split(exponent << EXP_SHIFT | bits & super::super::MANTISSA_MASK);
-            let (frac, e2) = fast_frame(m, e, false, false);
+            let (frac, e2) = fast_frame::<false>(m, e, false, false);
             refused += u32::from(round_fast(frac, e2, 0, super::super::atan2::ZIV_GATE).is_none());
         }
         println!("root band fallback: {refused} of {N}");
@@ -903,12 +1023,17 @@ mod ziv_soundness {
 
     /// `|frame − truth| / ZIV_GATE` in the gate's own units of the fast
     /// frame's 2^(e2−128).
-    fn slip(x: f128, acos: bool, xneg: bool) -> f64 {
+    fn slip<const PI: bool>(x: f128, acos: bool, xneg: bool) -> f64 {
         let (m, e) = split(x.to_bits());
-        let (frac, e2) = fast_frame(m, e, acos, xneg);
+        let (frac, e2) = fast_frame::<PI>(m, e, acos, xneg);
         let frame = Float::with_val(PRECISION, frac) * Float::with_val(PRECISION, 2).pow(e2 - 128);
         let arg = Float::with_val(PRECISION, if xneg { -x } else { x });
-        let truth = if acos { arg.acos() } else { arg.asin() };
+        let truth = match (PI, acos) {
+            (true, true) => arg.acos_pi(),
+            (true, false) => arg.asin_pi(),
+            (false, true) => arg.acos(),
+            (false, false) => arg.asin(),
+        };
         let unit: Float = Float::with_val(PRECISION, 2).pow(e2 - 128);
 
         (Float::with_val(PRECISION, truth - frame).abs() / unit).to_f64() / ZIV_GATE as f64
@@ -917,6 +1042,15 @@ mod ziv_soundness {
     /// Worst `|err|/gate` over the sample, all four function/sign flavors.
     #[test]
     fn fast_leg_is_sound() {
+        certify::<false>();
+    }
+
+    #[test]
+    fn pi_fast_leg_is_sound() {
+        certify::<true>();
+    }
+
+    fn certify<const PI: bool>() {
         let mut worst = 0.0;
         let mut worst_at = (0.0_f128, false, false);
 
@@ -928,7 +1062,7 @@ mod ziv_soundness {
             };
 
             for (acos, xneg) in [(false, false), (true, false), (true, true)] {
-                let ratio = slip(x, acos, xneg);
+                let ratio = slip::<PI>(x, acos, xneg);
 
                 if ratio > worst {
                     worst = ratio;
@@ -941,12 +1075,22 @@ mod ziv_soundness {
         for x in ASIN_NARROW_EXTREMA
             .into_iter()
             .chain(ASIN_BROAD_EXTREMA)
-            .chain([0.0625, 0.125])
+            .chain([
+                0.0625,
+                0.125,
+                f128::MIN_POSITIVE,
+                super::super::exp2i(-114),
+                super::super::exp2i(-115),
+                1.0_f128.next_down(),
+            ])
         {
-            for bits in x.to_bits() - 4..=x.to_bits() + 4 {
+            for bits in x.to_bits().saturating_sub(4)..=(x.to_bits() + 4).min(ONE - 1) {
+                if bits == 0 {
+                    continue;
+                }
                 for (acos, xneg) in [(false, false), (true, false), (true, true)] {
                     let x = f128::from_bits(bits);
-                    let ratio = slip(x, acos, xneg);
+                    let ratio = slip::<PI>(x, acos, xneg);
                     if ratio > worst {
                         worst = ratio;
                         worst_at = (x, acos, xneg);
@@ -954,10 +1098,10 @@ mod ziv_soundness {
                 }
             }
         }
-        println!("asinq/acosq fast leg: worst |err|/gate = {worst:.4} at {worst_at:?}");
+        println!("asinq/acosq (pi={PI}) fast leg: worst |err|/gate = {worst:.4} at {worst_at:?}");
         assert!(
             worst < 0.5,
-            "asinq/acosq gate covers only {:.2}× the slip at {worst_at:?}",
+            "asinq/acosq (pi={PI}) gate covers only {:.2}× the slip at {worst_at:?}",
             1.0 / worst
         );
     }

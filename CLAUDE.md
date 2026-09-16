@@ -218,6 +218,25 @@ series band's top binade).  Tiny inputs need no special path: once
 `x² < 2^-128` of `x` the series *is* `x`, which is what `asin(x) = x + x³/6 + …`
 rounds to, down through the subnormals.
 
+`asinpiq`/`acospiq` share `asin.rs` with a compile-time choice of units.
+`tools/gen_asin_f128.py --pi` generates `asinpi_tables.rs`: `asin(j/128)/π`
+for the fast leg, `atan(i/64)/π` for the accurate one, and `1/π` at 384 bits
+(the fast leg reads its top 128). The reduced arc multiplies by that
+reciprocal before the table sum; the quadrant offsets are exactly `0, 1/2, 1`
+in the same 2^-253 / 2^-381 frames. The cosine/root reduction and both
+polynomials stay shared. Tiny `asinpiq` keeps the irrational slope in floating
+form through the subnormal grid, and the accurate rounder handles underflow
+with the input's sign. Niven's theorem leaves only `0, ±1` as inputs with
+dyadic results, handled at the public edge; `±1/2` give rational non-dyadic
+answers that round by margin. The pi-scaled `ziv_soundness` check measures
+worst `|err|/gate = 0.2479` (~4.03× margin) on the shared 64-unit gate.
+`examples/gen_f128_arcpi_cases.rs` freezes MPFR answers: exact cases and
+neighbors, polynomial/table seams, inverse 114-bit output midpoints, the
+continued fractions of `2/π`, `4/π`, and `8/π` on both IEEE rounding grids,
+and 20M scan inputs per function. Both have MPFR sweeps and CORE-MATH f64
+cross-checks; neither has an external binary128 binding. Keep standalone
+benches and leave them out of `FUNCS128` until upstream binds them.
+
 `atan2q` reduces on *dyadic breakpoints*: one float divide picks
 `i ≈ round(64·min/max)`, and because `i/64` is a 6-bit dyadic both sides of
 `tan(θ − atan(i/64))` are exact 128-bit integers (`dn ≤ 7` whenever `i ≥ 1`,

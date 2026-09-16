@@ -619,6 +619,18 @@ fn table() -> Vec<Entry> {
             ],
         ),
         unary(
+            "asinpiq",
+            arc_argument,
+            |x| Float::with_val(WORK, x).asin_pi(),
+            [Some(metallic::asinpiq), None, None],
+        ),
+        unary(
+            "acospiq",
+            arc_argument,
+            |x| Float::with_val(WORK, x).acos_pi(),
+            [Some(metallic::acospiq), None, None],
+        ),
+        unary(
             "asinq",
             arc_argument,
             |x| Float::with_val(WORK, x).asin(),

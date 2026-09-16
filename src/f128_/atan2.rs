@@ -498,9 +498,27 @@ pub(super) fn combine_phi(
     quadrant: usize,
     negate: bool,
 ) -> (u128, i32) {
+    combine_offset(
+        phi,
+        theta,
+        negative,
+        [QOFF[quadrant][1], QOFF[quadrant][2]],
+        negate,
+    )
+}
+
+/// [`combine_phi`] with the quadrant offset supplied in the 2^-253 frame.
+/// The pi-scaled inverse functions supply exact dyadic offsets here.
+#[inline]
+pub(super) fn combine_offset(
+    phi: [u128; 2],
+    theta: [u128; 2],
+    negative: bool,
+    qoff: [u128; 2],
+    negate: bool,
+) -> (u128, i32) {
     // Both signs are coin flips on mixed quadrants: select by mask, not branch.
     let arc = add_signed_256(phi, theta, negative);
-    let qoff = [QOFF[quadrant][1], QOFF[quadrant][2]];
     let s = add_signed_256(qoff, arc, negate);
     let lz = s[1].leading_zeros();
 
@@ -656,15 +674,27 @@ pub(super) fn assemble_384(
     negate: bool,
     sign: u128,
 ) -> f128 {
+    assemble_offset_384(theta, negative, PHI[sector], QOFF[quadrant], negate, sign)
+}
+
+/// [`assemble_384`] with caller-supplied angle and quadrant constants.
+pub(super) fn assemble_offset_384(
+    theta: [u128; 3],
+    negative: bool,
+    phi: [u128; 3],
+    qoff: [u128; 3],
+    negate: bool,
+    sign: u128,
+) -> f128 {
     let arc = if negative {
-        sub_384(PHI[sector], theta)
+        sub_384(phi, theta)
     } else {
-        add_384(PHI[sector], theta)
+        add_384(phi, theta)
     };
     let s = if negate {
-        sub_384(QOFF[quadrant], arc)
+        sub_384(qoff, arc)
     } else {
-        add_384(QOFF[quadrant], arc)
+        add_384(qoff, arc)
     };
     let lz = s[2].leading_zeros();
 

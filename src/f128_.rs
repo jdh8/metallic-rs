@@ -4,6 +4,7 @@
 
 mod asin;
 mod asin_tables;
+mod asinpi_tables;
 mod atan2;
 mod atan2_tables;
 mod cbrt_tables;
@@ -29,7 +30,7 @@ mod trigpi;
 #[allow(dead_code)]
 mod uint;
 
-pub use asin::{acosq, asinq};
+pub use asin::{acospiq, acosq, asinpiq, asinq};
 pub use atan2::{atan2q, atanq};
 pub use exp::{exp2m1q, exp2q, exp10m1q, exp10q, expm1q, expq};
 pub use hypot::hypotq;

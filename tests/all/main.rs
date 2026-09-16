@@ -113,8 +113,14 @@ mod f64_ {
 mod common128_trigpi;
 
 #[cfg(feature = "f128")]
+#[path = "common/f128_arcpi.rs"]
+mod common128_arcpi;
+
+#[cfg(feature = "f128")]
 mod f128_ {
+    mod acospiq;
     mod acosq;
+    mod asinpiq;
     mod asinq;
     mod atan2q;
     mod atanq;
