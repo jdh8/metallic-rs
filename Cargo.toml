@@ -69,6 +69,10 @@ name = "gen_f128_trig_cases"
 required-features = ["f128", "mpfr"]
 
 [[example]]
+name = "gen_f128_trigpi_cases"
+required-features = ["f128", "mpfr"]
+
+[[example]]
 name = "gen_f128_log_cases"
 required-features = ["f128", "mpfr"]
 
@@ -561,5 +565,20 @@ required-features = ["f128"]
 
 [[bench]]
 name = "log10p1q"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "sinpiq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "cospiq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "tanpiq"
 harness = false
 required-features = ["f128"]

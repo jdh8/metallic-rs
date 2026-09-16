@@ -109,12 +109,17 @@ mod f64_ {
 }
 
 #[cfg(feature = "f128")]
+#[path = "common/f128_trigpi.rs"]
+mod common128_trigpi;
+
+#[cfg(feature = "f128")]
 mod f128_ {
     mod acosq;
     mod asinq;
     mod atan2q;
     mod atanq;
     mod cbrtq;
+    mod cospiq;
     mod cosq;
     mod exp10q;
     mod exp2q;
@@ -134,7 +139,9 @@ mod f128_ {
     mod roundq;
     mod rsqrtq;
     mod sincosq;
+    mod sinpiq;
     mod sinq;
     mod sqrtq;
+    mod tanpiq;
     mod tanq;
 }

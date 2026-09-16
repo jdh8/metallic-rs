@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acosq asinq atan2q atanq cbrtq cosq exp2q exp10q expm1q expq hypotq log1pq
-        log2p1q log2q log10p1q log10q logq powq rsqrtq sinq sqrtq tanq""".split(),
+    "f128": """acosq asinq atan2q atanq cbrtq cospiq cosq exp2q exp10q expm1q expq hypotq log1pq
+        log2p1q log2q log10p1q log10q logq powq rsqrtq sinpiq sinq sqrtq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
-    cosq sinq tanq log2q log10q log1pq log2p1q log10p1q powq""".split())
+    cosq sinq tanq sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -507,6 +507,10 @@ FN = {
         "m": {"cov": ["f128_/roots.rs: fn correct_cbrt(mantissa: u128, remainder: i32, mut candidate: f128) -> f128 {"], "leg": "branch:2", "prec": "128-bit fixed → exact 384-bit integer"},
         "c": {"cov": ["binary128/cbrt/cbrtq.c: u128 c = (sx1.a + (1<<14))>>15 | (u128)1<<113;"], "leg": "branch:3", "prec": "128-bit fixed → 256-bit / modular 128-bit integer"},
     },
+    "cospiq": {
+        "m": {"cov": ["f128_/trigpi.rs: fn accurate(r: &Reduction, kind: u8, sign: u128) -> f128 {"], "leg": "sym:trigpi::accurate", "prec": "exact dyadic reduction, 128-bit fixed → 384-bit fixed"},
+        "c": None,
+    },
     "cosq": {
         "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": None,
@@ -563,6 +567,10 @@ FN = {
         "m": {"cov": ["f128_/roots.rs: fn correct_rsqrt(mantissa: u128, exponent: i32, mut candidate: f128) -> f128 {"], "leg": "branch:6", "prec": "128-bit fixed → exact 384-bit integer"},
         "c": {"cov": ["binary128/rsqrt/rsqrtq.c: v.a += 1<<13;"], "leg": "branch:4", "prec": "128-bit fixed → exact 256-bit integer"},
     },
+    "sinpiq": {
+        "m": {"cov": ["f128_/trigpi.rs: fn accurate(r: &Reduction, kind: u8, sign: u128) -> f128 {"], "leg": "sym:trigpi::accurate", "prec": "exact dyadic reduction, 128-bit fixed → 384-bit fixed"},
+        "c": None,
+    },
     "sinq": {
         "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
         "c": None,
@@ -570,6 +578,10 @@ FN = {
     "sqrtq": {
         "m": {"cov": ["f128_/roots.rs: fn correct_sqrt(mantissa: u128, exponent: i32, mut candidate: f128) -> f128 {"], "leg": "branch:5", "prec": "128-bit fixed → exact 256/384-bit integer"},
         "c": {"cov": ["binary128/sqrt/sqrtq.c: v.a += 1<<13;"], "leg": "branch:3", "prec": "128-bit fixed → modular 128-bit integer"},
+    },
+    "tanpiq": {
+        "m": {"cov": ["f128_/trigpi.rs: fn accurate(r: &Reduction, kind: u8, sign: u128) -> f128 {"], "leg": "sym:trigpi::accurate", "prec": "exact dyadic reduction, 128-bit fixed → 384-bit fixed"},
+        "c": None,
     },
     "tanq": {
         "m": {"cov": ["f128_/tan.rs: fn accurate(m: u128, e: i32, sign: u128) -> f128 {"], "leg": "sym:tan::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
@@ -2006,7 +2018,7 @@ def cmd_render(args):
         "## Method",
         "**Function.** One row per public function, cells `metallic / CORE-MATH`; `—` where "
         "the `core_math` crate has no binding (`fma*`, `frexp*`, `ldexp*`, `round*`, "
-        "`compound`, and `cosq sinq tanq log2q log10q log1pq log2p1q log10p1q powq`).",
+        "`compound`, and `cosq sinq tanq sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq`).",
         "**v3, v4, native.** Cycles of the fast path from `llvm-mca -mcpu=x86-64-v3`, "
         "`x86-64-v4` and the host model (`{}`), each on the assembly rustc and clang emit for "
         "that level. GDB traces one call from the wrapper's entry (`metallic_<fn>`, "

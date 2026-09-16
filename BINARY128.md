@@ -22,6 +22,9 @@ assert_eq!(metallic::log1pq(1.0_f128), core::f128::consts::LN_2);
 assert_eq!(metallic::log2p1q(3.0_f128), 2.0);
 assert_eq!(metallic::log10p1q(99.0_f128), 2.0);
 assert_eq!(metallic::powq(2.0_f128, 0.5), core::f128::consts::SQRT_2);
+assert_eq!(metallic::sinpiq(0.5_f128), 1.0);
+assert_eq!(metallic::cospiq(1.0_f128), -1.0);
+assert_eq!(metallic::tanpiq(0.25_f128), 1.0);
 assert_eq!(metallic::fmaq(3.0_f128, 4.0, 5.0), 17.0);
 assert_eq!(metallic::frexpq(48.0_f128), (0.75, 6));
 assert_eq!(metallic::ldexpq(3.0_f128, 4), 48.0);
@@ -41,11 +44,11 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq`/`sincosq`/`tanq`/`log2q`/`log10q`/`log1pq`/`log2p1q`/
-  `log10p1q`/`powq` have no CORE-MATH
-  binding yet: their strict gate replays a home-grown corpus that carries its
-  MPFR answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/
-  `log1p`/`log2p1`/`log10p1`/`pow` cross-check them oracle-free.
+  `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
+  `log1pq`/`log2p1q`/`log10p1q`/`powq` have no CORE-MATH binding yet:
+  their strict gate replays a home-grown corpus that carries its
+  MPFR answers, and the matching CORE-MATH `f64` functions cross-check
+  them oracle-free.
 - **Perf** — measured same-run median ratio `metallic::<fn>q / core_math::<fn>q`
   ≈ 1× or better on the recorded workload and hardware. Archived results are in
   [BENCHMARKS.md](BENCHMARKS.md); [ANALYSIS.md](ANALYSIS.md) helps diagnose costs.
@@ -64,6 +67,7 @@ Each function is done when both gates hold:
 | `atan2q` | ✅ |
 | `cbrtq`  | ✅ |
 | `cosq`   | ✅ |
+| `cospiq` | ✅ |
 | `exp10q` | ✅ |
 | `fmaq`   | ✅ |
 | `frexpq` | ✅ |
@@ -83,16 +87,19 @@ Each function is done when both gates hold:
 | `rsqrtq` | ✅ |
 | `sincosq` | ✅ |
 | `sinq`   | ✅ |
+| `sinpiq` | ✅ |
 | `sqrtq`  | ✅ |
 | `tanq`   | ✅ |
+| `tanpiq` | ✅ |
 
 `sincosq` returns the pair off one reduction and one pair of series, so both
 halves are the separately gated `sinq` and `cosq` bit for bit — that identity,
 replayed over both corpora, is its gate; libquadmath binds it, `f128::` does
 not.
 
-`log2p1q` and `log10p1q` have standalone benchmarks; neither CORE-MATH
-nor libquadmath currently provides these entry points. They are not in the
+`log2p1q`, `log10p1q`, `sinpiq`, `cospiq`, and `tanpiq` have standalone
+benchmarks; neither CORE-MATH nor libquadmath currently provides these
+entry points. They are not in the
 historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
 
 `fmaq`, `frexpq`, `ldexpq` and `roundq` are exact operations rather than
@@ -108,7 +115,7 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Twenty `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+Seventeen `f64` entry points have no binary128 counterpart yet.  `fmaq`,
 `frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
 written already, `roundq` is the few lines of bit manipulation its row
 promised, and `sincosq` hoisted `trig::reduce` once across both legs as
@@ -117,7 +124,6 @@ planned.  For the rest, what follows is the plan, not a status report.
 | to do | rides on |
 |-------|----------|
 | `exp2m1q`, `exp10m1q` | `exp.rs`, the `expm1q` structure at a different `L` |
-| `sinpiq`, `cospiq`, `tanpiq` | `trig.rs` / `tan.rs` tables and series — **no Payne–Hanek** |
 | `asinpiq`, `acospiq` | `asin.rs` with `1/π` folded into `PHI` |
 | `atanpiq`, `atan2piq` | `atan2.rs` with `1/π` folded into the tables |
 | `sinhq`, `coshq`, `tanhq` | `exp.rs` both legs; `tanhq` also `tan.rs`'s `quotient`/`refine` |
@@ -133,7 +139,7 @@ oracle.
 ### What every one of them costs
 
 `FUNCS128` in `tools/sync-worst-cases.sh` is `sqrt rsqrt cbrt hypot exp exp2
-exp10 expm1 log asin acos atan atan2`.  **None of the twenty has a
+exp10 expm1 log asin acos atan atan2`.  **None of the remaining functions has a
 CORE-MATH binding**, so none of them gets the cheap gate.  Each follows the
 `sinq`/`powq` route from CLAUDE.md — an `examples/gen_f128_*_cases.rs`
 generator producing a corpus that carries its own MPFR answers, the
@@ -163,21 +169,17 @@ which is not exact, so the small branch needs its own `(b^x − 1)/x`
 coefficients from `tools/gen_exp_f128.py` to keep the property that settled
 `x = 2^-112`.
 
-**Phase 2 — the π-scaled seven.**  The best return in the list, and worth
-taking before the hyperbolics.  `sinpiq`/`cospiq`/`tanpiq` need no argument
-reduction machinery whatsoever: `n = round(256x)` and the residual are exact
-splits of the input significand, so the Payne–Hanek window, the `MAX_LZ` bail
-and the 448-bit accurate fraction all disappear, leaving the existing
-breakpoint tables and series with the residual scaled by π inside the frame.
-They should land *faster* than `sinq`.  For the inverse four, folding `1/π`
-into the constants makes the quadrant offsets dyadic — `atan2piq` adds 0, ½, 1
+**Phase 2 — the π-scaled seven.** `sinpiq`, `cospiq`, and `tanpiq` are
+implemented: `trigpi.rs` splits `n = round(256x)` and the residual exactly,
+then scales the residual by π inside the existing `trig.rs`/`tan.rs` frames.
+For the inverse four, folding `1/π` into the constants makes the quadrant offsets dyadic — `atan2piq` adds 0, ½, 1
 instead of 0, π/2, π, so those additions become exact and an error term
 vanishes; the tables become `atan(i/64)/π` and `asin(j/128)/π`, regenerated
 with a `--pi` flag on the existing generators, still mathematical constants and
-not fits.  The risk to design for first is exactness at the seams: `sinpiq`'s
-zeros at every integer and `tanpiq`'s poles at every half-integer must come out
-by construction, and the corpus has to hammer their ±1-ulp neighbourhoods
-across the whole exponent range.
+not fits.  The direct three return the exact integer, half-integer, and tangent
+quarter-integer values explicitly, including IEEE signed-zero and pole parity.
+Their corpora cover those seams and their neighbors through the all-integer
+range above 2^112.
 
 **Phase 3 — the hyperbolics.**  The bulk of the remaining line count.
 `sinhq`/`coshq` are `(e^x ∓ e^-x)/2` on `exp.rs`'s fast leg with `expm1q`'s
@@ -297,6 +299,24 @@ quotient is `atan2q`'s hardware-seeded Newton reciprocal of the denominator's
 top limb plus one Newton step on the quotient itself against the full
 denominator (two at 384 bits on the accurate leg), every iterate held below
 the ratio so no residual goes negative.
+
+`sinpiq`, `cospiq`, and `tanpiq` use those same kernels after an exact
+significand split modulo 2. The residual has at most 113 significant bits;
+multiplication by the existing 128/384-bit π/2 constant, with one exponent
+bit added, gives π times that residual. Tiny odd results stay in floating
+integer form through subnormal rounding. Exact table breakpoints carry a
+zero residual; the integer/half-integer values and tangent's exact ±1 cases
+bypass the series entirely. No new coefficients or tables are needed.
+
+`examples/gen_f128_trigpi_cases.rs` freezes precision-113 MPFR answers with
+ternary-aware subnormalization. Its layers are the exact grid and its
+neighbors, inverse images of 114-bit output midpoints, continued fractions
+of π and π/2 in the linear band, and a 20-million-input midpoint scan per
+function. The unconditional corpus gates need no MPFR; the optional sweeps
+cover every exponent field and the reduction seams. `trigpi::ziv_soundness`
+checks the three complete fast legs against MPFR at 300 bits: worst
+`|err|/gate` is 0.206585 / 0.197872 / 0.105193 (sine / cosine / tangent),
+so every gate retains more than 4.8× margin.
 
 ## Baselines
 

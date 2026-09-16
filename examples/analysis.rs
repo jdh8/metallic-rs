@@ -569,6 +569,7 @@ probes! {
         atanq = metallic_atanq: unary + core_math;
         cbrtq = metallic_cbrtq: unary + core_math;
         cosq = metallic_cosq: unary;
+        cospiq = metallic_cospiq: unary;
         exp2q = metallic_exp2q: unary + core_math;
         exp10q = metallic_exp10q: unary + core_math;
         expm1q = metallic_expm1q: unary + core_math;
@@ -583,8 +584,10 @@ probes! {
         powq = metallic_powq: binary;
         rsqrtq = metallic_rsqrtq: unary + core_math;
         sinq = metallic_sinq: unary;
+        sinpiq = metallic_sinpiq: unary;
         sqrtq = metallic_sqrtq: unary + core_math;
         tanq = metallic_tanq: unary;
+        tanpiq = metallic_tanpiq: unary;
     }
 }
 

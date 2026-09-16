@@ -279,6 +279,22 @@ identity replayed over both `.wc` corpora is the gate — `sincosq` needs no
 corpus of its own.  libquadmath binds it; nightly `std` has no binary128
 `sin_cos`, so that bench has no `f128::` lane.
 
+`sinpiq`/`cospiq`/`tanpiq` share those kernels through `fast_reduced` and
+`accurate_reduced`. Their `trigpi.rs` front end cuts `n = round(256·|x|) mod
+512` and the residual exactly from the significand, then scales it by π
+using the existing `PIO2_128`/`PIO2_384` limbs and one extra exponent bit.
+Integer/half-integer sine/cosine values and quarter-integer tangent values
+return directly, with IEEE tanPi signed-zero/pole parity. Nonzero residuals
+below the kernels' shift range use the 384-bit leg, except the tiny odd
+relative band, whose cubic correction is already below the fast gate.
+The generator is `examples/gen_f128_trigpi_cases.rs`: exact seams and
+neighbors, inverse 114-bit midpoints, continued fractions of π and π/2,
+and MPFR near-midpoint scans; the corpora carry their answers and parser
+count guards. MPFR sweeps include every exponent field and subnormals;
+`trigpi::ziv_soundness` certifies all three new fast legs. There is no
+CORE-MATH or libquadmath entry point: keep standalone benches and do not
+add these functions to `FUNCS128` before upstream binds them.
+
 CORE-MATH has no `sinq`/`cosq`/`sincosq`/`tanq` yet, so all four are gated on a
 home-grown corpus carrying MPFR answers (`examples/gen_f128_trig_cases.rs`:
 edges, the per-binade convergents of `2^(e−111)/π` for both parities of the

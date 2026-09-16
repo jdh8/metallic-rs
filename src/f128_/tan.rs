@@ -35,7 +35,7 @@
 //! so the tangent neither overflows nor underflows.
 
 use super::atan2::{add_signed_256, place_256, recip_128, round_384, round_fast, top_256};
-use super::trig::{DIRECT, TINY, edge, reduce, reduce_wide, squares};
+use super::trig::{DIRECT, Residual, TINY, edge, reduce, reduce_wide, squares};
 use super::trig_tables::{TAN, TAN_COEF, TAN_FAST};
 use super::uint::{
     add_256, add_384, leading_zeros_384, mhi_approx, mul_hi_64, mul_hi_256, mul_hi_384, shl_384,
@@ -125,7 +125,13 @@ fn fast(m: u128, e: i32) -> Option<(u128, i32, u128)> {
         let (tt, et2) = tan_frac(t1, et, u, v);
         return Some((tt, et2, 0));
     }
-    let r = reduce(m, e)?;
+    Some(fast_reduced(reduce(m, e)?))
+}
+
+/// Tangent reconstruction on an already reduced angle. The residual has
+/// `et >= -63`, or is zero at a nonzero table breakpoint.
+#[inline]
+pub(super) fn fast_reduced(r: Residual) -> (u128, i32, u128) {
     let (u, v, _) = squares(r.t1, r.et);
     let (tt, et2) = tan_frac(r.t1, r.et, u, v);
     let odd = r.n & 128 != 0;
@@ -134,10 +140,10 @@ fn fast(m: u128, e: i32) -> Option<(u128, i32, u128)> {
     if j == 0 {
         // The relative band: `tan θ` itself, or `−cot θ` a quadrant on.
         if !odd {
-            return Some((tt, et2, flip(r.negative)));
+            return (tt, et2, flip(r.negative));
         }
         let (f, eq) = quotient(1 << 127, tt);
-        return Some((f, eq + 1 - et2, flip(!r.negative)));
+        return (f, eq + 1 - et2, flip(!r.negative));
     }
     // `T_j ± tan θ` and `1 ∓ T_j·tan θ` in the 2^-249 frame, exact but for
     // the product's bits below it; the fast leg keeps `θ ≥ 2^-57`, so every
@@ -158,7 +164,7 @@ fn fast(m: u128, e: i32) -> Option<(u128, i32, u128)> {
     let lzd = d[1].leading_zeros();
     let (f, eq) = quotient(top_256(n, lzn), top_256(d, lzd));
 
-    Some((f, eq + lzd as i32 - lzn as i32, flip(odd)))
+    (f, eq + lzd as i32 - lzn as i32, flip(odd))
 }
 
 /// `tan θ` at 384 bits as a normalized floating fraction: twenty-five Taylor
@@ -185,7 +191,8 @@ fn tan_384(t: [u128; 3], et: i32, u: [u128; 3]) -> ([u128; 3], i32) {
     }
     let half = shr_384_sat(t, 1);
     let s = add_384(half, mul_hi_384(half, mul_hi_384(u, q)));
-    let lz = leading_zeros_384(s);
+    // Zero is possible at an exact π-scaled table breakpoint.
+    let lz = leading_zeros_384(s).min(383);
 
     (shl_384(s, lz), et + 1 - lz as i32)
 }
@@ -235,6 +242,17 @@ fn accurate(m: u128, e: i32, sign: u128) -> f128 {
     } else {
         reduce_wide(m, e)
     };
+    accurate_reduced(n, negative, t, et, sign)
+}
+
+/// The accurate reconstruction shared with the exact π-scaled reduction.
+pub(super) fn accurate_reduced(
+    n: usize,
+    negative: bool,
+    t: [u128; 3],
+    et: i32,
+    sign: u128,
+) -> f128 {
     let u = shr_384_sat(mul_hi_384(t, t), (-2 * et) as u32);
     let (tt, et2) = tan_384(t, et, u);
     let odd = n & 128 != 0;

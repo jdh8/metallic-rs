@@ -347,15 +347,17 @@ fn fast(m: u128, e: i32, cosine: bool) -> Option<(u128, i32, u128)> {
             normalize(sin_frac(t1, u, v), et)
         });
     }
-    let r = reduce(m, e)?;
+    Some(fast_reduced(reduce(m, e)?, cosine))
+}
+
+/// Evaluate a reduced angle, also shared by the exact π-scaled reduction.
+/// Nonzero residuals must have `et >= -63`; zero residuals need a nonzero
+/// breakpoint (the π-scaled front end handles the exact quadrants).
+#[inline]
+pub(super) fn fast_reduced(r: Residual, cosine: bool) -> (u128, i32, u128) {
     let (u, v, u1) = squares(r.t1, r.et);
 
-    Some(combine(
-        &r,
-        sin_frac(r.t1, u, v),
-        cos_corr(u1, u, v),
-        cosine,
-    ))
+    combine(&r, sin_frac(r.t1, u, v), cos_corr(u1, u, v), cosine)
 }
 
 /// Both fast legs off one reduction and one pair of series, for [`sincosq`]:
@@ -482,13 +484,20 @@ fn series_384(m: u128, e: i32) -> (usize, bool, [u128; 3], i32, [u128; 3]) {
     } else {
         reduce_wide(m, e)
     };
+    let (s, es, c) = series_reduced_384(t, et);
+
+    (n, negative, s, es, c)
+}
+
+/// The shared series on an already reduced angle, including exact π-scaled
+/// table breakpoints where the residual is zero.
+fn series_reduced_384(t: [u128; 3], et: i32) -> ([u128; 3], i32, [u128; 3]) {
     let u = shr_384_sat(mul_hi_384(t, t), (-2 * et) as u32);
     let s = sub_384(t, mul_hi_384(t, mul_hi_384(u, alternating(u, &SIN_COEF))));
-    let lzs = leading_zeros_384(s);
+    // Keep zero unnormalized: any in-range shift leaves it zero.
+    let lzs = leading_zeros_384(s).min(383);
 
     (
-        n,
-        negative,
         shl_384(s, lzs),
         et - lzs as i32,
         mul_hi_384(u, alternating(u, &COS_COEF)),
@@ -527,6 +536,21 @@ fn combine_384(
     let lz = leading_zeros_384(f);
 
     round_384(shl_384(f, lz), -(lz as i32), sign)
+}
+
+/// The same reconstruction on an already reduced 384-bit angle. Exact
+/// quadrants are handled by the π-scaled caller before reaching this kernel.
+pub(super) fn accurate_reduced(
+    n: usize,
+    negative: bool,
+    t: [u128; 3],
+    et: i32,
+    cosine: bool,
+    sign: u128,
+) -> f128 {
+    let (s, es, c) = series_reduced_384(t, et);
+
+    combine_384(n, negative, s, es, c, cosine, sign)
 }
 
 /// The 384-bit leg: everything the fast leg would not decide.

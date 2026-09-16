@@ -639,6 +639,24 @@ fn table() -> Vec<Entry> {
             ],
         ),
         unary(
+            "tanpiq",
+            |i| band(mix128(i), -20, 20),
+            |x| Float::with_val(WORK, x).tan_pi(),
+            [Some(metallic::tanpiq), None, None],
+        ),
+        unary(
+            "cospiq",
+            |i| band(mix128(i), -20, 20),
+            |x| Float::with_val(WORK, x).cos_pi(),
+            [Some(metallic::cospiq), None, None],
+        ),
+        unary(
+            "sinpiq",
+            |i| band(mix128(i), -20, 20),
+            |x| Float::with_val(WORK, x).sin_pi(),
+            [Some(metallic::sinpiq), None, None],
+        ),
+        unary(
             "sinq",
             |i| band(mix128(i), -20, 20),
             |x| Float::with_val(WORK, x).sin(),
