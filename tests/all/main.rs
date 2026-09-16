@@ -121,7 +121,9 @@ mod f128_ {
     mod cbrtq;
     mod cospiq;
     mod cosq;
+    mod exp10m1q;
     mod exp10q;
+    mod exp2m1q;
     mod exp2q;
     mod expm1q;
     mod expq;

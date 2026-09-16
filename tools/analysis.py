@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acosq asinq atan2q atanq cbrtq cospiq cosq exp2q exp10q expm1q expq hypotq log1pq
+    "f128": """acosq asinq atan2q atanq cbrtq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
         log2p1q log2q log10p1q log10q logq powq rsqrtq sinpiq sinq sqrtq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
-    cosq sinq tanq sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
+    cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -523,8 +523,16 @@ FN = {
         "m": {"cov": ["f128_/exp.rs: fn accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {"], "leg": "sym:exp::accurate", "prec": "128-bit fixed → 256-bit fixed"},
         "c": {"cov": ["binary128/exp10/exp10q.c: static void __attribute__((noinline)) as_exp10q_accurate(int *el, u2x64 m, u128 x0){"], "leg": "sym:as_exp10q_accurate", "prec": "128-bit fixed → 192-bit fixed → 384-bit fixed"},
     },
+    "exp2m1q": {
+        "m": {"cov": ["f128_/exp.rs: fn expm1_accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {", "f128_/exp.rs: fn expbm1_small_accurate<const DECIMAL: bool>(m: u128, e: i32, negative: bool) -> f128 {"], "leg": "sym:expm1_accurate", "prec": "128-bit fixed → 256/384-bit fixed"},
+        "c": None,
+    },
+    "exp10m1q": {
+        "m": {"cov": ["f128_/exp.rs: fn expm1_accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {", "f128_/exp.rs: fn expbm1_small_accurate<const DECIMAL: bool>(m: u128, e: i32, negative: bool) -> f128 {"], "leg": "sym:expm1_accurate", "prec": "128-bit fixed → 256/384-bit fixed"},
+        "c": None,
+    },
     "expm1q": {
-        "m": {"cov": ["f128_/exp.rs: fn expm1_accurate(m: u128, e: i32, negative: bool) -> f128 {", "f128_/exp.rs: fn expm1_small(m: u128, e: i32, y: [u128; 3], negative: bool) -> f128 {"], "leg": "sym:expm1_accurate", "prec": "128-bit fixed → 256-bit fixed (384-bit product)"},
+        "m": {"cov": ["f128_/exp.rs: fn expm1_accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {", "f128_/exp.rs: fn expm1_small(m: u128, e: i32, y: [u128; 3], negative: bool) -> f128 {"], "leg": "sym:expm1_accurate", "prec": "128-bit fixed → 256-bit fixed (384-bit product)"},
         "c": {"cov": ["binary128/expm1/expm1q.c: static void __attribute__((noinline)) as_expm1q_accurate(int *el, u2x64 m, u128 x0){"], "leg": "sym:as_expm1q_accurate", "prec": "128-bit fixed → 192-bit fixed → 384-bit fixed"},
     },
     "expq": {
@@ -1476,11 +1484,14 @@ IDENT = re.compile(r'^\s*\.ident\s+"rustc version (.*)"', re.M)
 
 
 def hashed_twin(uplifted):
-    """`examples/analysis-<hash>` behind the uplifted `examples/analysis`: cargo
+    """The build artifact behind the uplifted `examples/analysis`: cargo
     hardlinks the two (or copies when it cannot), so the twin shares the inode
-    or, failing that, the bytes.  The hashed name is what `--emit=asm` stamps
-    on the `.s` beside it."""
+    or, failing that, the bytes. Older cargo places it at
+    `examples/analysis-<hash>`, newer cargo at
+    `build/metallic/<hash>/out/analysis`; the assembly sits beside it."""
     twins = [f for f in uplifted.parent.glob(uplifted.name + "-*") if "." not in f.name]
+    twins.extend((uplifted.parent.parent / "build" / "metallic").glob(
+        "*/out/" + uplifted.name))
     same = [f for f in twins
             if os.path.samefile(f, uplifted) or filecmp.cmp(f, uplifted, shallow=False)]
     if len(same) != 1:
@@ -2018,7 +2029,7 @@ def cmd_render(args):
         "## Method",
         "**Function.** One row per public function, cells `metallic / CORE-MATH`; `—` where "
         "the `core_math` crate has no binding (`fma*`, `frexp*`, `ldexp*`, `round*`, "
-        "`compound`, and `cosq sinq tanq sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq`).",
+        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq`).",
         "**v3, v4, native.** Cycles of the fast path from `llvm-mca -mcpu=x86-64-v3`, "
         "`x86-64-v4` and the host model (`{}`), each on the assembly rustc and clang emit for "
         "that level. GDB traces one call from the wrapper's entry (`metallic_<fn>`, "

@@ -31,7 +31,7 @@ mod uint;
 
 pub use asin::{acosq, asinq};
 pub use atan2::{atan2q, atanq};
-pub use exp::{exp2q, exp10q, expm1q, expq};
+pub use exp::{exp2m1q, exp2q, exp10m1q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
 pub use log::{log1pq, log2p1q, log2q, log10p1q, log10q, logq};
 pub use misc::{fmaq, frexpq, ldexpq, roundq};

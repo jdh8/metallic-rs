@@ -570,6 +570,8 @@ probes! {
         cbrtq = metallic_cbrtq: unary + core_math;
         cosq = metallic_cosq: unary;
         cospiq = metallic_cospiq: unary;
+        exp2m1q = metallic_exp2m1q: unary;
+        exp10m1q = metallic_exp10m1q: unary;
         exp2q = metallic_exp2q: unary + core_math;
         exp10q = metallic_exp10q: unary + core_math;
         expm1q = metallic_expm1q: unary + core_math;

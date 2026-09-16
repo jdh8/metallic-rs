@@ -15,6 +15,8 @@ assert_eq!(metallic::sqrtq(4.0_f128), 2.0);
 assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
 assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
 assert_eq!(metallic::exp2q(10.0_f128), 1024.0);
+assert_eq!(metallic::exp2m1q(10.0_f128), 1023.0);
+assert_eq!(metallic::exp10m1q(3.0_f128), 999.0);
 assert_eq!(metallic::logq(1.0_f128), 0.0);
 assert_eq!(metallic::log2q(1024.0_f128), 10.0);
 assert_eq!(metallic::log10q(1000.0_f128), 3.0);
@@ -44,6 +46,7 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
+  `exp2m1q`/`exp10m1q`/
   `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
   `log1pq`/`log2p1q`/`log10p1q`/`powq` have no CORE-MATH binding yet:
   their strict gate replays a home-grown corpus that carries its
@@ -69,9 +72,11 @@ Each function is done when both gates hold:
 | `cosq`   | ✅ |
 | `cospiq` | ✅ |
 | `exp10q` | ✅ |
+| `exp10m1q` | ✅ |
 | `fmaq`   | ✅ |
 | `frexpq` | ✅ |
 | `exp2q`  | ✅ |
+| `exp2m1q` | ✅ |
 | `expm1q` | ✅ |
 | `expq`   | ✅ |
 | `hypotq` | ✅ |
@@ -97,10 +102,14 @@ halves are the separately gated `sinq` and `cosq` bit for bit — that identity,
 replayed over both corpora, is its gate; libquadmath binds it, `f128::` does
 not.
 
-`log2p1q`, `log10p1q`, `sinpiq`, `cospiq`, and `tanpiq` have standalone
-benchmarks; neither CORE-MATH nor libquadmath currently provides these
-entry points. They are not in the
-historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
+`exp2m1q`, `exp10m1q`, `log2p1q`, `log10p1q`, `sinpiq`, `cospiq`, and
+`tanpiq` have standalone benchmarks; neither CORE-MATH nor libquadmath
+currently provides these entry points. They are not in the historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
+The initial `exp2m1q` / `exp10m1q` x86-64-v3 traces at `x = 1.7` cost
+169 / 183 llvm-mca cycles (2026-09-16); regenerate with
+`python3 tools/analysis.py asm --only exp2m1q,exp10m1q --isa v3`, then
+`python3 tools/analysis.py mca --only exp2m1q,exp10m1q`. Concurrent workloads
+made the initial Criterion timings unsuitable for an absolute speed claim.
 
 `fmaq`, `frexpq`, `ldexpq` and `roundq` are exact operations rather than
 approximations, so neither column means what it does for the rest of the
@@ -115,7 +124,7 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Seventeen `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+Fifteen `f64` entry points have no binary128 counterpart yet.  `fmaq`,
 `frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
 written already, `roundq` is the few lines of bit manipulation its row
 promised, and `sincosq` hoisted `trig::reduce` once across both legs as
@@ -123,7 +132,6 @@ planned.  For the rest, what follows is the plan, not a status report.
 
 | to do | rides on |
 |-------|----------|
-| `exp2m1q`, `exp10m1q` | `exp.rs`, the `expm1q` structure at a different `L` |
 | `asinpiq`, `acospiq` | `asin.rs` with `1/π` folded into `PHI` |
 | `atanpiq`, `atan2piq` | `atan2.rs` with `1/π` folded into the tables |
 | `sinhq`, `coshq`, `tanhq` | `exp.rs` both legs; `tanhq` also `tan.rs`'s `quotient`/`refine` |
@@ -161,13 +169,8 @@ no external lane (as `log2p1q` and `log10p1q` already do not) and fall back to
 share one `reduce` rather than call `trig` twice: the pair costs about what
 the sine alone does, against the two calls' sum.
 
-**Phase 1 — `exp2m1q`, `exp10m1q`.** `expm1q` already solved the hard half:
-riding the fast leg above `2^-6` and normalizing the subtracted 1 into a
-widened Ziv gate.  What changes is the near-zero branch.  `INV_FACT` sums
-`e^a − 1` on the *exact input significand*; for base 2 the argument is `x·ln2`,
-which is not exact, so the small branch needs its own `(b^x − 1)/x`
-coefficients from `tools/gen_exp_f128.py` to keep the property that settled
-`x = 2^-112`.
+**Phase 1 — `exp2m1q`, `exp10m1q` (done).** Both reuse the exponential
+frame and carry their own base's Taylor ratio near zero; see below.
 
 **Phase 2 — the π-scaled seven.** `sinpiq`, `cospiq`, and `tanpiq` are
 implemented: `trigpi.rs` splits `n = round(256x)` and the residual exactly,
@@ -218,6 +221,17 @@ with a 256-bit accurate leg behind the Ziv gate of the 128-bit fast one.
 `expm1q` reuses that engine above 2<sup>&minus;6</sup>; below, a Taylor
 correction rides on top of the exact input significand, so subtracting 1 from
 2<sup>f</sup> &isin; [1, 2) never gets to cancel the bits that matter.
+`exp2m1q` and `exp10m1q` share that subtracted frame with their own reduction
+constant. Below 2<sup>&minus;6</sup>, independently generated Taylor constants
+for `(b^x − 1)/x` retain the irrational slope: a 128-bit ratio multiplies the
+exact input significand, with a 384-bit ratio on fallback. Subnormals round
+directly on their final grid. The exact and midpoint cases, including
+`exp2m1q(±114)`, pass through the shared integer rounder. Their MPFR corpora
+include every input binade, inverse images of output midpoints, continued
+fractions of `ln(b)` on the normal and subnormal midpoint grids, thresholds,
+seams and 16 million near-midpoint scan inputs per base. In-source soundness
+checks measure worst |error|/gate of 0.359738 (`exp2m1q`) and 0.327608
+(`exp10m1q`), giving 2.78× and 3.05× margin respectively.
 `logq` reduces in log space instead: an 18-bit estimate of
 log<sub>2</sub>(m) picks three 31-bit reciprocals whose product with the
 significand is exact, so the logarithms to add back are the only table the sum

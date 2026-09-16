@@ -171,6 +171,21 @@ entry:
                 assert error.code == 2
             else:
                 raise AssertionError("ambiguous coverage anchors must fail")
+    # Cargo's old and new artifact layouts must select the executable's
+    # matching assembly, even when a stale build is newer on disk.
+    for layout in ("examples/analysis-1234", "build/metallic/1234/out/analysis"):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uplifted = root / "examples/analysis"
+            uplifted.parent.mkdir()
+            uplifted.write_bytes(b"current binary")
+            twin = root / layout
+            twin.parent.mkdir(parents=True, exist_ok=True)
+            twin.write_bytes(b"current binary")
+            stale = root / "build/metallic/5678/out/analysis"
+            stale.parent.mkdir(parents=True)
+            stale.write_bytes(b"stale binary")
+            assert a.hashed_twin(uplifted) == twin.with_name(twin.name + ".s")
     print("analysis synthetic checks passed")
 
 

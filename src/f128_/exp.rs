@@ -25,10 +25,12 @@
 //! needs; when the discarded 15 bits sit within [`ZIV_GATE`] of a rounding tie
 //! the accurate leg redoes the same steps at 256 bits.
 
-use super::exp_tables::{COEF, INV_FACT, LOG2_10, LOG2E, ONE, Reduction, T0, T1, T2};
+use super::exp_tables::{
+    COEF, EXP2M1_COEF, EXP10M1_COEF, INV_FACT, LOG2_10, LOG2E, ONE, Reduction, T0, T1, T2,
+};
 use super::uint::{
-    add_256, add_384, leading_zeros_384, mhi, mul_hi_64, mul_hi_256, neg_384, shl_384, sub_256,
-    wmul,
+    add_256, add_384, leading_zeros_384, mhi, mul_hi_64, mul_hi_256, mul_hi_384, neg_384, shl_384,
+    shr_384_sat, sub_256, sub_384, wmul, wmul_128x384,
 };
 use super::{BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, QUIET_BIT, SIGN_MASK, split};
 
@@ -470,7 +472,7 @@ pub fn expm1q(x: f128) -> f128 {
         let decided = subtract_one(fast(n, f))
             .filter(|&(n, r, gate)| !undecided(n, r, gate))
             .map(|(n, r, _)| round(n, r, 0));
-        let value = decided.unwrap_or_else(|| expm1_accurate(m, e, negative));
+        let value = decided.unwrap_or_else(|| expm1_accurate(m, e, negative, &LOG2E));
         return with_sign(value, negative);
     }
     let (n, r, low) = if e >= MID_EXP {
@@ -484,13 +486,151 @@ pub fn expm1q(x: f128) -> f128 {
         if y[2] == 0 && y[1] < POLY_LIMIT {
             expm1_small(m, e, y, negative)
         } else {
-            expm1_accurate(m, e, negative)
+            expm1_accurate(m, e, negative, &LOG2E)
         }
     } else {
         round(n, r, low)
     };
 
     with_sign(value, negative)
+}
+
+/// The base-2 exponential minus one, 2<sup>x</sup> − 1.
+///
+/// Keeps relative accuracy near zero, including subnormal inputs and results.
+#[must_use]
+pub fn exp2m1q(x: f128) -> f128 {
+    expbm1::<false>(x)
+}
+
+/// The base-10 exponential minus one, 10<sup>x</sup> − 1.
+///
+/// Keeps relative accuracy near zero, including subnormal inputs and results.
+#[must_use]
+pub fn exp10m1q(x: f128) -> f128 {
+    expbm1::<true>(x)
+}
+
+/// The ordinary exponential frame above 2^-6, a result-relative Taylor
+/// ratio below it.  Unlike `expm1q`, neither base can return a tiny `x`
+/// unchanged: its slope is irrational and must survive to the final rounding.
+#[inline]
+fn expbm1<const DECIMAL: bool>(x: f128) -> f128 {
+    let bits = x.to_bits();
+    let magnitude = bits & !SIGN_MASK;
+    let negative = bits & SIGN_MASK != 0;
+    let limit = if DECIMAL { 35.0_f128 } else { 114.0_f128 };
+
+    if magnitude >= SATURATE {
+        if magnitude > EXP_MASK {
+            return f128::from_bits(bits | QUIET_BIT);
+        }
+        return if negative { -1.0 } else { f128::INFINITY };
+    }
+    // Half an ulp toward zero from -1 is 2^-114. Base 2 attains the
+    // midpoint exactly at -114 (ties to -1); 10^-35 is strictly below it.
+    // These guards also keep the shared subtracted frame's n >= -128.
+    if negative && magnitude >= limit.to_bits() {
+        return -1.0;
+    }
+    if magnitude == 0 {
+        return x;
+    }
+    let (m, e) = split(magnitude);
+    let l = if DECIMAL { &LOG2_10 } else { &ONE };
+    let value = if e >= FRAME_EXP {
+        let (n, f) = frame(m, e, l, negative);
+        subtract_one(fast(n, f))
+            .filter(|&(n, r, gate)| !undecided(n, r, gate))
+            .map_or_else(
+                || expm1_accurate(m, e, negative, l),
+                |(n, r, _)| round(n, r, 0),
+            )
+    } else {
+        let (n, r, low) = expbm1_small::<DECIMAL>(m, e, negative);
+        if undecided(n, r, ZIV_GATE) {
+            expbm1_small_accurate::<DECIMAL>(m, e, negative)
+        } else {
+            round(n, r, low)
+        }
+    };
+    with_sign(value, negative)
+}
+
+/// `(b^x - 1)/x` at scale 2^126 times the *exact* input significand.
+///
+/// At `|x| < 2^-6`, eighteen terms leave < 2^-141 absolute error in the
+/// ratio, even for base 10; below 2^-19 seven terms leave < 2^-138.
+/// Truncating x at 2^-128 moves the ratio by < 3 units of 2^-128.
+/// The coefficient and product cuts add < 2.04 units at 2^-126;
+/// normalization shifts by at most three. In base 2 the error before
+/// normalization is < 2.1 units, amplified by at most 4/0.689 < 5.81;
+/// in base 10 it is < 2.8 units, amplified by at most 4/2.26 < 1.77.
+/// The final cut adds < 1 unit: both stay below half of `ZIV_GATE = 32`.
+/// The signed Horner chain stays positive at every step. Fixed-point limbs
+/// need these integer products rather than the floating `crate::poly`.
+#[inline]
+fn expbm1_small<const DECIMAL: bool>(m: u128, e: i32, negative: bool) -> (i32, u128, u128) {
+    let c = if DECIMAL { &EXP10M1_COEF } else { &EXP2M1_COEF };
+    let t = (m << 15).checked_shr((-1 - e) as u32).unwrap_or(0);
+    let mask = 0_u128.wrapping_sub(u128::from(negative));
+    let mut q = c[0][2];
+    if t != 0 {
+        let end = if e >= MID_EXP { 18 } else { 7 };
+        q = c[end - 1][2];
+        for a in c[..end - 1].iter().rev() {
+            q = a[2].wrapping_add((mhi(t, q) ^ mask).wrapping_sub(mask));
+        }
+    }
+    let (high, low) = wmul(m << 15, q);
+    let shift = high.leading_zeros();
+    (
+        e + 2 - shift as i32,
+        high << shift | low >> 1 >> (127 - shift),
+        low << shift,
+    )
+}
+
+/// The near-zero ratio at 384 bits, followed by an exact 128×384 product.
+///
+/// The Taylor tail is < 2^-390, and the cuts leave < 2^-378 relative error.
+/// Tiny arguments simply multiply the full slope. No subtraction of 1 and no
+/// rounded `x*ln(b)` ever destroys low bits; `round` handles the subnormal
+/// grid directly. This is the univariate binary128 precision policy, rather
+/// than a claim that a finite sample proves a worst-case hardness bound.
+#[cold]
+#[inline(never)]
+fn expbm1_small_accurate<const DECIMAL: bool>(m: u128, e: i32, negative: bool) -> f128 {
+    let c = if DECIMAL { &EXP10M1_COEF } else { &EXP2M1_COEF };
+    let t = if e >= -272 {
+        shl_384([m, 0, 0], (e + 272) as u32)
+    } else {
+        shr_384_sat([m, 0, 0], (-272 - e) as u32)
+    };
+    let mut q = c[0];
+    if t != [0; 3] {
+        // For the narrow band, twenty terms already put the tail below
+        // 2^-400; the full band needs all forty-four.
+        let end = if e >= MID_EXP { 44 } else { 20 };
+        q = c[end - 1];
+        for &a in c[..end - 1].iter().rev() {
+            let term = mul_hi_384(t, q);
+            q = if negative {
+                sub_384(a, term)
+            } else {
+                add_384(a, term)
+            };
+        }
+    }
+    let p = wmul_128x384(m << 15, q);
+    let shift = p[3].leading_zeros();
+    let high = p[3] << shift | p[2] >> 1 >> (127 - shift);
+    let low = p[2] << shift | p[1] >> 1 >> (127 - shift);
+    round(
+        e + 2 - shift as i32,
+        high,
+        low | u128::from(p[1] != 0 || p[0] != 0),
+    )
 }
 
 /// `1/(j + 2)!` truncated to 64 bits, scaled by 2^-64.
@@ -649,8 +789,8 @@ fn expm1_small(m: u128, e: i32, y: [u128; 3], negative: bool) -> f128 {
 /// leg decides its half of the range on its own and needs no gate.
 #[cold]
 #[inline(never)]
-fn expm1_accurate(m: u128, e: i32, negative: bool) -> f128 {
-    let (n, r) = wide(m, e, negative, &LOG2E);
+fn expm1_accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {
+    let (n, r) = wide(m, e, negative, l);
     let (v, frame) = if n >= 0 {
         let one = match n {
             // Past 255 the 1 sits below the frame; one unit is the closest
@@ -862,5 +1002,72 @@ mod ziv_soundness {
     #[test]
     fn exp10q_fast_leg_is_sound() {
         certify("exp10q", 12, &LOG2_10, |x| x.clone().exp10());
+    }
+
+    /// Certify the raw values the new gates see, including small normals,
+    /// subnormals, both sides of the series seams, and the subtracted frame.
+    fn certify_expbm1<const DECIMAL: bool>() {
+        let l = if DECIMAL { &LOG2_10 } else { &ONE };
+        let mut worst = [0.0_f64; 2];
+        let mut worst_x = [0.0_f128; 2];
+        for i in 0..1_000_000_u64 {
+            let bits = u128::from(mix(i)) | u128::from(mix(i ^ 0xCAFE)) << 64;
+            let e = match i % 4 {
+                0 => -16494 + (i / 4 % 16509) as i32,
+                1 => -400 + (i / 4 % 415) as i32,
+                2 => -20 + (i / 4 % 35) as i32,
+                _ => [-129, -128, -20, -19, -7, -6][(i / 4 % 6) as usize],
+            };
+            let m = IMPLICIT_BIT | bits & MANTISSA_MASK;
+            let negative = bits >> 127 != 0;
+            let x = with_sign(round(e, m << 15, 0), negative);
+            if x == 0.0 || x < if DECIMAL { -35.0 } else { -114.0 } {
+                continue;
+            }
+            // Recover the actual significand after rounding subnormal draws.
+            let (m, e) = split(x.to_bits() & !SIGN_MASK);
+            let (n, r, gate, band) = if e >= FRAME_EXP {
+                let (n, f) = frame(m, e, l, negative);
+                let Some((n, r, gate)) = subtract_one(fast(n, f)) else {
+                    continue;
+                };
+                (n, r, gate, 1)
+            } else {
+                let (n, r, _) = expbm1_small::<DECIMAL>(m, e, negative);
+                (n, r, ZIV_GATE, 0)
+            };
+            let input = Float::with_val(420, x);
+            let truth = if DECIMAL {
+                input.exp10_m1()
+            } else {
+                input.exp2_m1()
+            }
+            .abs();
+            let unit = Float::with_val(420, 2).pow(n - 127);
+            let value = Float::with_val(420, r);
+            let ratio = (truth / unit - value).abs().to_f64() / gate as f64;
+            if ratio > worst[band] {
+                worst[band] = ratio;
+                worst_x[band] = x;
+            }
+        }
+        let name = if DECIMAL { "exp10m1q" } else { "exp2m1q" };
+        for band in 0..2 {
+            println!(
+                "{name} band {band}: worst |err|/gate = {:.6} at {:?}",
+                worst[band], worst_x[band]
+            );
+            assert!(worst[band] > 0.0 && worst[band] < 0.5);
+        }
+    }
+
+    #[test]
+    fn exp2m1q_fast_legs_are_sound() {
+        certify_expbm1::<false>();
+    }
+
+    #[test]
+    fn exp10m1q_fast_legs_are_sound() {
+        certify_expbm1::<true>();
     }
 }

@@ -582,3 +582,17 @@ required-features = ["f128"]
 name = "tanpiq"
 harness = false
 required-features = ["f128"]
+
+[[example]]
+name = "gen_f128_expbm1_cases"
+required-features = ["f128", "mpfr"]
+
+[[bench]]
+name = "exp2m1q"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "exp10m1q"
+harness = false
+required-features = ["f128"]
