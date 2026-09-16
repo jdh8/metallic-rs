@@ -345,7 +345,7 @@ of that comparison: max ulp of metallic / glibc / libquadmath against MPFR at
 300 bits, over the benches' own bands. The metallic column is the harness'
 own proof — it must read `≤ 0.5` on every function, and a `self_check` pins
 the ulp scaling against exact midpoints before the survey runs. The table it
-prints is in the README's [Baselines](README.md#baselines) section.
+prints is in [BINARY128.md](BINARY128.md#baselines).
 
 ## Verification (reproducing CORE-MATH's checks)
 

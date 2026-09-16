@@ -400,7 +400,7 @@ def render(directory):
         "context; transcendental accuracy contracts differ. On dl02, most `f128::` methods "
         "call glibc; the `sqrtq` std lane resolves to Rust `compiler_builtins`, and the "
         "`exp10q` system lane is explicitly `glibc::exp10f128`. See "
-        "[README baseline details](README.md#baselines). There is no CORE-MATH lane for "
+        "[binary128 baseline details](BINARY128.md#baselines). There is no CORE-MATH lane for "
         "`log2q`, `log10q`, `log1pq`, `powq`, `sinq`, `cosq`, or `tanq`; their libquadmath "
         "times remain separate from the CORE-MATH ratio. `compound` has no equivalent "
         "comparison entry point, so its row contains metallic alone.",

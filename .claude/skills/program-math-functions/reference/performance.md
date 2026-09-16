@@ -286,7 +286,7 @@ evidence wastes a session.
 Live status (ratio table, open laggards, per-function notes) is maintained in
 **issue #5** — read it with `gh api repos/jdh8/metallic-rs/issues/5 --jq
 .body` and its comments before picking a target; the binary128 table lives in
-README.md § Binary128 status (as of 2026-08-24 no `q` function is above
+BINARY128.md § Status (as of 2026-08-24 no `q` function is above
 1.13x). As of 2026-07-02 (calm box):
 no function above 1.15×, and the remaining ~1.05–1.10 cluster (asinh, asin,
 atanh, log1p, exp2/exp10) has no known mechanism — treat those as research,
