@@ -896,7 +896,7 @@ mod ziv_soundness {
         let x = if bits & (1 << 126) == 0 {
             t
         } else {
-            super::super::roots::sqrtq(crate::f128_::fma128(-t, t, 1.0))
+            super::super::roots::sqrtq(crate::fmaq(-t, t, 1.0))
         };
         f128::from_bits(x.to_bits().wrapping_add(bits >> 119 & 15).wrapping_sub(7))
     }

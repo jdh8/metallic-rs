@@ -14,7 +14,6 @@ mod log;
 mod log10_tables;
 mod log2_tables;
 mod log_tables;
-#[allow(dead_code)]
 mod misc;
 #[cfg(feature = "mpfr")]
 #[doc(hidden)]
@@ -34,6 +33,7 @@ pub use atan2::{atan2q, atanq};
 pub use exp::{exp2q, exp10q, expm1q, expq};
 pub use hypot::hypotq;
 pub use log::{log1pq, log2p1q, log2q, log10p1q, log10q, logq};
+pub use misc::{fmaq, frexpq, ldexpq};
 pub use pow::powq;
 pub use roots::{cbrtq, rsqrtq, sqrtq};
 pub use tan::tanq;
@@ -43,5 +43,5 @@ pub use trig::{cosq, sinq};
 #[allow(unused_imports)]
 pub use misc::{
     BIAS, EXP_MASK, EXP_SHIFT, IMPLICIT_BIT, MANTISSA_MASK, Magnitude, QUIET_BIT, SIGN_MASK, exp2i,
-    fma128, frexp, ldexp, normalize, split,
+    normalize, split,
 };

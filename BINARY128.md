@@ -22,6 +22,9 @@ assert_eq!(metallic::log1pq(1.0_f128), core::f128::consts::LN_2);
 assert_eq!(metallic::log2p1q(3.0_f128), 2.0);
 assert_eq!(metallic::log10p1q(99.0_f128), 2.0);
 assert_eq!(metallic::powq(2.0_f128, 0.5), core::f128::consts::SQRT_2);
+assert_eq!(metallic::fmaq(3.0_f128, 4.0, 5.0), 17.0);
+assert_eq!(metallic::frexpq(48.0_f128), (0.75, 6));
+assert_eq!(metallic::ldexpq(3.0_f128, 4), 48.0);
 ```
 
 Run its tests with `cargo +nightly test --features f128`.  Building the
@@ -62,10 +65,13 @@ Each function is done when both gates hold:
 | `cbrtq`  | ✅ |
 | `cosq`   | ✅ |
 | `exp10q` | ✅ |
+| `fmaq`   | ✅ |
+| `frexpq` | ✅ |
 | `exp2q`  | ✅ |
 | `expm1q` | ✅ |
 | `expq`   | ✅ |
 | `hypotq` | ✅ |
+| `ldexpq` | ✅ |
 | `log2q`  | ✅ |
 | `log2p1q` | ✅ |
 | `log10q` | ✅ |
@@ -82,14 +88,25 @@ Each function is done when both gates hold:
 nor libquadmath currently provides these entry points. They are not in the
 historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
 
+`fmaq`, `frexpq` and `ldexpq` are exact operations rather than approximations,
+so neither column means what it does for the rest of the table.  `frexpq` and
+`ldexpq` are bit manipulation, gated on their defining invariants — the
+exponent-field identity, the subnormal ladder, the exact round trip — plus an
+MPFR sweep; neither has an interesting cost.  `fmaq` is the *platform's*
+binary128 fused multiply-add, not metallic's: it is glibc's `fmaf128` wherever
+`long double` is binary128, and on a target where it is narrower LLVM lowers it
+to `fmal`, which computes the narrow function of the low half of each operand.
+Keep it off any path that has to be right everywhere; see its rustdoc.
+
 ## Coverage gap
 
-Twenty-five `f64` entry points have no binary128 counterpart yet.  The work is
-not started; what follows is the plan, not a status report.
+Twenty-two `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+`frexpq` and `ldexpq` are done — they were written already, and publishing them
+was the whole of the work.  For the rest, what follows is the plan, not a status
+report.
 
 | to do | rides on |
 |-------|----------|
-| `fmaq`, `frexpq`, `ldexpq` | written already — `misc::{fma128, frexp, ldexp}` behind `#[allow(dead_code)]`, wanting only public names and docs |
 | `roundq` | nothing; a few lines of bit manipulation |
 | `sincosq` | `trig::reduce` hoisted once across both legs |
 | `exp2m1q`, `exp10m1q` | `exp.rs`, the `expm1q` structure at a different `L` |
@@ -109,7 +126,7 @@ oracle.
 ### What every one of them costs
 
 `FUNCS128` in `tools/sync-worst-cases.sh` is `sqrt rsqrt cbrt hypot exp exp2
-exp10 expm1 log asin acos atan atan2`.  **None of the twenty-five has a
+exp10 expm1 log asin acos atan atan2`.  **None of the twenty-two has a
 CORE-MATH binding**, so none of them gets the cheap gate.  Each follows the
 `sinq`/`powq` route from CLAUDE.md — an `examples/gen_f128_*_cases.rs`
 generator producing a corpus that carries its own MPFR answers, the
@@ -126,9 +143,9 @@ no external lane (as `log2p1q` and `log10p1q` already do not) and fall back to
 
 ### Order
 
-**Phase 0 — exports.** `fmaq`, `frexpq`, `ldexpq`, `roundq`, `sincosq`.  Five
-of the twenty-five at almost no risk; only `sincosq` is real work, and there
-the point is to share one `reduce` rather than call `trig` twice.
+**Phase 0 — exports.**  ~~`fmaq`, `frexpq`, `ldexpq`~~ (done), `roundq`,
+`sincosq`.  Almost no risk; only `sincosq` is real work, and there the point is
+to share one `reduce` rather than call `trig` twice.
 
 **Phase 1 — `exp2m1q`, `exp10m1q`.** `expm1q` already solved the hard half:
 riding the fast leg above `2^-6` and normalizing the subtracted 1 into a

@@ -945,7 +945,7 @@ mod tests {
         assert!(log2q(f128::NAN).is_nan());
         // Every power of two, subnormals included, is exact.
         for k in -16494..=16383_i32 {
-            let x = super::super::ldexp(1.0, k);
+            let x = super::super::ldexpq(1.0, k);
             assert_eq!(log2q(x).to_bits(), (k as f128).to_bits(), "log2(2^{k})");
         }
     }
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn log1p_exact_and_special() {
-        use super::super::ldexp;
+        use super::super::ldexpq;
 
         assert_eq!(log1pq(0.0).to_bits(), 0.0_f128.to_bits());
         assert_eq!(log1pq(-0.0).to_bits(), (-0.0_f128).to_bits());
@@ -1014,15 +1014,15 @@ mod tests {
         for x in [
             f128::from_bits(1),
             f128::MIN_POSITIVE,
-            ldexp(1.0, -114),
-            ldexp(-1.0, -114),
-            ldexp(1.0, -113),
-            ldexp(-1.0, -113),
+            ldexpq(1.0, -114),
+            ldexpq(-1.0, -114),
+            ldexpq(1.0, -113),
+            ldexpq(-1.0, -113),
         ] {
             assert_eq!(log1pq(x).to_bits(), x.to_bits(), "log1p({x:?})");
         }
         // At 2^-112 the square is exactly half an ulp: the cube decides.
-        let x = ldexp(1.0, -112);
+        let x = ldexpq(1.0, -112);
         assert_eq!(log1pq(x).to_bits(), x.to_bits() - 1);
         assert_eq!(log1pq(-x).to_bits(), (-x).to_bits() + 1);
     }

@@ -120,7 +120,10 @@ mod f128_ {
     mod exp2q;
     mod expm1q;
     mod expq;
+    mod fmaq;
+    mod frexpq;
     mod hypotq;
+    mod ldexpq;
     mod log10p1q;
     mod log10q;
     mod log1pq;

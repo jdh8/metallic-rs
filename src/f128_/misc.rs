@@ -2,9 +2,18 @@ use crate::Sign;
 use core::num::FpCategory;
 
 /// Multiply `x` by 2 raised to the power `n`.
+///
+/// The scaling is exact unless the result overflows or falls into the
+/// subnormal range, where it rounds exactly once.  Zeros, infinities and NaNs
+/// come back unchanged, sign included.
+///
+/// ```
+/// # #![feature(f128)]
+/// assert_eq!(metallic::ldexpq(3.0_f128, 4), 48.0);
+/// ```
 #[must_use]
 #[inline]
-pub const fn ldexp(x: f128, n: i32) -> f128 {
+pub const fn ldexpq(x: f128, n: i32) -> f128 {
     // Scale in up to two steps per direction so the final multiply is the only
     // one that can round into the subnormal range.
     let mut x = x;
@@ -39,10 +48,16 @@ pub const fn ldexp(x: f128, n: i32) -> f128 {
 /// Decompose into a significand and an exponent.
 ///
 /// The absolute value of the significand is in `[0.5, 1)` for nonzero finite
-/// `x`.
+/// `x`, and `x == ldexpq(significand, exponent)` exactly.  Zeros, infinities
+/// and NaNs come back paired with an exponent of zero.
+///
+/// ```
+/// # #![feature(f128)]
+/// assert_eq!(metallic::frexpq(48.0_f128), (0.75, 6));
+/// ```
 #[must_use]
 #[inline]
-pub const fn frexp(x: f128) -> (f128, i32) {
+pub const fn frexpq(x: f128) -> (f128, i32) {
     let (sign, Magnitude::Normalized(magnitude)) = normalize(x) else {
         return (x, 0);
     };
@@ -141,15 +156,28 @@ const fn u128_sign_bit(sign: Sign) -> u128 {
     }
 }
 
-/// Fused multiply-add for binary128, correctly rounded where `long double` is
-/// binary128 — this is glibc's `fmaf128`.  On a target whose `long double` is
-/// narrower (Apple arm64, x86 f80) LLVM lowers it to `fmal` and the result is
-/// the *narrow* function of the low half of each argument, so keep this off
-/// any path that has to be right everywhere.
+/// Fused multiply-add: `x * y + a` with a single rounding.
+///
+/// Correctly rounded where the target's `long double` is binary128 — there
+/// this is glibc's `fmaf128`.
+///
+/// # Platform caveat
+///
+/// On a target whose `long double` is narrower (Apple arm64, x86 `f80`) LLVM
+/// lowers the binary128 multiply-add to `fmal`, which computes the *narrow*
+/// function of the low half of each argument and returns it with register
+/// residue above.  The result is then wrong, not merely inaccurate, so keep
+/// this off any path that has to be right everywhere.  Like the rest of
+/// metallic's binary128 surface, it is supported on x86-64 GNU/Linux.
+///
+/// ```
+/// # #![feature(f128)]
+/// assert_eq!(metallic::fmaq(3.0_f128, 4.0, 5.0), 17.0);
+/// ```
 #[must_use]
 #[allow(clippy::disallowed_methods)]
 #[inline]
-pub fn fma128(x: f128, y: f128, a: f128) -> f128 {
+pub fn fmaq(x: f128, y: f128, a: f128) -> f128 {
     x.mul_add(y, a)
 }
 
@@ -193,8 +221,8 @@ mod tests {
             f128::MAX,
             -f128::from_bits(1),
         ] {
-            let (fraction, exponent) = frexp(x);
-            assert_eq!(ldexp(fraction, exponent).to_bits(), x.to_bits());
+            let (fraction, exponent) = frexpq(x);
+            assert_eq!(ldexpq(fraction, exponent).to_bits(), x.to_bits());
         }
     }
 }

@@ -296,7 +296,7 @@ reference: never copy binary128 fitted seed or polynomial tables (`rsqrt9`,
 the `rsqrtq`/`cbrtq` seed tables are truncated-Taylor data (values and
 derivatives), not minimax fits.
 
-For f128 FMA, call the crate's `fma128` wrapper rather than `f128::mul_add` or a
+For f128 FMA, call the crate's `fmaq` wrapper rather than `f128::mul_add` or a
 raw multiply-add. Benchmarks require the `f128` feature and nightly; the
 headline is the same-run `metallic::*q / core_math::*q` ratio. The std
 `f128::sqrt` lane has the same correct-rounding contract; other std lanes are

@@ -37,8 +37,8 @@ pub use f32_::{
 
 #[cfg(feature = "f128")]
 pub use f128_::{
-    acosq, asinq, atan2q, atanq, cbrtq, cosq, exp2q, exp10q, expm1q, expq, hypotq, log1pq, log2p1q,
-    log2q, log10p1q, log10q, logq, powq, rsqrtq, sinq, sqrtq, tanq,
+    acosq, asinq, atan2q, atanq, cbrtq, cosq, exp2q, exp10q, expm1q, expq, fmaq, frexpq, hypotq,
+    ldexpq, log1pq, log2p1q, log2q, log10p1q, log10q, logq, powq, rsqrtq, sinq, sqrtq, tanq,
 };
 
 /// MPFR bridges for testing binary128 functions.
@@ -49,9 +49,6 @@ pub use f128_::mpfr as f128_mpfr;
 // Crate-internal `f64` primitives, reached as `crate::exp2i` / `crate::fast_mul_add`
 // from both precision trees (private re-export, like `poly` above).
 use f64_::{exp2i, fast_mul_add};
-#[cfg(feature = "f128")]
-#[allow(unused_imports)]
-use f128_::fma128;
 
 /// Explicit sign rather than a `bool`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
