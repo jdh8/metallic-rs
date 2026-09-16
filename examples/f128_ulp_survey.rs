@@ -583,6 +583,18 @@ fn table() -> Vec<Entry> {
                 Some(quadmath::log1pq),
             ],
         ),
+        unary(
+            "log2p1q",
+            log1p_argument,
+            |x| Float::with_val(WORK, x).log2_1p(),
+            [Some(metallic::log2p1q), None, None],
+        ),
+        unary(
+            "log10p1q",
+            log1p_argument,
+            |x| Float::with_val(WORK, x).log10_1p(),
+            [Some(metallic::log10p1q), None, None],
+        ),
         binary(
             "atan2q",
             |i| {

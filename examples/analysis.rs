@@ -575,6 +575,8 @@ probes! {
         expq = metallic_expq: unary + core_math;
         hypotq = metallic_hypotq: binary + core_math;
         log1pq = metallic_log1pq: unary;
+        log2p1q = metallic_log2p1q: unary;
+        log10p1q = metallic_log10p1q: unary;
         log2q = metallic_log2q: unary;
         log10q = metallic_log10q: unary;
         logq = metallic_logq: unary + core_math;

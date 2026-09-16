@@ -18,7 +18,7 @@ const SAMPLE_COUNT: u64 = 200_000;
 /// The whole domain: a random significand at an exponent uniform over every
 /// binade, subnormals included — positive, or negative above −1.
 #[cfg(feature = "mpfr")]
-fn domain(i: u64) -> f128 {
+pub(super) fn domain(i: u64) -> f128 {
     let bits = common128::mix128(i);
     let span = if bits >> 127 != 0 { 0x3fff } else { 0x7fff };
     let exponent = (bits >> 112 & 0x7fff) % span;
@@ -30,7 +30,7 @@ fn domain(i: u64) -> f128 {
 /// the result is the argument; `2^-112`, where `x²/2` is exactly half an
 /// ulp; and `2^-18`, where the floating leg hands over to the reduction.
 #[cfg(feature = "mpfr")]
-fn seams(i: u64) -> f128 {
+pub(super) fn seams(i: u64) -> f128 {
     let anchors: [u128; 3] = [16383 - 113, 16383 - 112, 16383 - 18];
     let anchor = anchors[(i % 6 / 2) as usize] << 112;
     let offset = (i / 6) as i128 - (SAMPLE_COUNT / 12) as i128;
@@ -42,7 +42,7 @@ fn seams(i: u64) -> f128 {
 /// `−1 + t` for `t` log-uniform over `[2^-113, 2^-1)`: `1 + x` small and
 /// exact, the reduction's cancellation.
 #[cfg(feature = "mpfr")]
-fn near_minus_one(i: u64) -> f128 {
+pub(super) fn near_minus_one(i: u64) -> f128 {
     let bits = common128::mix128(i);
     let exponent = 16383 - 113 + (bits >> 112 & 0x7fff) % 113;
 
@@ -51,7 +51,7 @@ fn near_minus_one(i: u64) -> f128 {
 
 /// Uniform dense sweep of `(−1, 2]`.
 #[cfg(feature = "mpfr")]
-fn dense(i: u64) -> f128 {
+pub(super) fn dense(i: u64) -> f128 {
     3.0 * (i + 1) as f128 / SAMPLE_COUNT as f128 - 1.0
 }
 

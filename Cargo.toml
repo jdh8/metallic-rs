@@ -548,3 +548,13 @@ required-features = ["f128"]
 name = "powq"
 harness = false
 required-features = ["f128"]
+
+[[bench]]
+name = "log2p1q"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "log10p1q"
+harness = false
+required-features = ["f128"]

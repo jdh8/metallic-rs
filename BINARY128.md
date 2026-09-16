@@ -19,6 +19,8 @@ assert_eq!(metallic::logq(1.0_f128), 0.0);
 assert_eq!(metallic::log2q(1024.0_f128), 10.0);
 assert_eq!(metallic::log10q(1000.0_f128), 3.0);
 assert_eq!(metallic::log1pq(1.0_f128), core::f128::consts::LN_2);
+assert_eq!(metallic::log2p1q(3.0_f128), 2.0);
+assert_eq!(metallic::log10p1q(99.0_f128), 2.0);
 assert_eq!(metallic::powq(2.0_f128, 0.5), core::f128::consts::SQRT_2);
 ```
 
@@ -36,10 +38,11 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
-  `sinq`/`cosq`/`tanq`/`log2q`/`log10q`/`log1pq`/`powq` have no CORE-MATH
+  `sinq`/`cosq`/`tanq`/`log2q`/`log10q`/`log1pq`/`log2p1q`/`log10p1q`/`powq`
+  have no CORE-MATH
   binding yet: their strict gate replays a home-grown corpus that carries its
   MPFR answers, and CORE-MATH's `f64` `sin`/`cos`/`tan`/`log2`/`log10`/
-  `log1p`/`pow` cross-check them oracle-free.
+  `log1p`/`log2p1`/`log10p1`/`pow` cross-check them oracle-free.
 - **Perf** — measured same-run median ratio `metallic::<fn>q / core_math::<fn>q`
   ≈ 1× or better on the recorded workload and hardware. Archived results are in
   [BENCHMARKS.md](BENCHMARKS.md); [ANALYSIS.md](ANALYSIS.md) helps diagnose costs.
@@ -64,7 +67,9 @@ Each function is done when both gates hold:
 | `expq`   | ✅ |
 | `hypotq` | ✅ |
 | `log2q`  | ✅ |
+| `log2p1q` | ✅ |
 | `log10q` | ✅ |
+| `log10p1q` | ✅ |
 | `log1pq` | ✅ |
 | `logq`   | ✅ |
 | `powq`   | ✅ |
@@ -72,6 +77,14 @@ Each function is done when both gates hold:
 | `sinq`   | ✅ |
 | `sqrtq`  | ✅ |
 | `tanq`   | ✅ |
+
+`log2p1q` and `log10p1q` have standalone benchmarks; neither CORE-MATH
+nor libquadmath currently provides these entry points. They are not in the
+historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
+
+Remaining coverage relative to f64 includes the six hyperbolic functions,
+`erf`/`erfc`/`tgamma`/`lgamma`, the seven π-scaled trigonometric functions,
+`exp2m1`, `exp10m1`, `compound`, and the combined `sincos` entry point.
 
 ## How the functions work
 
@@ -92,6 +105,13 @@ needs; `log2q` and `log10q` are the same engine with base-2 and base-10
 tables, exact at every power of two and every representable power of ten, and
 `log1pq` is the natural one behind an exact 256-bit `1 + x` (its argument is
 its own reduction below 2<sup>&minus;18</sup>).
+`log2p1q` and `log10p1q` share that front end with their own base's constants.
+Their small leg retains the input's floating scale and the factor
+log<sub>b</sub>(e) all the way down to subnormals, rounding directly on the
+subnormal grid when needed. Their MPFR corpora include exact powers, the
+transition points, inverse images of rounding midpoints, and scans near −1
+and zero. The worst measured |error|/gate is 0.1870 for `log2p1q` and
+0.2565 for `log10p1q`, giving more than the required 2× margin.
 `powq` is 2<sup>y·log<sub>2</sub>x</sup> on both engines: the logarithm's
 frame times the exact significand of `y` feeds the exponential's, with the
 Ziv gate widened by `|y|`; a 384-by-256-bit accurate leg decides what the fast
@@ -161,7 +181,7 @@ they are not interchangeable:
 
 - **[CORE-MATH]** shares metallic's ≤ 0.5 ulp contract, so it is the only fair
   performance baseline — it is the only one doing the same work.  It binds
-  thirteen of the twenty functions above.
+  thirteen of the twenty-two functions above.
 - **nightly Rust** adds no binary128 math of its own.  `f128::sin`,
   `f128::powf` and the rest are `extern "C"` calls into **glibc**'s
   `_Float128` libm (`sinf128`, `powf128`, …), and `std` documents their
@@ -212,6 +232,15 @@ and crowds the endpoints where the reflection cancels.  Correct rounding is
 | `sinq`    | **0.500** | 1.095 | 1.095 |
 | `sqrtq`   | **0.500** | **0.500** | 0.750 |
 | `tanq`    | **0.500** | 0.804 | 0.804 |
+
+The new `log2p1q` and `log10p1q` also stay at or below 0.5 ulp in a separate
+200 000-draw survey of the same `log1pq` band. Neither has a glibc or
+libquadmath entry in the survey. Reproduce with:
+
+```sh
+CC=clang cargo +nightly run --release --features "f128 mpfr" \
+  --example f128_ulp_survey -- 200000 log2p1q log10p1q
+```
 
 The share of draws whose last bit comes out wrong spans four orders of
 magnitude: 0.006% for glibc's `logq`, ~1% for the exponentials and the sine,

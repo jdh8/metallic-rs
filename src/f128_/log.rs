@@ -60,6 +60,13 @@
 //! only `x ≥ 2^256` drops its 1, a relative slip under 2^-256), its 384-bit
 //! product with the reciprocal carries `z` to 2^-333 for the accurate leg,
 //! and the fast leg, its gate, and the rounder are [`logq`]'s unchanged.
+//!
+//! [`log2p1q`] and [`log10p1q`] use that same front end with their base's
+//! constants. Their tiny results are `x·log_b(e)`, so the small leg keeps
+//! the input's floating scale through every binade, including subnormals.
+//! Below the ratio's fixed-point resolution only its constant term survives;
+//! the exact input significand still multiplies the full 256-bit ratio.
+//! Subnormal results round directly with [`super::atan2::round_384`].
 
 use super::log_tables::{CRUDE, RECIP0, RECIP1, RECIP2};
 use super::uint::{
@@ -73,6 +80,12 @@ use super::{log_tables, log2_tables, log10_tables};
 /// What a logarithm's base contributes: the constants of the add-back and
 /// the polynomial, all in the frames of [`log_tables`].
 pub(super) trait Base {
+    /// Only the natural logarithm rounds to its input in the tiny band.
+    const UNIT_SLOPE: bool = false;
+    /// Tie window on the normalized small leg's 128-bit discarded field.
+    /// Its ratio has < 2^-125 absolute error; normalization makes that
+    /// relative, so base 10 needs another bit because log10(e) < 1/2.
+    const SMALL_GATE: u128 = 1 << 118;
     /// `log_b 2`, scaled by 2^342: what each unit of the exponent adds.
     const PER_EXPONENT: [u128; 3];
     /// `-log_b(RECIP0[j]/2^31)`, scaled by 2^342.
@@ -100,6 +113,7 @@ pub(super) trait Base {
 struct Natural;
 
 impl Base for Natural {
+    const UNIT_SLOPE: bool = true;
     const PER_EXPONENT: [u128; 3] = log_tables::LN2;
     const LOG0: &'static [[u128; 3]; 65] = &log_tables::LOG0;
     const LOG1: &'static [[u128; 3]; 64] = &log_tables::LOG1;
@@ -127,6 +141,7 @@ impl Base for Binary {
 struct Decimal;
 
 impl Base for Decimal {
+    const SMALL_GATE: u128 = 1 << 119;
     const PER_EXPONENT: [u128; 3] = log10_tables::LOG10_2;
     const LOG0: &'static [[u128; 3]; 65] = &log10_tables::LOG0;
     const LOG1: &'static [[u128; 3]; 64] = &log10_tables::LOG1;
@@ -140,9 +155,9 @@ impl Base for Decimal {
 /// so [`accurate`] takes the whole neighbourhood of 1 on its own.
 const FAST_FLOOR: u128 = 1 << 70;
 
-/// [`log1pq`]'s floor: its general leg starts at `|x| = 2^-18`, where
-/// `|log(1 + x)| > 2^-19`, so this is never crossed and only pins the shift
-/// windows of [`finish`].
+/// The one-plus front end's floor. At `|x| = 2^-18`, the natural and binary
+/// logarithms exceed 2^-19. The decimal one can fall just below it and
+/// uses the accurate leg there. This also pins [`finish`]'s shift windows.
 const FLOOR_1P: u128 = 1 << 67;
 
 /// The bit pattern of 1.
@@ -188,11 +203,32 @@ pub fn log10q(x: f128) -> f128 {
 /// `log1p(±0) = ±0`, and below `|x| = 2^-113` the result is `x` itself.
 #[must_use]
 pub fn log1pq(x: f128) -> f128 {
+    log_one_plus::<Natural>(x)
+}
+
+/// `log2(1 + x)`, without rounding `1 + x` first.
+///
+/// Preserves signed zero; returns −∞ at −1 and NaN below −1.
+#[must_use]
+pub fn log2p1q(x: f128) -> f128 {
+    log_one_plus::<Binary>(x)
+}
+
+/// `log10(1 + x)`, without rounding `1 + x` first.
+///
+/// Preserves signed zero; returns −∞ at −1 and NaN below −1.
+#[must_use]
+pub fn log10p1q(x: f128) -> f128 {
+    log_one_plus::<Decimal>(x)
+}
+
+#[inline]
+fn log_one_plus<B: Base>(x: f128) -> f128 {
     let bits = x.to_bits();
     let magnitude = bits & !SIGN_MASK;
 
     if magnitude < SMALL {
-        return small(bits);
+        return small::<B>(bits);
     }
     // Nonfinite, or `x ≤ −1`.
     if magnitude >= EXP_MASK || bits >= SIGN_MASK | ONE {
@@ -200,7 +236,7 @@ pub fn log1pq(x: f128) -> f128 {
     }
     let (e, j, d) = reduce1p(bits);
 
-    finish::<Natural>(e, j, d, FLOOR_1P)
+    finish::<B>(e, j, d, FLOOR_1P)
 }
 
 /// `log_b x` for the base `B`: the shared fast leg, its gate, and the
@@ -390,31 +426,34 @@ fn one_plus(m: u128, e: i32, negative: bool) -> ([u128; 2], i32) {
     }
 }
 
-/// `log(1 + x)` for `|x| < 2^-18`: the argument is its own reduced `z`, and
-/// the Taylor ratio `log(1 + z)/z` multiplies the input significand in
-/// floating form, keeping full relative accuracy down to `|x| = 2^-113`.
-/// Below that `x − x²/2 + ⋯` rounds to `x` itself: at `|x| = 2^-113` the
-/// square lands exactly on the tie and the cube breaks it toward `x`.
+/// `log_b(1 + x)` for `|x| < 2^-18`: the argument is its own reduced `z`,
+/// and the Taylor ratio `log_b(1 + z)/z` multiplies the input significand
+/// in floating form. Only the natural base has an identity shortcut below
+/// `|x| = 2^-113`; the other bases retain the irrational slope `log_b(e)`.
 #[inline]
-fn small(bits: u128) -> f128 {
+fn small<B: Base>(bits: u128) -> f128 {
     let magnitude = bits & !SIGN_MASK;
 
-    if magnitude < TINY {
+    if magnitude == 0 || (B::UNIT_SLOPE && magnitude < TINY) {
         return f128::from_bits(bits);
     }
-    let m = magnitude & MANTISSA_MASK | IMPLICIT_BIT;
-    let e = (magnitude >> EXP_SHIFT) as i32 - BIAS;
+    let (m, e) = split(magnitude);
     let negative = bits >> 127 != 0;
-    let (high, low) = small_leg(m, e, negative);
+    // The result can lose two binades in base 10. Round near underflow
+    // directly on the subnormal grid, without an intermediate f128 result.
+    if e < -16380 {
+        return small_accurate::<B>(m, e, negative);
+    }
+    let (high, low) = small_leg::<B>(m, e, negative);
 
-    // `|log(1 + x)|·2^(254 − e)` leads within two bits of 2^255.
+    // `|log_b(1 + x)|·2^(254 − e)` leads within three bits of 2^255.
     let leading = high.leading_zeros();
     let n = shl_256([low, high], leading);
     // The top 128 of the 143 discarded bits, tie center at 2^127.
     let v = (n[1] << 113) | (n[0] >> 15);
 
-    if (v ^ (1 << 127)).wrapping_add(SMALL_GATE) <= SMALL_GATE << 1 {
-        return small_accurate(m, e, negative);
+    if (v ^ (1 << 127)).wrapping_add(B::SMALL_GATE) <= B::SMALL_GATE << 1 {
+        return small_accurate::<B>(m, e, negative);
     }
     f128::from_bits(
         (bits & SIGN_MASK)
@@ -424,42 +463,49 @@ fn small(bits: u128) -> f128 {
     )
 }
 
-/// The fast leg of [`small`]: `|log(1 + x)|·2^(254 − e)` as `(high, low)`,
+/// The fast leg of [`small`]: `|log_b(1 + x)|·2^(254 − e)` as `(high, low)`,
 /// the exact product of the input significand and [`ratio`] at 2^127.  The
 /// ratio's slip — a few units of 2^-128 from its truncated products, plus
-/// the `x⁷/8 < 2^-129` past its last term — is all the error there is.
+/// `log_b(e)·x⁷/8` past its last term — is all the error there is.
 #[inline]
-fn small_leg(m: u128, e: i32, negative: bool) -> (u128, u128) {
+fn small_leg<B: Base>(m: u128, e: i32, negative: bool) -> (u128, u128) {
     // `z·2^145 = ±m·2^(e + 33)`, cut at 2^-145 below `e = −33`, which moves
-    // the ratio by half that.
+    // the ratio by at most log_b(e)/2 times that.
     let z = if e >= -33 {
         m << (e + 33)
     } else {
-        m >> (-33 - e)
+        m.checked_shr((-33 - e) as u32).unwrap_or(0)
     };
     let mask = 0_u128.wrapping_sub(u128::from(negative));
 
-    wmul(
-        m << 15,
-        ratio::<Natural>((z ^ mask).wrapping_sub(mask) as i128),
-    )
+    wmul(m << 15, ratio::<B>((z ^ mask).wrapping_sub(mask) as i128))
 }
 
-/// Half-width of the tie window [`small`]'s fast leg refuses to decide, in
-/// units of its 128-bit discarded field: the ratio's slip is under 2^-125
-/// relative, 2^116 of the field, and [`ziv_soundness`] certifies the margin.
-const SMALL_GATE: u128 = 1 << 118;
-
-/// [`small`] at 256 bits, on the exact `z = x`.
+/// [`small`] at 256 bits, with `z = x` cut at 2^-273 for the ratio and
+/// the exact input significand for its final product.
 #[cold]
 #[inline(never)]
-fn small_accurate(m: u128, e: i32, negative: bool) -> f128 {
-    // `z·2^273 = ±m·2^(e + 161)`, exact since `e ≥ −113`.
-    let z = shl_256([m, 0], (e + 161) as u32);
+fn small_accurate<B: Base>(m: u128, e: i32, negative: bool) -> f128 {
+    // `z·2^273 = ±m·2^(e + 161)`. Cutting tiny z here changes the
+    // ratio by < 2^-273; the exact input significand still multiplies it.
+    let z = if e >= -161 {
+        shl_256([m, 0], (e + 161) as u32)
+    } else {
+        shr_256_sat([m, 0], (-161 - e) as u32)
+    };
     let z = if negative { sub_256([0, 0], z) } else { z };
-    let w = log1p_wide::<Natural>(z, [0, m << 15], negative);
+    // A truncated negative z may be zero. Signed multiplication must then
+    // see zero, not a negative 256-bit value with an implicit high limb.
+    let w = log1p_wide::<B>(z, [0, m << 15], negative && z != [0; 2]);
     let leading = w[1].leading_zeros();
     let n = shl_256(w, leading);
+    if e + 2 - (leading as i32) < f128::MIN_EXP {
+        return super::atan2::round_384(
+            [0, n[0], n[1]],
+            e + 2 - leading as i32,
+            u128::from(negative) << 127,
+        );
+    }
     let mantissa = n[1] >> 15;
     let round_bit = n[1] >> 14 & 1 != 0;
     let sticky = n[1] & ((1 << 14) - 1) != 0 || n[0] != 0;
@@ -1016,7 +1062,7 @@ mod tests {
     }
 }
 
-/// MPFR certification that [`ZIV_GATE`] covers the fast leg's true error with
+/// MPFR certification that [`Base::ZIV_GATE`] covers the fast leg's true error with
 /// the 2× margin the project requires.  Run with
 /// `CC=clang cargo +nightly test --release --features "f128 mpfr"`.
 #[cfg(all(test, feature = "mpfr"))]
@@ -1129,8 +1175,7 @@ mod ziv_soundness {
         f128::from_bits(bits & SIGN_MASK | ((e + BIAS) as u128) << EXP_SHIFT | bits & MANTISSA_MASK)
     }
 
-    #[test]
-    fn log1p_fast_leg_is_sound() {
+    fn certify_one_plus<B: Base>(name: &str, truth: fn(Float) -> Float) {
         let unit: Float = Float::with_val(PRECISION, 2).pow(-214);
         let mut worst = 0.0;
         let mut worst_x = 0.0;
@@ -1144,20 +1189,20 @@ mod ziv_soundness {
                 continue;
             }
             let (e, j, d) = reduce1p(bits);
-            let s = fast::<Natural>(e, j, z_fast(d));
-            let truth = Float::with_val(PRECISION, x).ln_1p() / unit.clone();
-            let ratio = Float::with_val(PRECISION, truth - value(s)).abs().to_f64()
-                / Natural::ZIV_GATE as f64;
+            let s = fast::<B>(e, j, z_fast(d));
+            let truth = truth(Float::with_val(PRECISION, x)) / unit.clone();
+            let ratio =
+                Float::with_val(PRECISION, truth - value(s)).abs().to_f64() / B::ZIV_GATE as f64;
 
             if ratio > worst {
                 worst = ratio;
                 worst_x = x;
             }
         }
-        println!("log1pq general leg: worst |err|/gate = {worst:.4} at x={worst_x:?}");
+        println!("{name} general leg: worst |err|/gate = {worst:.4} at x={worst_x:?}");
         assert!(
             worst < 0.5,
-            "log1pq gate covers only {:.2}× the slip at x={worst_x:?}",
+            "{name} gate covers only {:.2}× the slip at x={worst_x:?}",
             1.0 / worst
         );
     }
@@ -1171,26 +1216,37 @@ mod ziv_soundness {
         f128::from_bits(bits & SIGN_MASK | ((e + BIAS) as u128) << EXP_SHIFT | bits & MANTISSA_MASK)
     }
 
-    #[test]
-    fn log1p_small_leg_is_sound() {
+    fn certify_small<B: Base>(name: &str, truth: fn(Float) -> Float) {
         let mut worst = 0.0;
         let mut worst_x = 0.0;
 
-        for i in 0..SAMPLES {
-            let x = sample_small(i);
+        for i in 0..5 * SAMPLES {
+            let x = if i < SAMPLES || B::UNIT_SLOPE {
+                sample_small(i)
+            } else {
+                let bits = u128::from(mix(i)) | u128::from(mix(i ^ 0x9E37_79B9)) << 64;
+                let e = if i < 2 * SAMPLES {
+                    -19
+                } else {
+                    ((bits >> 112 & 0x7fff) % 16362) as i32 - 16380
+                };
+                f128::from_bits(
+                    bits & SIGN_MASK | ((e + BIAS) as u128) << EXP_SHIFT | bits & MANTISSA_MASK,
+                )
+            };
             let bits = x.to_bits();
             let magnitude = bits & !SIGN_MASK;
             let m = magnitude & MANTISSA_MASK | IMPLICIT_BIT;
             let e = (magnitude >> EXP_SHIFT) as i32 - BIAS;
-            let (high, low) = small_leg(m, e, bits >> 127 != 0);
+            let (high, low) = small_leg::<B>(m, e, bits >> 127 != 0);
 
             // The leg is `|log(1 + x)|·2^(254 − e)`; the gate is set on the
             // normalized field, so it shrinks by the product's leading zeros.
             let scale: Float = Float::with_val(PRECISION, 2).pow(254 - e);
-            let truth = Float::with_val(PRECISION, x).ln_1p().abs() * scale;
+            let truth = truth(Float::with_val(PRECISION, x)).abs() * scale;
             let got = Float::with_val(PRECISION, high) * Float::with_val(PRECISION, 2).pow(128)
                 + Float::with_val(PRECISION, low);
-            let gate = (SMALL_GATE as f64) * 2_f64.powi(15 - high.leading_zeros() as i32);
+            let gate = (B::SMALL_GATE as f64) * 2_f64.powi(15 - high.leading_zeros() as i32);
             let ratio = Float::with_val(PRECISION, truth - got).abs().to_f64() / gate;
 
             if ratio > worst {
@@ -1198,12 +1254,70 @@ mod ziv_soundness {
                 worst_x = x;
             }
         }
-        println!("log1pq small leg: worst |err|/gate = {worst:.4} at x={worst_x:?}");
+        println!("{name} small leg: worst |err|/gate = {worst:.4} at x={worst_x:?}");
         assert!(
             worst < 0.5,
-            "log1pq small gate covers only {:.2}× the slip at x={worst_x:?}",
+            "{name} small gate covers only {:.2}× the slip at x={worst_x:?}",
             1.0 / worst
         );
+    }
+
+    #[test]
+    fn log1p_fast_leg_is_sound() {
+        certify_one_plus::<Natural>("log1pq", Float::ln_1p);
+    }
+
+    #[test]
+    fn log1p_small_leg_is_sound() {
+        certify_small::<Natural>("log1pq", Float::ln_1p);
+    }
+
+    #[test]
+    fn log2p1_fast_legs_are_sound() {
+        certify_one_plus::<Binary>("log2p1q", Float::log2_1p);
+        certify_small::<Binary>("log2p1q", Float::log2_1p);
+    }
+
+    #[test]
+    fn log10p1_fast_legs_are_sound() {
+        certify_one_plus::<Decimal>("log10p1q", Float::log10_1p);
+        certify_small::<Decimal>("log10p1q", Float::log10_1p);
+    }
+
+    /// Exercise the accurate small leg even when the fast gate would accept.
+    /// In particular, a negative argument whose reduced z truncates to zero
+    /// must multiply the slope as zero, not as a negative fixed-point limb.
+    #[test]
+    fn one_plus_accurate_small() {
+        use rug::float::Round::Nearest;
+
+        for i in 0..20_000 {
+            let bits = u128::from(mix(i)) | u128::from(mix(i ^ 0x9E37_79B9)) << 64;
+            let anchors = [-19, -33, -113, -161, -273, -274, -16380, -16382, -16494];
+            let e = anchors[i as usize % anchors.len()];
+            let x = f128::from_bits(
+                bits & SIGN_MASK
+                    | if e < -16382 {
+                        (bits & MANTISSA_MASK).max(1)
+                    } else {
+                        ((e + BIAS) as u128) << EXP_SHIFT | bits & MANTISSA_MASK
+                    },
+            );
+            let (m, e) = split(x.to_bits() & !SIGN_MASK);
+            let negative = x.is_sign_negative();
+            for (got, want) in [
+                (
+                    small_accurate::<Binary>(m, e, negative),
+                    super::super::mpfr::cr_unop(x, |v| v.log2_1p_round(Nearest)),
+                ),
+                (
+                    small_accurate::<Decimal>(m, e, negative),
+                    super::super::mpfr::cr_unop(x, |v| v.log10_1p_round(Nearest)),
+                ),
+            ] {
+                assert_eq!(got.to_bits(), want.to_bits(), "x={x:?}");
+            }
+        }
     }
 
     #[test]
