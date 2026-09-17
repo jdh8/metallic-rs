@@ -9,6 +9,9 @@ mod common;
 #[path = "common/f128.rs"]
 mod common128;
 #[cfg(feature = "f128")]
+#[path = "common/f128_special.rs"]
+mod common128_special;
+#[cfg(feature = "f128")]
 #[path = "common/f128_exp.rs"]
 mod common_exp;
 
@@ -146,6 +149,8 @@ mod f128_ {
     mod coshq;
     mod cospiq;
     mod cosq;
+    mod erfcq;
+    mod erfq;
     mod exp10m1q;
     mod exp10q;
     mod exp2m1q;
@@ -156,6 +161,7 @@ mod f128_ {
     mod frexpq;
     mod hypotq;
     mod ldexpq;
+    mod lgammaq;
     mod log10p1q;
     mod log10q;
     mod log1pq;
@@ -173,4 +179,5 @@ mod f128_ {
     mod tanhq;
     mod tanpiq;
     mod tanq;
+    mod tgammaq;
 }

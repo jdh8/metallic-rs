@@ -5,8 +5,9 @@
 //! The three lanes are [`metallic`]'s own `*q` (correctly rounded, so this lane
 //! is the harness' own sanity check — it must never read above 0.5), glibc's
 //! `*f128` (what nightly's `f128` methods lower to) and GCC's libquadmath `*q`.
-//! Both competitors are faithful-only, so the number that matters is how far
-//! past a half ulp they go on a population close to the one the benches time.
+//! Neither competitor promises correct rounding for these transcendental
+//! functions. The survey measures how far past a half ulp they go on a
+//! population close to the one the benches time; errors may exceed one ulp.
 //!
 //! **Metric.** For a sample `x` let `v = f(x)` evaluated in MPFR at
 //! [`WORK`] bits.  MPFR rounds every operation correctly, so `v` is within
@@ -176,6 +177,10 @@ dynamic_lanes! {
         atanhf128(x: f128);
         coshf128(x: f128);
         tanhf128(x: f128);
+        erff128(x: f128);
+        erfcf128(x: f128);
+        tgammaf128(x: f128);
+        lgammaf128(x: f128);
         powf128(x: f128, y: f128);
     }
 }
@@ -207,6 +212,10 @@ dynamic_lanes! {
         atanhq(x: f128);
         coshq(x: f128);
         tanhq(x: f128);
+        erfq(x: f128);
+        erfcq(x: f128);
+        tgammaq(x: f128);
+        lgammaq(x: f128);
         powq(x: f128, y: f128);
     }
 }
@@ -480,6 +489,46 @@ fn survey(entry: &Entry, n: u64) -> Outcome {
 
 fn table() -> Vec<Entry> {
     vec![
+        unary(
+            "erfq",
+            |i| band(mix128(i), -20, 3),
+            |x| Float::with_val(WORK, x).erf(),
+            [
+                Some(metallic::erfq),
+                Some(glibc::erff128),
+                Some(quadmath::erfq),
+            ],
+        ),
+        unary(
+            "erfcq",
+            |i| band(mix128(i), -8, 6),
+            |x| Float::with_val(WORK, x).erfc(),
+            [
+                Some(metallic::erfcq),
+                Some(glibc::erfcf128),
+                Some(quadmath::erfcq),
+            ],
+        ),
+        unary(
+            "tgammaq",
+            |i| band(mix128(i), -8, 10),
+            |x| Float::with_val(WORK, x).gamma(),
+            [
+                Some(metallic::tgammaq),
+                Some(glibc::tgammaf128),
+                Some(quadmath::tgammaq),
+            ],
+        ),
+        unary(
+            "lgammaq",
+            |i| band(mix128(i), -8, 10),
+            |x| Float::with_val(WORK, x).ln_abs_gamma().0,
+            [
+                Some(metallic::lgammaq),
+                Some(glibc::lgammaf128),
+                Some(quadmath::lgammaq),
+            ],
+        ),
         unary(
             "sqrtq",
             |i| positive_normal(mix128(i)),

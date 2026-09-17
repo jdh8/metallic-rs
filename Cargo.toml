@@ -671,3 +671,31 @@ required-features = ["f128", "mpfr"]
 name = "compoundq"
 harness = false
 required-features = ["f128"]
+
+[[example]]
+name = "gen_f128_erf_cases"
+required-features = ["f128", "mpfr"]
+
+[[example]]
+name = "gen_f128_gamma_cases"
+required-features = ["f128", "mpfr"]
+
+[[bench]]
+name = "erfq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "erfcq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "tgammaq"
+harness = false
+required-features = ["f128"]
+
+[[bench]]
+name = "lgammaq"
+harness = false
+required-features = ["f128"]

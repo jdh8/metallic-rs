@@ -1,0 +1,901 @@
+{
+  "conditions": "Our exhaustive tests, MPFR certification tests and corpus generators were SIGSTOP-paused during all measurements, then resumed. See timing.log for paused PIDs. Other background processes remained.",
+  "date_utc": "2026-09-17",
+  "environment": {
+    "CC": "clang",
+    "RUSTFLAGS": "-Ctarget-cpu=x86-64-v3"
+  },
+  "functions": {
+    "erfcq": {
+      "estimates_ns": {
+        "metallic": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 71.9390883127768,
+              "upper_bound": 72.16513308647814
+            },
+            "point_estimate": 72.03555663459173,
+            "standard_error": 0.05627907429505125
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 71.93078556210611,
+              "upper_bound": 71.99684935223496
+            },
+            "point_estimate": 71.95719234651739,
+            "standard_error": 0.017358124320842706
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 0.07357630885039927,
+              "upper_bound": 0.13779990381948298
+            },
+            "point_estimate": 0.12451736896707018,
+            "standard_error": 0.016950960163536973
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 71.92728414095335,
+              "upper_bound": 72.04036478334056
+            },
+            "point_estimate": 71.97238518089834,
+            "standard_error": 0.02924139865974128
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 0.119167311156845,
+              "upper_bound": 0.626178801250073
+            },
+            "point_estimate": 0.39762325891745565,
+            "standard_error": 0.13083690580496943
+          }
+        },
+        "quadmath": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 725.391928636135,
+              "upper_bound": 730.0461894124882
+            },
+            "point_estimate": 727.3455855727462,
+            "standard_error": 1.2177228519651135
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 724.2223553443519,
+              "upper_bound": 726.8321033210332
+            },
+            "point_estimate": 725.3747544935127,
+            "standard_error": 0.7138565192500811
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2.3181881822307213,
+              "upper_bound": 4.960484672317231
+            },
+            "point_estimate": 3.349655664973161,
+            "standard_error": 0.6380559452228828
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 724.1803598494948,
+              "upper_bound": 728.565979960699
+            },
+            "point_estimate": 725.7586108848567,
+            "standard_error": 1.151469265367349
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 3.393204502217415,
+              "upper_bound": 13.860691211051634
+            },
+            "point_estimate": 8.763034243003768,
+            "standard_error": 3.2666117662909837
+          }
+        },
+        "std": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 698.0316986960763,
+              "upper_bound": 702.598672412068
+            },
+            "point_estimate": 700.0438177025286,
+            "standard_error": 1.1778495529256543
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 697.1303380782919,
+              "upper_bound": 699.9186057122
+            },
+            "point_estimate": 698.5239209185081,
+            "standard_error": 0.7046767884842444
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2.067173487520729,
+              "upper_bound": 4.304250256518867
+            },
+            "point_estimate": 3.1488243141503114,
+            "standard_error": 0.5196883503785427
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 698.2516549425535,
+              "upper_bound": 704.2736255073969
+            },
+            "point_estimate": 700.4520867834115,
+            "standard_error": 1.6709045075210633
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2.841694142649093,
+              "upper_bound": 13.028806533889878
+            },
+            "point_estimate": 8.669068506953957,
+            "standard_error": 2.747469181217397
+          }
+        }
+      },
+      "exponents_inclusive": [
+        -8,
+        6
+      ],
+      "sampler": "Exponents"
+    },
+    "erfq": {
+      "estimates_ns": {
+        "metallic": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 54.754425838090796,
+              "upper_bound": 54.89710680543792
+            },
+            "point_estimate": 54.806294570256185,
+            "standard_error": 0.0369908243613432
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 54.73048399771406,
+              "upper_bound": 54.80305938557234
+            },
+            "point_estimate": 54.77850854192887,
+            "standard_error": 0.021106284853194816
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 0.06572667452317335,
+              "upper_bound": 0.14177249862764912
+            },
+            "point_estimate": 0.10632222250992146,
+            "standard_error": 0.017922560190966393
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 54.741314035261304,
+              "upper_bound": 54.78601389097928
+            },
+            "point_estimate": 54.762963100574375,
+            "standard_error": 0.011316517360284124
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 0.07286552493286086,
+              "upper_bound": 0.42157261925203227
+            },
+            "point_estimate": 0.25462059022096606,
+            "standard_error": 0.1212668860701251
+          }
+        },
+        "quadmath": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 566.7113888920994,
+              "upper_bound": 568.453316487645
+            },
+            "point_estimate": 567.5306278488956,
+            "standard_error": 0.4541042110849531
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 566.0228509563334,
+              "upper_bound": 567.919373436019
+            },
+            "point_estimate": 567.0588269147828,
+            "standard_error": 0.501896968331295
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1.4608314284136958,
+              "upper_bound": 2.9828944878325916
+            },
+            "point_estimate": 2.3460199962422523,
+            "standard_error": 0.4097962318034056
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 566.444124924464,
+              "upper_bound": 568.4687616518992
+            },
+            "point_estimate": 567.3431300597102,
+            "standard_error": 0.5296713397294757
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1.896288942749224,
+              "upper_bound": 4.566146188459107
+            },
+            "point_estimate": 3.244589165071252,
+            "standard_error": 0.7427451782548782
+          }
+        },
+        "std": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 541.7898180611254,
+              "upper_bound": 543.2465534095428
+            },
+            "point_estimate": 542.434448915007,
+            "standard_error": 0.38181819244845167
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 541.7534467012333,
+              "upper_bound": 543.0095340930692
+            },
+            "point_estimate": 542.168137504779,
+            "standard_error": 0.3612602411014002
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1.0757236032706996,
+              "upper_bound": 2.102730044642305
+            },
+            "point_estimate": 1.5204042973682843,
+            "standard_error": 0.2696358987615929
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 541.6183497126449,
+              "upper_bound": 542.493433407404
+            },
+            "point_estimate": 542.0506054840127,
+            "standard_error": 0.22091805624666033
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1.545322545203972,
+              "upper_bound": 3.734877081693923
+            },
+            "point_estimate": 2.660287411615704,
+            "standard_error": 0.5947800280559433
+          }
+        }
+      },
+      "exponents_inclusive": [
+        -20,
+        3
+      ],
+      "sampler": "Exponents"
+    },
+    "lgammaq": {
+      "estimates_ns": {
+        "metallic": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1811.1028193638274,
+              "upper_bound": 1816.977836997603
+            },
+            "point_estimate": 1813.6356843347667,
+            "standard_error": 1.489248802507621
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1809.9251459650982,
+              "upper_bound": 1814.893662919067
+            },
+            "point_estimate": 1813.0729654840206,
+            "standard_error": 1.288991017202716
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 4.907158577125321,
+              "upper_bound": 9.32347391144618
+            },
+            "point_estimate": 6.661147978649902,
+            "standard_error": 1.177475174190984
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1810.2853084862813,
+              "upper_bound": 1814.6329496596888
+            },
+            "point_estimate": 1812.2264751748914,
+            "standard_error": 1.1445049318749712
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 5.851270134761024,
+              "upper_bound": 15.664472875435237
+            },
+            "point_estimate": 10.574952545800546,
+            "standard_error": 3.029878103610762
+          }
+        },
+        "quadmath": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1847.4620363762842,
+              "upper_bound": 1861.3399451187097
+            },
+            "point_estimate": 1854.0014285894465,
+            "standard_error": 3.497365994493492
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1845.133474623692,
+              "upper_bound": 1862.7772587805198
+            },
+            "point_estimate": 1851.5285973720756,
+            "standard_error": 4.7992532424497085
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 15.836928935386348,
+              "upper_bound": 29.44967039739422
+            },
+            "point_estimate": 23.832098629324584,
+            "standard_error": 3.4369383783567127
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1844.5100476189275,
+              "upper_bound": 1857.3705804129838
+            },
+            "point_estimate": 1851.0355840776585,
+            "standard_error": 3.2339221007496115
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 18.892896736635333,
+              "upper_bound": 28.255818342812788
+            },
+            "point_estimate": 23.909095455782143,
+            "standard_error": 2.487088928331322
+          }
+        },
+        "std": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1604.226309958993,
+              "upper_bound": 1614.672738166645
+            },
+            "point_estimate": 1609.314299603685,
+            "standard_error": 2.7171029756996923
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1604.1619973009447,
+              "upper_bound": 1609.2534133333334
+            },
+            "point_estimate": 1608.4330565730565,
+            "standard_error": 1.4557521874170525
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 5.0063101517766215,
+              "upper_bound": 14.152431501590799
+            },
+            "point_estimate": 9.86605764421063,
+            "standard_error": 2.25683008961562
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 1604.5067071019282,
+              "upper_bound": 1611.294006847935
+            },
+            "point_estimate": 1607.680593712946,
+            "standard_error": 1.7258870598590381
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 11.130423100794829,
+              "upper_bound": 27.02909545666047
+            },
+            "point_estimate": 19.80545924648927,
+            "standard_error": 4.137733824160857
+          }
+        }
+      },
+      "exponents_inclusive": [
+        -8,
+        10
+      ],
+      "sampler": "Exponents"
+    },
+    "tgammaq": {
+      "estimates_ns": {
+        "metallic": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2177.3173127296877,
+              "upper_bound": 2182.0814036610122
+            },
+            "point_estimate": 2179.431508113478,
+            "standard_error": 1.2498866516176794
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2175.8529220068203,
+              "upper_bound": 2178.858896956841
+            },
+            "point_estimate": 2177.4475048010245,
+            "standard_error": 0.7212847654402199
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 3.279455373043288,
+              "upper_bound": 8.312542276320288
+            },
+            "point_estimate": 5.163973750207589,
+            "standard_error": 1.2070177655155283
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2176.730715607174,
+              "upper_bound": 2180.1996394921066
+            },
+            "point_estimate": 2178.4427424215864,
+            "standard_error": 0.9127343992014599
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 5.320064864825681,
+              "upper_bound": 12.963356993143059
+            },
+            "point_estimate": 9.175111873168113,
+            "standard_error": 2.1792275447787843
+          }
+        },
+        "quadmath": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2832.4714498656426,
+              "upper_bound": 2844.82782943019
+            },
+            "point_estimate": 2838.692787814532,
+            "standard_error": 3.1314333148284494
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2834.4759980267154,
+              "upper_bound": 2847.062295081967
+            },
+            "point_estimate": 2839.06970465782,
+            "standard_error": 3.3953014701286275
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 11.775551322400672,
+              "upper_bound": 23.337898253297542
+            },
+            "point_estimate": 16.149174204377537,
+            "standard_error": 2.89024384464077
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2838.3100068067074,
+              "upper_bound": 2845.9290018077036
+            },
+            "point_estimate": 2842.4624030773375,
+            "standard_error": 1.9084902682668563
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 15.730561144490544,
+              "upper_bound": 26.150180998060037
+            },
+            "point_estimate": 21.451204778213544,
+            "standard_error": 2.6763622788178707
+          }
+        },
+        "std": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2539.719237585477,
+              "upper_bound": 2555.7306395542873
+            },
+            "point_estimate": 2547.2418297943204,
+            "standard_error": 4.066655794251736
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2538.09591056193,
+              "upper_bound": 2546.0489695111564
+            },
+            "point_estimate": 2541.608219112888,
+            "standard_error": 2.679884744504676
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 8.831362401881426,
+              "upper_bound": 27.91684818610498
+            },
+            "point_estimate": 16.56901010223848,
+            "standard_error": 5.2446107115786305
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 2534.12666441779,
+              "upper_bound": 2558.62575868441
+            },
+            "point_estimate": 2544.176224241499,
+            "standard_error": 6.045693065537511
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 18.15712635837347,
+              "upper_bound": 37.250529291459564
+            },
+            "point_estimate": 28.815056608156244,
+            "standard_error": 5.062728462870671
+          }
+        }
+      },
+      "exponents_inclusive": [
+        -8,
+        10
+      ],
+      "sampler": "Exponents"
+    }
+  },
+  "machine": {
+    "c_compiler": {
+      "command": [
+        "clang",
+        "--version"
+      ],
+      "exit_code": 0,
+      "output": "Ubuntu clang version 21.1.8 (6ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-21/bin"
+    },
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly",
+        "-V"
+      ],
+      "exit_code": 0,
+      "output": "cargo 1.100.0-nightly (3c0b53475 2026-09-04)"
+    },
+    "frequency_policy": {
+      "energy_performance_preference": "performance",
+      "scaling_driver": "intel_pstate",
+      "scaling_governor": "performance",
+      "scaling_max_freq": "5700000",
+      "scaling_min_freq": "800000"
+    },
+    "hardware": {
+      "command": [
+        "lscpu"
+      ],
+      "exit_code": 0,
+      "output": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 48 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               32\nOn-line CPU(s) list:                  4,5,14,17\nOff-line CPU(s) list:                 0-3,6-13,15,16,18-31\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Core(TM) i9-14900K\nCPU family:                           6\nModel:                                183\nThread(s) per core:                   2\nCore(s) per socket:                   24\nSocket(s):                            1\nStepping:                             1\nCPU(s) scaling MHz:                   93%\nCPU max MHz:                          6000.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             6374.40\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq tme rdpid movdiri movdir64b fsrm md_clear serialize pconfig arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            896 KiB (24 instances)\nL1i cache:                            1.3 MiB (24 instances)\nL2 cache:                             32 MiB (12 instances)\nL3 cache:                             36 MiB (1 instance)\nNUMA node(s):                         1\nNUMA node0 CPU(s):                    0-31\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Vulnerable: No microcode\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected"
+    },
+    "hostname": "jdh8-26",
+    "libc": {
+      "command": [
+        "ldd",
+        "--version"
+      ],
+      "exit_code": 0,
+      "output": "ldd (Ubuntu GLIBC 2.43-2ubuntu2.4) 2.43\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\nWritten by Roland McGrath and Ulrich Drepper."
+    },
+    "logical_cpus": 4,
+    "machine": "x86_64",
+    "platform": "Linux-6.8.12-13-pve-x86_64-with-glibc2.43",
+    "python": "3.14.4 (main, Jun 18 2026, 14:25:02) [GCC 15.2.0]",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "output": "rustc 1.100.0-nightly (a36d05efa 2026-09-09)\nbinary: rustc\ncommit-hash: a36d05efab632d1ddf902b6a5c33b6d5d3b64131\ncommit-date: 2026-09-09\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.1"
+    }
+  },
+  "measurement": "serial four-target Criterion run",
+  "precision": "f128",
+  "settings": {
+    "measurement_seconds": 2,
+    "nresamples": 1000,
+    "sample_size": 50,
+    "warm_up_seconds": 1
+  },
+  "source": {
+    "cargo_lock_sha256": "45c7b42a8caa7d844843db211be079c076b016c8f0448bff1291b2790c9f91db",
+    "git_head": {
+      "command": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "output": "05751ea485f88633f274c2a1a0806eddf2f42f4f"
+    },
+    "git_status": {
+      "command": [
+        "git",
+        "status",
+        "--porcelain"
+      ],
+      "exit_code": 0,
+      "output": "M BINARY128.md\n M CLAUDE.md\n M Cargo.toml\n M README.md\n M examples/analysis.rs\n M examples/f128_ulp_survey.rs\n M src/f128_.rs\n M src/f128_/hyp.rs\n M src/lib.rs\n M tests/all/main.rs\n M tools/README.md\n M tools/analysis.py\n?? benches/erfcq.rs\n?? benches/erfq.rs\n?? benches/lgammaq.rs\n?? benches/tgammaq.rs\n?? examples/gen_f128_erf_cases.rs\n?? examples/gen_f128_gamma_cases.rs\n?? examples/support/\n?? src/f128_/erf.rs\n?? src/f128_/erf_tables.rs\n?? src/f128_/gamma.rs\n?? src/f128_/gamma_tables.rs\n?? tests/all/common/f128_special.rs\n?? tests/all/f128_/erfcq.rs\n?? tests/all/f128_/erfq.rs\n?? tests/all/f128_/lgammaq.rs\n?? tests/all/f128_/tgammaq.rs\n?? tests/cases/erfq.wc\n?? tools/gen_erf_f128.py\n?? tools/gen_gamma_f128.py"
+    },
+    "source_files_sha256": {
+      "Cargo.lock": "45c7b42a8caa7d844843db211be079c076b016c8f0448bff1291b2790c9f91db",
+      "Cargo.toml": "0b667dc20729129777393b4652f70f5b7e55981a5d8256015b0d287f408d9c2a",
+      "benches/acos.rs": "f44f3cbbbc2ef63f30c43482d01387014dec8196b537e2323dee414ae6518bc7",
+      "benches/acosf.rs": "1702b6bdfb85f3b0fe0e1142f7eecda3fd3240fb972bf4c99b1ac612fdd8e54c",
+      "benches/acosh.rs": "04d60b1be16688e2664a5332d0f90dbd808e4dad7957eee1a034ecc30e99d4c0",
+      "benches/acoshf.rs": "6421fb0dc01f71a34b0a82fbe9a24a2dab2fc76bf98753e2a29e8569f0c39eba",
+      "benches/acoshq.rs": "880c04ff01c53b99dee2fed2dbe020bb07a4301bcfd78d7262160560869a9ef6",
+      "benches/acospi.rs": "34bc5bfb2513d18a53818a274f454646a3fbf43a4834aea356dfd7422e9beaea",
+      "benches/acospif.rs": "8c9424a9779715556c729ef042eeaf3a3b6ba21a6fca71ceb28833fcce53adfc",
+      "benches/acospiq.rs": "fcf656c22f7f52ef4c073d3608670637fdd9ff43baa0082c7ea649488b450502",
+      "benches/acosq.rs": "01afee17fa1da471b0378aba359a8c097ccbadacfb6cf600fa95be452f9adf47",
+      "benches/asin.rs": "d06db13651ca25ccd17769247b9423a8292fc03d8a242a19fb9b344dec665068",
+      "benches/asinf.rs": "818d01f0554542bde5249924774a114fbbc580b0c5d51734fc4bb8248f5dd371",
+      "benches/asinh.rs": "4df667c08c46b455e212af281881a808513839c212c47a5da9ab22c1d21d230c",
+      "benches/asinhf.rs": "3fc89c6a95fa6b3c9d89b20e03aae67941b59421005013eae7dfc5ed754a676d",
+      "benches/asinhq.rs": "60cd195be5b0f20b3982b9123a2a88206fb1cc601505efad5e566c91a15c2949",
+      "benches/asinpi.rs": "073456b52e0fb246b9ec2ade3c6a654f8953f84c2f794a6e4a90f146e6cfbea4",
+      "benches/asinpif.rs": "898676b9684b6d4b98c01b97f147b9ba2dcea15bb89efdd25231e06ebb772f52",
+      "benches/asinpiq.rs": "c568086c9e3784a287569a9cd54e1ce964fa74af8c4192f234d5f109ed55e78b",
+      "benches/asinq.rs": "4aee467d2c298eaf8b91991987289cecc86d1cacf65efda76d102d415c275f88",
+      "benches/atan.rs": "0123b82de559dd82dec1e9dec808a1707ea8cbb465e787966a197ba8e04d6c20",
+      "benches/atan2.rs": "88a4ce97c3c055869d3e667e50533a6b9ee23cd5d8f75acfb274437c09725c19",
+      "benches/atan2f.rs": "734a4e0c314d7e4558531c588fc8717497a8d0991a113cb232178a3a6d3e8fa0",
+      "benches/atan2pi.rs": "ee7b0ce856f88f353ff836f6c3c88fbf960b0dd7c6b02c52012ff2458b65f4d8",
+      "benches/atan2pif.rs": "91d7ef065cf17c261b02dba75870f5ad6dbe5fd9b83a2fe5b8bb312b79d99987",
+      "benches/atan2piq.rs": "dc8105ae3d0a46f846bad39537bcc43a151219e1956af1e7903e8b73b334891f",
+      "benches/atan2q.rs": "1141845688f99971655324015569720c3e61c831640f72560177f287551b8d8b",
+      "benches/atanf.rs": "87f27ff226b347467a7ae7df29df03b040a13f6197b4ec4759172d292ba5313b",
+      "benches/atanh.rs": "15eeb61e9c7213277fde16ef4e9d86a6d38ceab1dbf1601ad320b537dfbe58dd",
+      "benches/atanhf.rs": "64e269d2ba21da0d9e3c66f0b4d8bc7337b7ce39dab99f4b53c1181204e2b532",
+      "benches/atanhq.rs": "3d11571acbee2e969184c874d9af6ccdbc754d26ac4f44c78f50d872e5192e35",
+      "benches/atanpi.rs": "fbec3e9dddca08870fdecf1378971115648d2cafc3f5db510b875ddaa2d7b2eb",
+      "benches/atanpif.rs": "66e8daa4817e2a77ad6fb00d5872325b9b106fd2ae8a4e23c4fac85832a8ef3d",
+      "benches/atanpiq.rs": "50bd230cfae6dc09469780ebc47d72cacba6f58f852241d02f053dc239eddc51",
+      "benches/atanq.rs": "390ee679fc4b3a4ccf8f6dbba6552060c2ab618fdf8852018e59f293a025731f",
+      "benches/bench.rs": "2a97f6165c62893f3f57c25697357590ccf450ebf7bfc18b761304e04e8b59b9",
+      "benches/bench128.rs": "7eff1ccc6fcfd621c1d0b13e95ba2a31c88dc4752e6914c1f7ef0e1c4d35377d",
+      "benches/cbrt.rs": "1f95e30294ae8791f277dd815bfa0bcef27aca91da4e155c03cfa4be93ced7c6",
+      "benches/cbrtf.rs": "01eda77d71d0e881f800ff295abebe76e20f74e1f94a6f2993987fadbcf3b7e4",
+      "benches/cbrtq.rs": "58fe8651203bfe44f04b25aa9ea2eadfa008f95b89fe0ed035d830afd9276da1",
+      "benches/compound.rs": "feb0587f9f18741107b66bd54d6007b18024b03d37610c0f3c76912f6c7ca6f2",
+      "benches/compoundf.rs": "d4beee5e1ce17f6b64d0e70b8b20d2753a97e93aece0d508c1330d4ec97b9a1e",
+      "benches/compoundq.rs": "a1775350623eea906a3227e81a97dc80680d95d2e54caaf3c07ac5987b0368c0",
+      "benches/cos.rs": "097344a5dcf182050c5ea0f0d52b5111260deb02e759f213632ae9524d094344",
+      "benches/cosf.rs": "97344d5801afc4e649769ee45c83ad2563240b69d40593580e57570490c9e50b",
+      "benches/cosh.rs": "7dec4f0773c6dbfcb69712b51fab2ea317a9eaa68175dabbea585485c64cf16a",
+      "benches/coshf.rs": "e8503946ff5950baaa2ecebb33228026725c9c143acb75e2e1cecdd532a807d4",
+      "benches/coshq.rs": "ecfc278d689557e0f28422303f6528e116d42bea88a8e896a4622a120ba898a2",
+      "benches/cospi.rs": "f5c2295593cf217a74551e69e65189a46acf41b8a2ff59374f807cd4adcef4b3",
+      "benches/cospif.rs": "ba07f3c31a4bd16040ba4d15f92f7ba1bd49cdaab0a427877f3e8041e6f0d4dd",
+      "benches/cospiq.rs": "1837c98d229d9d0213e62338f7b3ba7f164a63a057b2a6f8232e3478d44d9845",
+      "benches/cosq.rs": "03643961141bf69fcb6e9028694fd9e821fec7bba8d0dfd83ece7130ccfb70dd",
+      "benches/erf.rs": "9026bf861d1aa635a2c5e91ad380916e33a1569807dd1d35138c378d126addc8",
+      "benches/erfc.rs": "1e2cd1f7f57e4bf51559f0a3af9fb54c1d22503668ac6fb9e755d2d02221d802",
+      "benches/erfcf.rs": "7c1f0c59579b4f92d830d94d157b9481d958f46b1ced44f7bb3de81fdd90ff46",
+      "benches/erfcq.rs": "e38b576c60a5e03b18cdbdadb9903eb6b38ce646b880fcef790873efc093477e",
+      "benches/erff.rs": "76ebcadd98602217a3dcf519eb9f4d74022afa28a5a87968f3bf3736400d9a25",
+      "benches/erfq.rs": "20e5e550922d5bf86b0359f46cee4b9c4d61df3a7eb0b6877c5de9fdd3cc299d",
+      "benches/exp.rs": "0aeebb37a0f3e0b25077ad6c25ef72bdd241cdb2530bc24d989e193a001abea8",
+      "benches/exp10.rs": "d99b06b5f5c36959906aa5fba6c2325153297792459b6a906c18acc89bec019a",
+      "benches/exp10f.rs": "b4c447cc4397b39cf45ff5dc988e4ddeaa7d909fa8e75ddef390be48f7b01a88",
+      "benches/exp10m1.rs": "c7e6669acf24ec8885dd28a0db92d852542feb0168a2bc0623dd1def359de972",
+      "benches/exp10m1f.rs": "11a398359760d388e017475e8247805dc02b66851d802d1a445ebd3ed1873a3b",
+      "benches/exp10m1q.rs": "dac188840f0d10d894b63b8472f14a2ac5a9e9459694a5a046576f3b4199120f",
+      "benches/exp10q.rs": "8db7f199f5f401bdb0c3c5551af9935d3b78dc396cc483d27fb7f7d9c0f2c378",
+      "benches/exp2.rs": "2e0590f7fec4792cd5a715ed50f525554ac4de21c6e6e089066c296e047f3a37",
+      "benches/exp2f.rs": "aa383543b5552e370f67a876d2ce2609de9c930b3db36282d6241d916e10adec",
+      "benches/exp2m1.rs": "0e734a22dea54319577f3be18e71b3aafd96b4958dad7a05bc3e4519562e000d",
+      "benches/exp2m1f.rs": "cbf8f93916554840dde174699e1dd35d77d544606fe9a350ed1ce17ffa34e5ed",
+      "benches/exp2m1q.rs": "282b001dab2e7a1cb454417b20c05adc0ea8f31f48023bc871f8ac2493b93c7d",
+      "benches/exp2q.rs": "9bc326141fc5b7c00f82a49c436acd05aa9f9674ef807b277bba48bdd0c8caaf",
+      "benches/expf.rs": "797e2962acc1cb2c72e11848e3eaab709561effc6831116d3acfc05b448f0a70",
+      "benches/expm1.rs": "1b1bef9e84e74434c40ad522f4fc3680375aada1e0b5db3d5ae27f5144c2d73c",
+      "benches/expm1f.rs": "90c445847c4be529740e99035a2eb8ff457e712cf9f09bc6f529dbcf287d8eff",
+      "benches/expm1q.rs": "bd403ff210733e628bdfba3c2dfae866c526ec4bcdd7f98151d56e14b9f7a081",
+      "benches/expq.rs": "ade288529f8096f6a4ed312d156e7c6a4e9adadd4c20bc7f428423c90aa39458",
+      "benches/fma.rs": "64a1d67a48252db2283f004b1ad73de2d942833760d4f817b9f014805bc5c954",
+      "benches/fmaf.rs": "727cb257aab2efd632c2eb4c321dc166c563812c3a795f8d57c52b8a429b15a1",
+      "benches/frexp.rs": "3560fd44e270d690b57c9f47663099de7e631aef39f83503d52d1159a0ccc8f0",
+      "benches/frexpf.rs": "f545c9eacccec42331ff97c488c04bd55560fc02b4f8cb2bf256015b9cc020d0",
+      "benches/hypot.rs": "5c1871d34b995029b4702f634f619c80e17a6842e8d958678da54e0d1d7ec443",
+      "benches/hypotf.rs": "c5c364561b73b540a0213314fd6031e8d7438d6ec36de43c70ff5f1cc904245d",
+      "benches/hypotq.rs": "1d8ca8b72ba2ad7324ad6ffaf58428c46a8cd766e115aa72ca0007bc198841eb",
+      "benches/ldexp.rs": "b7070e93c182674172e876d8796c79abdeb42bbfa0ab4a751af3804ddb6c339f",
+      "benches/ldexpf.rs": "2ffa4723d5c2098ce03511de97dde9a7629a4bbc59eae24146149c785276ea54",
+      "benches/lgamma.rs": "7bf02209bef2e708e2cd3424a132f2b38a17f8eaa850bd04bb912fd65c8a38eb",
+      "benches/lgammaf.rs": "bc26420e36b55e94d79f46555d9436c4a912c7259a426ac9fe7f11c49a040dd4",
+      "benches/lgammaq.rs": "db3df8ecc66ff1c94763660663a038558c503a2591dc160f575bc3f5a6f8e13b",
+      "benches/log.rs": "44a5ace107a2e97e6c652894c566d6f4e3cbb9eceaa78d4fed6bfb9c84a56747",
+      "benches/log10.rs": "40019d9d4dd0e6115584eb7bcc1fc92f53729c55f6f2a776bd15e02000997132",
+      "benches/log10f.rs": "db7a04d0bbd6200d2104f7336d67ed5f8a01620aba294307334775801b7d6124",
+      "benches/log10p1.rs": "6275bc5a9679537179ee50b64290f6ab44e572705d0d9be8fbc17d25e42dc053",
+      "benches/log10p1f.rs": "1ed06658cd70b2dcb0517e4cfa00cba0037ad90b8aa7a7f543fed50449f8d6c7",
+      "benches/log10p1q.rs": "27b41042d4738d801535f5d4f09625d2a9acbb37ad86014d0fd0941a77c3801c",
+      "benches/log10q.rs": "8c224d2925fe7e70fb34cf00d7844c606ef8be3a5aa82e72eb4006809adc12c3",
+      "benches/log1p.rs": "8a4997dce5c8210a41260bf440364e2f38f7e2482d1051a24c6143cebf1651e8",
+      "benches/log1pf.rs": "9ec2ecfe85594e611e022a5a5cd42a145f7fa2d59c62c2d59597e586fcc6fe0e",
+      "benches/log1pq.rs": "f838c555be9d3e9c40e60b44d6b02744c494085d846f7bd2c03a8e0de23f90c8",
+      "benches/log2.rs": "d4c7e2141a825d0a6281d587cb18a07cca904619164fbf8cd2a82d9970be2cd0",
+      "benches/log2f.rs": "376c850e97eb5fa131b8ac02d2569d0f6bd0fe0d96496513a019da4c46ba605d",
+      "benches/log2p1.rs": "d10a049ccc76609d0426478b74ad376cd78f89b5e9e791ceda1f2502f67f0fe5",
+      "benches/log2p1f.rs": "7903d026b1a9a36fbfb1478ccc75e80e6977ba2d76fe51c2768f6baf8a92e410",
+      "benches/log2p1q.rs": "a7216a4d5ae4f3416610d1d2105187f84502178cb4733ed4ac7602a29f638f7a",
+      "benches/log2q.rs": "a3c0c85f25412eaad1b743aa05e3c8b4736355ef5bfc4af461ceb7c590a85305",
+      "benches/logf.rs": "99309a7d0368169eac485003bca2ae8e8c2c473a1a147b2a9cb2246bf239f97a",
+      "benches/logq.rs": "9e45cb9d55fdba3a03993bf0b96922463e8ea9fa368e819614f0a94b08e1e322",
+      "benches/pow.rs": "988d2b8b19f7b2447ea313d72bc5098f0292e7a3f8de0cc92446b3a5e92e5f60",
+      "benches/powf.rs": "ec62ca7e26f76b75bc64212312cf281430865b9316fde61917ee075ab0218d1a",
+      "benches/powq.rs": "592ff1d527d7e5ac0e2f1e904a5782d48dbd73d82e0e679111475ef800de8372",
+      "benches/round.rs": "6f75a6e5d3ebc6badb096c798b75d2fcf1ba86b6e9b8cd3ff4c77da57c6ae98f",
+      "benches/roundf.rs": "8477cb9e1b35b7fc8d400e943b7416c4209795ea2d56f74d61bd42184e4e08ca",
+      "benches/rsqrt.rs": "4484984120ac7b4f4da4540247727e8e323dbfb07b4c190e748c7db0b215ee00",
+      "benches/rsqrtf.rs": "593e5fb04064c086ea3f14ed0166351bd2446bf82faa7d07dda57630be64c1be",
+      "benches/rsqrtq.rs": "c26028900ff146c4fca970890014cd18a4d87b94aa901ced330f61103aa4277b",
+      "benches/sin.rs": "0334368a6b3cd4ac1783ea99587b72098ab41901ae5bfef804bd67c348cbbd74",
+      "benches/sincos.rs": "1f92461c3d7b3605fa15098f2a35e9d95349323f8da89fe7c7f448b5daf23f8b",
+      "benches/sincosf.rs": "9b9056afa86e37397a90436afb57abe1aee6376fdadec8679a11c430bb60c7ed",
+      "benches/sincosq.rs": "e6fd0422da38a1cdd673d43568fc9544bd1137db4585c9800b53909073fd6c1c",
+      "benches/sinf.rs": "d8f2bf30e016019582b30cad385a89bd7a93eb563710cfd4679213e2e24faeee",
+      "benches/sinh.rs": "f38c971573b00a5656317be17a746e22bc7777d2dc617e5418a724a813432e82",
+      "benches/sinhf.rs": "432a0975f7fda1406372ef93fc8351b791714538c0180e16dbc88a58da81d7dc",
+      "benches/sinhq.rs": "807cf62dc6c4a519953fae959d36dcbc669aa2cc01b424c7609a711b0831169c",
+      "benches/sinpi.rs": "afa7548f9490312db5f723350aaffd156991bf992981f2f829243995f93e8873",
+      "benches/sinpif.rs": "f23d9bec3df500e909279755a1de55f8bc2d0aa89c5c040d4a28feb974220e7f",
+      "benches/sinpiq.rs": "6d54531f7febf7237a70e4ace05f16788eef213c4789b1170c0d81e0437dbb73",
+      "benches/sinq.rs": "7b2cd447e3e2c7f5412942bde5bd8104b398b4ff940c669687528e506b8328c2",
+      "benches/sqrtq.rs": "39377151f83cf99ce3fb3f50b8a1b23536dd2c907c58d6860f1e5024c4521fbf",
+      "benches/tan.rs": "ae440f17307174bb0eab1a6edcf975250e9d309f9ad4eb0f21c8742cba52a058",
+      "benches/tanf.rs": "04745263a67d82bf2f3b491b3e7f46074c39bae46d535ade5b80b90546dd63d3",
+      "benches/tanh.rs": "cc5f7c56f4864715a4d16f6a04ce46f98ec3b4993e2b7c471cd16dd86bccbce4",
+      "benches/tanhf.rs": "05466a3edfd85c2d4459966c632245b4a946b254738d6dcf45cee837d5732373",
+      "benches/tanhq.rs": "5825c0e43c15a0f4e44341ee2c7ac8031d652c6f05f1b954cb37d906372333f1",
+      "benches/tanpi.rs": "5723edeb24cd3820f6db92e8bc3c0f363af4a73b1beccec0a941f14d89b2f0b3",
+      "benches/tanpif.rs": "ae6ee2355148562ab07270d54296ce29357355fa74c05bda263aa020fa07663e",
+      "benches/tanpiq.rs": "dc79f717986a2442e0d596abe86eefc7eb6419b451727713ca25aba76c5c4a34",
+      "benches/tanq.rs": "19df5275559b3b6cf143236c09b992b2842d26120c1025f9fa2f54ebb0dcd644",
+      "benches/tgamma.rs": "edbec6625e65561646abb0a39b3e2c41567a7fc469f998c034b477e13bfe8167",
+      "benches/tgammaf.rs": "e837821c7d761993a7a4435df8294636e94a717ee63c32027ea72323d2a16cf8",
+      "benches/tgammaq.rs": "02727d957e424484ae77d0c4b75b258c3a1a340038d842b89472e56574adef9d",
+      "build.rs": "d0235b2c829c7de10f44c0b25dd833ff8bc6c77e0cc5d7c66c55e4e0393bbd16",
+      "src/f128_.rs": "306fabb5517cbf386e6854aa9ebdfd6d48af6d0ede9d21269ed10bea31419ce6",
+      "src/f128_/asin.rs": "cee5324379cebc63dcb8b47bfac38b60a1f68869a3906294bd6af09466e40385",
+      "src/f128_/asin_tables.rs": "f5061f5094887faa859a670b148d36545dbe8678251408a4f1854c738fdb747e",
+      "src/f128_/asinpi_tables.rs": "9d8179fff6b9830bca8dbf7a0d93d130d3a80a2673b6bde2923051c39f6947fc",
+      "src/f128_/atan2.rs": "69d52e4f96e9a02d3dd5cacfe922ad890cd2686eec62053608a966c4d2252ae2",
+      "src/f128_/atan2_tables.rs": "ba235f4c232b7ddf00e7aae2fac8b40a6cfbab8de780fa81fedb324b86a9b7bd",
+      "src/f128_/cbrt_tables.rs": "faeadb9f3dd6049d30224fbd1a65b0de0148834d0aa9f7a0b0cc40d55b97931f",
+      "src/f128_/erf.rs": "a26a17c062ccab1411d4056ab7593cb6d19c28e52f5d21f26a25e5d87a682027",
+      "src/f128_/erf_tables.rs": "62263f84b23cc948434723adc7060b2e2e423cffc6d0803691a73b171b086165",
+      "src/f128_/exp.rs": "b8f7c29a264b89c3fd1387707a5338160af555fb02d23e56b48fc717463a2b41",
+      "src/f128_/exp_tables.rs": "677d3c2935f7139298442160976be5b70353b3d5b3439519c141e8aaad001f22",
+      "src/f128_/gamma.rs": "3458e1f5a4800485d053ea90176668d66aed9975052fb484dc6713eb2c743e44",
+      "src/f128_/gamma_tables.rs": "9e71647fe10dee3d9168dfd112cceac30fcace17aa6741ebedd2699b3bb097a9",
+      "src/f128_/hyp.rs": "5ede683e930380fca31fab447ca7341e61b8f39bfc90848535b91425aff9643f",
+      "src/f128_/hyp_tables.rs": "4f88be1dd9d7e709c0eb5e053ceed780b8248ac45643bfab2832af5bdcf55b7a",
+      "src/f128_/hypot.rs": "cb3465745f7e327e0249a765d6fdf021307edc4ee71dd0c305107d6e0825fc64",
+      "src/f128_/invhyp.rs": "caa891196c104e67e9b95c358cb2b38a47323a12f8f3756bc9826731a0a19862",
+      "src/f128_/invhyp_tables.rs": "199e3b6ebae9f6c5bd36f49c506d632d5df99cde54d6a714b93e01fa9802e76e",
+      "src/f128_/log.rs": "35e3647b50fb07d780bb3656eb11e85ff05a2b18d1cdddcd159ba2a1590fa639",
+      "src/f128_/log10_tables.rs": "f4d16b72e2dea921ec7aeb622401ee7939d641c7260988aded4df0bdef7b23f3",
+      "src/f128_/log2_tables.rs": "3a800f3b1832a06815f9bf08aaf97f7f7e6db4f8d4292b786ec3661192a3a245",
+      "src/f128_/log_tables.rs": "67bed8b9b6b41d677785165c5d5d020bd889d05a53637e4b3188ec1649ea89a8",
+      "src/f128_/misc.rs": "05f0211a3828b028a03fce4ea5baadc085941c9d3b33dc7ba3852d726c624fbe",
+      "src/f128_/mpfr.rs": "3f8a1ba7921f2cf7ef87a8c8fe7046a865fa881338357ee26d5103d38492538c",
+      "src/f128_/pow.rs": "7c5842e3146d2b39e9298cc310bd89e6e8ab05d7d9f9c0add49f7e121408e7f5",
+      "src/f128_/pow_tables.rs": "3cef3a6adc17a1d8b46f8980c2002e33bf3cd35c7301486c20dae13fe8c7bbf5",
+      "src/f128_/roots.rs": "02f4372f3adc2a3aab24e077e6939409c847cae1b0b0293c89a25b89deaa3d4e",
+      "src/f128_/rsqrt_tables.rs": "620bc7bb2d7a70e75e367521cad04cab9b58144a7334d75712a29371db803bd4",
+      "src/f128_/tan.rs": "ada959d51d89ff3a693650239152a08376fbaedc97c75830c1502d8cd5f0c758",
+      "src/f128_/trig.rs": "d8bf6d6d7055a3fc19fa300487bfa57e1c5d06cd82567b94e906ac135ccc4533",
+      "src/f128_/trig_tables.rs": "ba9c8dec26d9b7fbe6bb8088f9c07994dbc0547011929836b0f665c7f64d2acd",
+      "src/f128_/trigpi.rs": "d952922b6ff05ef895bfd20555ad3b6b26ccc7b3f1a15fd11c98b114156408bf",
+      "src/f128_/uint.rs": "141e55c96e9fec1b2ced4682dc63833971dc86263abefe6508a978b927080fb3",
+      "src/f32_.rs": "aa02dca1c7eb6b166875f99db08f857d824bbcb1a68ef41bb497ed163af1c4c1",
+      "src/f32_/atan.rs": "deb4787fdafc17e6a0ace1823ac1320edebade220b5be606085b0d6999808b61",
+      "src/f32_/erf.rs": "d9582ff727184571529685923a8d2d55e1d3b8957b2ddeb708decdf613aca970",
+      "src/f32_/exp.rs": "e5dcd8629fbdb8e93427a034acda0aa48027c92cf7f1d3df3a7e484f40310c5c",
+      "src/f32_/gamma.rs": "62461ff5ca1c0fb5d31ac9fe0d3a63b38664b1c49f35d025cf70a28fd913ecc9",
+      "src/f32_/hyp.rs": "c778e35bb23e84d88225f3e271713b1fa7d8f5578802b420ffa1ed500bc0fec5",
+      "src/f32_/log.rs": "2752ef49ef93acc6444bd1a9907d055bbab9fd24a7671518949d84bd5e07876f",
+      "src/f32_/misc.rs": "58349b564f6d9bd15bd68e513b00fe27fafd42fe2916bd41337cc98828359bd2",
+      "src/f32_/pow.rs": "643524258a93027fcd84ffb34eee8b78116e7856435789dbcd5039a884090115",
+      "src/f32_/trig.rs": "f7e733d3e2878e773c82f49056cccdfe162f445ba9c6392dc0f3bfaddafb958c",
+      "src/f64_.rs": "bfc70864bba43bcd4bb16ea58dce406b8de91fb0f9797925bc22146a425fe45d",
+      "src/f64_/atan.rs": "a7b76a4752c82226de89d6377c727493606e762d230c6eac544df5b1c90efc09",
+      "src/f64_/dint.rs": "73997923a28fc3acb5724e4bbf61eb92aed3ec27f6547245f147d382a852e8e5",
+      "src/f64_/dint_consts.rs": "f965881024cf1de857ea75b9082c878ef582188d9ebae29552c38f97cf617fde",
+      "src/f64_/double.rs": "0467c2769346213a7ed18d878dd97cb7474af38140897152bfa61904a5b1d468",
+      "src/f64_/erf.rs": "10f22480914e764862dac2410134a27fdec2e3aa53ee077da481d09ff2cfde38",
+      "src/f64_/exp.rs": "141c0d84ee690de9601bd446bc9f4251cb49f3a72b9600a3867264c104035f9f",
+      "src/f64_/gamma.rs": "eb5c1df1374954a3f7d29c5428f8eb0eb6744a3c69ad1d73b4c5f40bb3364c36",
+      "src/f64_/gamma_piece_tables.rs": "a4bea4e91418c529ffb787c978eb95e6d97b755d2df33e501983d41554cff782",
+      "src/f64_/gamma_td_tables.rs": "5e16bb8026039f812758e7add0bd05cb10c39796c3d965a7d37c362b100aa49f",
+      "src/f64_/hyp.rs": "de138bc8cc445f16d1fc3369e1b1f3a07e6b18fa662256020d0fcd390bbde5ca",
+      "src/f64_/log.rs": "132bf3b22ac69c7608f28f84beb8a10287fc0426c0b3f820180a0105790a14a6",
+      "src/f64_/misc.rs": "c9edb209d5c8dc70b5f662e679a644ede182a6611a1eb2207dd3db9db316a617",
+      "src/f64_/pow.rs": "5f61b45dfb4663d3d9ab3da68d17b02fca05ed7a2cf662d669d82bb319bdd615",
+      "src/f64_/pow_accurate.rs": "29f7b0c5ce09a03ce4b052843a7199b9cce72df9bd09bb063e86876c48e55bdc",
+      "src/f64_/pow_consts.rs": "776512cdef0bb2bf953d11452d3961c52a2d73fd8b31015c6d7fe0d747240cd5",
+      "src/f64_/qint.rs": "f254fe57bd511c597104c2d6147ced75253ebbec68362bb33f6739b18de647a6",
+      "src/f64_/trig.rs": "874541b07d6c20efd27a09c0a9f9f23afdfefa138d3d242693cc061682961b5c",
+      "src/lib.rs": "796bb414ba699ed655d1285a2b6e348cb3bb4d77247e5ca529462b73ede481c9",
+      "tools/benchmark_snapshot.py": "d46fcdbd698599c98ba7ee542e19350b3cf5d03d9620bc175d579e626998833d"
+    },
+    "source_tree_sha256": "16997f2610775f21e4be26b38278564a2c1f65e90a88c29273cdf7a118130809",
+    "tracked_diff_sha256": "dff87e2bab57eb84b1d3cd7ab6df1631384947b4160620879e7cb32b6e5fc719"
+  }
+}

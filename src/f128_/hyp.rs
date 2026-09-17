@@ -233,6 +233,13 @@ fn exponential_384(m: u128, e: i32, negative: bool) -> (i32, [u128; 3]) {
         n = -n - i32::from(f != [0; 3]);
         f = neg_384(f);
     }
+    exp2_384(n, f)
+}
+
+/// Evaluate `2^(n + f/2^384)` without rounding to binary128. The returned
+/// significand is normalized at 2^383 and paired with its binary exponent.
+/// Callers retain their own reduction error in the final rounding bound.
+pub(super) fn exp2_384(n: i32, f: [u128; 3]) -> (i32, [u128; 3]) {
     let (i0, i1, i2) = (
         (f[2] >> 122) as usize,
         (f[2] >> 116) as usize & 63,

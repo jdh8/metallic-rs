@@ -135,6 +135,40 @@ fallback checks, the CORE-MATH f64 cross-check, libquadmath/std benches and
 the accuracy survey follow asinh/acosh. Leave it out of `FUNCS128` until
 upstream binds it.
 
+`erfq`/`erfcq` share `erf.rs`: an alternating factorial ratio below 1/2,
+multiplied by the exact input significand, and `exp(-x²)*erfcx(x)` above.
+The square is an exact 226-bit integer. Sixteen dyadic centers per binade
+leave `|(x-c)/c| ≤ 1/33`; normalized Taylor coefficients of `erfcx` are at
+most one, so 28 terms fast / 78 accurate have geometric remainder bounds.
+The high fourteen fast coefficients narrow to 64 bits. All constants come
+from `tools/gen_erf_f128.py`; regenerate rather than edit. The 384-bit
+accurate leg reuses `hyp::exp2_384` and the existing 380-bit log2(e), with
+a `2^-360` relative precision policy. Tiny erf retains `2/sqrt(pi)` on the
+subnormal grid. Both million-input gate certifications measure worst
+`|err|/gate = 0.259560` (3.85× margin); forced accurate checks and MPFR
+sweeps cover both functions. `gen_f128_erf_cases` supplies answer-carrying
+corpora from seams, inverse midpoints, tiny-slope continued fractions and
+near-midpoint scans. Keep standalone libquadmath/std benches and leave
+them out of `FUNCS128` until upstream supplies bindings.
+
+`tgammaq`/`lgammaq` share `gamma.rs`: a 192-bit integer floating fast leg,
+512-bit fallback, original log-Gamma Taylor derivatives on `[31/32, 2]`,
+recurrence products below 64, and a Bernoulli expansion above. Reflection
+reduces the exact dyadic fraction and cancels π symbolically through
+`sin(πf)/(πf)`; no rounded sine or logarithm enters the final sum. Exact
+Taylor constants remove division from the log/exp/sinc polynomial loops.
+`tools/gen_gamma_f128.py` emits all constants and integer-rounded factorials;
+regenerate rather than edit. Positive log-Gamma zeros keep their displacement
+in floating form; the gate tracks uncancelled terms at negative zeros.
+The accurate relative policy is `2^-350`. MPFR audits of the 57 nonpole
+negative-root neighborhoods find minimum `|lgamma| = 2^-111.5099`; all have
+forced-fallback checks. The million-input gate ratios are below `2.24e-8`
+for gamma and `2.61e-11` for log-Gamma. Tiny gamma has an analytic reciprocal
+rounding proof; integer arguments use exact factorial rounding, including
+midpoints. `gen_f128_gamma_cases` freezes MPFR-answer corpora from roots,
+poles, inverse midpoints, terminal subnormal boundaries and scans. Keep
+standalone libquadmath/std benches and leave both out of `FUNCS128`.
+
 `logq` reduces in *log space*, which is why it needs no reciprocal-indexed log
 table: a per-bucket linear fit (`CRUDE`) estimates `j ≈ 2^18·log2(m)` to within
 0.9 of a unit, the three 6-bit slices of `j` index 31-bit reciprocals whose

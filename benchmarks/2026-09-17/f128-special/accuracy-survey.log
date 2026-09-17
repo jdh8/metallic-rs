@@ -1,0 +1,35 @@
+f128 ulp survey — 200000 samples per function, deterministic SplitMix64 draws
+err = |a − v| / 2^max(E − 112, −16494), v the MPFR value at 300 bits and
+E its binade exponent (v ∈ [2^E, 2^(E+1))); the floor is binary128's subnormal
+ulp.  A correctly rounded lane never exceeds 0.5, which is what the metallic
+column checks: it validates the harness, it is not a result.
+
+function    metallic       glibc    quadmath
+erfq          0.5000      1.1718      1.1718
+erfcq         0.5000      2.3357      2.3357
+
+worst case per lane (Debug prints the binary128 bit pattern):
+erfq    metallic  max 0.5000  wrong   0.000% (0/200000)  bogus 0      at 0xc00133fa607152c18f71ec9fc63a8f35
+erfq    glibc     max 1.1718  wrong  14.643% (29285/200000)  bogus 0      at 0xbfff0bf3c123a06763ebaff388b83c3f
+erfq    quadmath  max 1.1718  wrong  14.643% (29285/200000)  bogus 0      at 0xbfff0bf3c123a06763ebaff388b83c3f
+erfcq   metallic  max 0.5000  wrong   0.000% (0/200000)  bogus 0      at 0xbffed010aa2af95d931661f48b0c5ece
+erfcq   glibc     max 2.3357  wrong  11.907% (23814/200000)  bogus 0      at 0x3fff60ac1175baf6ffced8cdd78056a8
+erfcq   quadmath  max 2.3357  wrong  11.907% (23814/200000)  bogus 0      at 0x3fff60ac1175baf6ffced8cdd78056a8
+
+f128 ulp survey — 200000 samples per function, deterministic SplitMix64 draws
+err = |a − v| / 2^max(E − 112, −16494), v the MPFR value at 300 bits and
+E its binade exponent (v ∈ [2^E, 2^(E+1))); the floor is binary128's subnormal
+ulp.  A correctly rounded lane never exceeds 0.5, which is what the metallic
+column checks: it validates the harness, it is not a result.
+
+function    metallic       glibc    quadmath
+tgammaq       0.5000      5.9367      5.9367
+lgammaq       0.5000      6.0830      6.0830
+
+worst case per lane (Debug prints the binary128 bit pattern):
+tgammaq metallic  max 0.5000  wrong   0.000% (0/200000)  bogus 0      at 0x4000a3ff56d27309604bc46d6fe1dcd6
+tgammaq glibc     max 5.9367  wrong  46.783% (93566/200000)  bogus 0      at 0xc002a4222cf16bc8754043a2aa6af7d9
+tgammaq quadmath  max 5.9367  wrong  46.783% (93566/200000)  bogus 0      at 0xc002a4222cf16bc8754043a2aa6af7d9
+lgammaq metallic  max 0.5000  wrong   0.000% (0/200000)  bogus 0      at 0x40016ed998e8fce23959ac41eae0ca17
+lgammaq glibc     max 6.0830  wrong  39.395% (78789/200000)  bogus 0      at 0xc00140da3fe6719371dd61b65a3d496e
+lgammaq quadmath  max 6.0830  wrong  39.395% (78789/200000)  bogus 0      at 0xc00140da3fe6719371dd61b65a3d496e

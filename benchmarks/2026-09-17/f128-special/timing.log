@@ -1,0 +1,230 @@
+UTC: 2026-09-17T01:30:27.115148+00:00
+rustc 1.100.0-nightly (a36d05efa 2026-09-09)
+    PID    PPID %CPU %MEM COMMAND
+ 754497  754496 81.8  0.0 gen_f128_gamma_
+ 751316  751315 57.3  0.0 gen_f128_gamma_
+ 756125  756124 33.3  0.0 python3
+ 509655  387580  0.4  1.3 claude
+ 387580  344116  0.3  4.1 MainThread
+ 500516  387580  0.1  1.1 claude
+ 507216  387580  0.1  1.1 claude
+ 499986  387580  0.1  1.1 claude
+ 389099  387580  0.1  1.0 claude
+ 388048  387580  0.1 11.1 rust-analyzer
+ 387677  387580  0.0  1.5 codex
+ 344229  344116  0.0  0.4 MainThread
+ 344116  344112  0.0  1.1 MainThread
+ 387592  344116  0.0  0.4 MainThread
+ 389437  387580  0.0  3.6 MainThread
+ 386070  386052  0.0  0.1 code-645f29cc31
+ 344218  344168  0.0  0.7 MainThread
+ 386037  386020  0.0  0.0 sshd-session
+ 388275  387580  0.0  1.0 MainThread
+ 388954  387580  0.0  0.5 MainThread
+ 392263  387677  0.0  0.0 codex-code-mode
+ 388194  387580  0.0  0.4 MainThread
+ 387785  387580  0.0  0.6 MainThread
+ 344288  344218  0.0  1.1 MainThread
+ 344168  344163  0.0  0.6 MainThread
+ 514173  509655  0.0  0.0 bash
+  87752       1  0.0  0.1 systemd-journal
+   2841       1  0.0  0.0 code-1b6a188127
+ 541798  509655  0.0  0.0 bash
+ 515749  509655  0.0  0.0 bash
+ 514496  509655  0.0  0.0 bash
+ 515696  509655  0.0  0.0 bash
+      1       0  0.0  0.0 systemd
+ 121718       1  0.0  0.0 code-645f29cc31
+  88599   88598  0.0  0.0 sssd_be
+ 542051  509655  0.0  0.0 bash
+ 389021  387580  0.0  0.0 pet
+ 517209  509655  0.0  0.0 bash
+ 517188  509655  0.0  0.0 bash
+  88600   88598  0.0  0.0 sssd_nss
+  88601   88598  0.0  0.0 sssd_pam
+ 388148  388048  0.0  0.1 rust-analyzer-p
+    454       1  0.0  0.0 master
+    323       1  0.0  0.0 rsyslogd
+    272       1  0.0  0.0 dbus-daemon
+    420       1  0.0  0.0 systemd-logind
+    418       1  0.0  0.0 cron
+  88598       1  0.0  0.0 sssd
+  88088       1  0.0  0.0 systemd-resolve
+  87755       1  0.0  0.0 systemd-network
+    456     454  0.0  0.0 qmgr
+ 601254  344229  0.0  0.0 bash
+ 554642  344229  0.0  0.0 bash
+ 389335  344229  0.0  0.0 bash
+ 386052  386038  0.0  0.0 sh
+   1437       1  0.0  0.0 systemd
+    436       1  0.0  0.0 sshd
+    275       1  0.0  0.0 networkd-dispat
+    453       1  0.0  0.0 agetty
+    457       1  0.0  0.0 agetty
+    458       1  0.0  0.0 agetty
+   1438    1437  0.0  0.0 (sd-pam)
+ 163643    1437  0.0  0.0 dbus-daemon
+ 344112       1  0.0  0.0 sh
+ 344163  121718  0.0  0.0 sh
+ 386020     436  0.0  0.0 sshd-session
+ 386038  386037  0.0  0.0 bash
+ 386963  386070  0.0  0.0 sh
+ 387701  386070  0.0  0.0 sh
+ 388149  388048  0.0  0.1 rust-analyzer-p
+ 450982  386070  0.0  0.0 sh
+ 743166     454  0.0  0.0 pickup
+ 751315  387677  0.0  0.0 bash
+ 754496  387677  0.0  0.0 bash
+ 755787  517188  0.0  0.0 sleep
+ 755792  386052  0.0  0.0 sleep
+ 755846  517209  0.0  0.0 sleep
+ 756082  515749  0.0  0.0 sleep
+ 756114  515696  0.0  0.0 sleep
+ 756116  542051  0.0  0.0 sleep
+ 756117  514496  0.0  0.0 sleep
+ 756119  514173  0.0  0.0 sleep
+ 756121  541798  0.0  0.0 sleep
+ 756124  387677  0.0  0.0 bash
+ 756128  756125  0.0  0.0 ps
+Paused PIDs: [751316, 754497]
+
+Benchmark erfcq
+Benchmarking metallic::erfcq
+Benchmarking metallic::erfcq: Warming up for 1.0000 s
+Benchmarking metallic::erfcq: Collecting 50 samples in estimated 2.0000 s (28M iterations)
+Benchmarking metallic::erfcq: Analyzing
+metallic::erfcq         time:   [71.927 ns 71.972 ns 72.040 ns]
+                        change: [−0.1346% +0.0464% +0.2127%] (p = 0.63 > 0.05)
+                        No change in performance detected.
+Found 5 outliers among 50 measurements (10.00%)
+  2 (4.00%) low mild
+  3 (6.00%) high severe
+
+Benchmarking quadmath::erfcq
+Benchmarking quadmath::erfcq: Warming up for 1.0000 s
+Benchmarking quadmath::erfcq: Collecting 50 samples in estimated 2.0008 s (2.8M iterations)
+Benchmarking quadmath::erfcq: Analyzing
+quadmath::erfcq         time:   [724.18 ns 725.76 ns 728.57 ns]
+                        change: [+0.1322% +0.4433% +0.7179%] (p = 0.02 < 0.05)
+                        Change within noise threshold.
+Found 4 outliers among 50 measurements (8.00%)
+  3 (6.00%) high mild
+  1 (2.00%) high severe
+
+Benchmarking f128::erfc
+Benchmarking f128::erfc: Warming up for 1.0000 s
+Benchmarking f128::erfc: Collecting 50 samples in estimated 2.0001 s (2.9M iterations)
+Benchmarking f128::erfc: Analyzing
+f128::erfc              time:   [698.25 ns 700.45 ns 704.27 ns]
+                        change: [−2.4320% −0.6544% +0.4705%] (p = 0.59 > 0.05)
+                        No change in performance detected.
+Found 3 outliers among 50 measurements (6.00%)
+  1 (2.00%) high mild
+  2 (4.00%) high severe
+
+
+Benchmark erfq
+Benchmarking metallic::erfq
+Benchmarking metallic::erfq: Warming up for 1.0000 s
+Benchmarking metallic::erfq: Collecting 50 samples in estimated 2.0001 s (36M iterations)
+Benchmarking metallic::erfq: Analyzing
+metallic::erfq          time:   [54.741 ns 54.763 ns 54.786 ns]
+                        change: [−0.0046% +0.1136% +0.3173%] (p = 0.12 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 50 measurements (2.00%)
+  1 (2.00%) high severe
+
+Benchmarking quadmath::erfq
+Benchmarking quadmath::erfq: Warming up for 1.0000 s
+Benchmarking quadmath::erfq: Collecting 50 samples in estimated 2.0004 s (3.5M iterations)
+Benchmarking quadmath::erfq: Analyzing
+quadmath::erfq          time:   [566.44 ns 567.34 ns 568.47 ns]
+                        change: [−0.1995% +0.0259% +0.2730%] (p = 0.77 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 50 measurements (4.00%)
+  1 (2.00%) high mild
+  1 (2.00%) high severe
+
+Benchmarking f128::erf
+Benchmarking f128::erf: Warming up for 1.0000 s
+Benchmarking f128::erf: Collecting 50 samples in estimated 2.0000 s (3.7M iterations)
+Benchmarking f128::erf: Analyzing
+f128::erf               time:   [541.62 ns 542.05 ns 542.49 ns]
+                        change: [−0.3551% −0.1005% +0.1210%] (p = 0.42 > 0.05)
+                        No change in performance detected.
+Found 4 outliers among 50 measurements (8.00%)
+  2 (4.00%) low mild
+  1 (2.00%) high mild
+  1 (2.00%) high severe
+
+
+Benchmark lgammaq
+Benchmarking metallic::lgammaq
+Benchmarking metallic::lgammaq: Warming up for 1.0000 s
+Benchmarking metallic::lgammaq: Collecting 50 samples in estimated 2.0011 s (1.1M iterations)
+Benchmarking metallic::lgammaq: Analyzing
+metallic::lgammaq       time:   [1.8103 µs 1.8122 µs 1.8146 µs]
+                        change: [−19.057% −18.896% −18.730%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 50 measurements (4.00%)
+  1 (2.00%) high mild
+  1 (2.00%) high severe
+
+Benchmarking quadmath::lgammaq
+Benchmarking quadmath::lgammaq: Warming up for 1.0000 s
+Benchmarking quadmath::lgammaq: Collecting 50 samples in estimated 2.0016 s (1.1M iterations)
+Benchmarking quadmath::lgammaq: Analyzing
+quadmath::lgammaq       time:   [1.8445 µs 1.8510 µs 1.8574 µs]
+                        change: [−0.5146% +0.0860% +0.6394%] (p = 0.77 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 50 measurements (2.00%)
+  1 (2.00%) high mild
+
+Benchmarking f128::ln_gamma
+Benchmarking f128::ln_gamma: Warming up for 1.0000 s
+Benchmarking f128::ln_gamma: Collecting 50 samples in estimated 2.0016 s (1.2M iterations)
+Benchmarking f128::ln_gamma: Analyzing
+f128::ln_gamma          time:   [1.6045 µs 1.6077 µs 1.6113 µs]
+                        change: [−0.6120% −0.1740% +0.2913%] (p = 0.50 > 0.05)
+                        No change in performance detected.
+Found 7 outliers among 50 measurements (14.00%)
+  1 (2.00%) low severe
+  1 (2.00%) low mild
+  3 (6.00%) high mild
+  2 (4.00%) high severe
+
+
+Benchmark tgammaq
+Benchmarking metallic::tgammaq
+Benchmarking metallic::tgammaq: Warming up for 1.0000 s
+Benchmarking metallic::tgammaq: Collecting 50 samples in estimated 2.0006 s (919k iterations)
+Benchmarking metallic::tgammaq: Analyzing
+metallic::tgammaq       time:   [2.1767 µs 2.1784 µs 2.1802 µs]
+                        change: [−25.355% −25.197% −25.064%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 50 measurements (4.00%)
+  1 (2.00%) high mild
+  1 (2.00%) high severe
+
+Benchmarking quadmath::tgammaq
+Benchmarking quadmath::tgammaq: Warming up for 1.0000 s
+Benchmarking quadmath::tgammaq: Collecting 50 samples in estimated 2.0009 s (700k iterations)
+Benchmarking quadmath::tgammaq: Analyzing
+quadmath::tgammaq       time:   [2.8383 µs 2.8425 µs 2.8459 µs]
+                        change: [−0.1732% +0.1101% +0.3900%] (p = 0.51 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 50 measurements (4.00%)
+  1 (2.00%) low mild
+  1 (2.00%) high mild
+
+Benchmarking f128::gamma
+Benchmarking f128::gamma: Warming up for 1.0000 s
+Benchmarking f128::gamma: Collecting 50 samples in estimated 2.0028 s (788k iterations)
+Benchmarking f128::gamma: Analyzing
+f128::gamma             time:   [2.5341 µs 2.5442 µs 2.5586 µs]
+                        change: [−0.1042% +0.2760% +0.7047%] (p = 0.24 > 0.05)
+                        No change in performance detected.
+Found 3 outliers among 50 measurements (6.00%)
+  1 (2.00%) high mild
+  2 (4.00%) high severe
+

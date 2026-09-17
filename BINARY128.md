@@ -12,6 +12,10 @@ metallic = { version = "0.3.0", features = ["f128"] }
 #![feature(f128)]
 
 assert_eq!(metallic::sqrtq(4.0_f128), 2.0);
+assert_eq!(metallic::erfq(-0.0_f128).to_bits(), (-0.0_f128).to_bits());
+assert_eq!(metallic::erfcq(0.0_f128), 1.0);
+assert_eq!(metallic::tgammaq(6.0_f128), 120.0);
+assert_eq!(metallic::lgammaq(1.0_f128), 0.0);
 assert_eq!(metallic::rsqrtq(4.0_f128), 0.5);
 assert_eq!(metallic::cbrtq(8.0_f128), 2.0);
 assert_eq!(metallic::sinhq(-0.0_f128).to_bits(), (-0.0_f128).to_bits());
@@ -57,6 +61,7 @@ Each function is done when both gates hold:
 
 - **CR** — correctly rounded, all strict gates green (bit-exact vs
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
+  `erfq`/`erfcq`/`tgammaq`/`lgammaq`/
   `asinhq`/`acoshq`/`atanhq`/`sinhq`/`coshq`/`tanhq`/`exp2m1q`/`exp10m1q`/
   `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
   `asinpiq`/`acospiq`/`atanpiq`/`atan2piq`/`log1pq`/`log2p1q`/`log10p1q`/`powq`/`compoundq`
@@ -71,7 +76,7 @@ Each function is done when both gates hold:
   `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench --features f128
   --bench <fn>q`, then `python3 tools/bench_ratio.py median`.  Each bench also
   carries a `f128::` lane (nightly `std`) and, where CORE-MATH has no binding,
-  a `quadmath::` one; both are faithful-only, so they are context rather than
+  a `quadmath::` one; their weaker accuracy contracts make them context rather than
   the headline — see [Baselines](#baselines).
 
 | Function | CR |
@@ -92,6 +97,8 @@ Each function is done when both gates hold:
 | `cosq`   | ✅ |
 | `coshq` | ✅ |
 | `cospiq` | ✅ |
+| `erfcq` | ✅ |
+| `erfq` | ✅ |
 | `exp10q` | ✅ |
 | `exp10m1q` | ✅ |
 | `fmaq`   | ✅ |
@@ -102,6 +109,7 @@ Each function is done when both gates hold:
 | `expq`   | ✅ |
 | `hypotq` | ✅ |
 | `ldexpq` | ✅ |
+| `lgammaq` | ✅ |
 | `log2q`  | ✅ |
 | `log2p1q` | ✅ |
 | `log10q` | ✅ |
@@ -119,6 +127,7 @@ Each function is done when both gates hold:
 | `tanq`   | ✅ |
 | `tanhq` | ✅ |
 | `tanpiq` | ✅ |
+| `tgammaq` | ✅ |
 
 `sincosq` returns the pair off one reduction and one pair of series, so both
 halves are the separately gated `sinq` and `cosq` bit for bit — that identity,
@@ -171,84 +180,27 @@ binary128 fused multiply-add, not metallic's: it is glibc's `fmaf128` wherever
 to `fmal`, which computes the narrow function of the low half of each operand.
 Keep it off any path that has to be right everywhere; see its rustdoc.
 
-## Coverage gap
+## Coverage and verification
 
-Four `f64` entry points have no binary128 counterpart yet.  `fmaq`,
-`frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
-written already, `roundq` is the few lines of bit manipulation its row
-promised, and `sincosq` hoisted `trig::reduce` once across both legs as
-planned.  For the rest, what follows is the plan, not a status report.
+Binary128 now covers the same C99 transcendental and special-function families
+as the f32 and f64 APIs, including `erfq`, `erfcq`, `tgammaq`, and `lgammaq`.
+The selected C23 functions and extensions also have `q` counterparts.
+`sqrtq` additionally supplies its own integer implementation; the f64 API
+uses `f64::sqrt`.
 
-| to do | rides on |
-|-------|----------|
-| `erfq`, `erfcq`, `tgammaq`, `lgammaq` | nothing yet — new tables, new generators |
+`FUNCS128` in `tools/sync-worst-cases.sh` remains `sqrt rsqrt cbrt hypot exp
+exp2 exp10 expm1 log asin acos atan atan2`. Functions without CORE-MATH
+bindings use generated corpora carrying MPFR answers, precision-113 MPFR
+sweeps with ternary-aware subnormalization, and independent CORE-MATH f64
+cross-checks (`compoundq` uses `compoundf`). Each fast rounding gate also
+has an in-source `ziv_soundness` check, and the accurate leg is exercised
+directly. Binary128 sampling is not an exhaustive proof; the wider legs
+follow the documented precision policies.
 
-`sqrtq` is the one entry point that goes the other way: `f64` defers to
-`f64::sqrt`, while binary128 needs its own because no `f128::` method is an
-oracle.
-
-### What every one of them costs
-
-`FUNCS128` in `tools/sync-worst-cases.sh` is `sqrt rsqrt cbrt hypot exp exp2
-exp10 expm1 log asin acos atan atan2`.  **None of the remaining functions has a
-CORE-MATH binding**, so none of them gets the cheap gate.  Each follows the
-`sinq`/`powq` route from CLAUDE.md — an `examples/gen_f128_*_cases.rs`
-generator producing a corpus that carries its own MPFR answers, the
-`--features mpfr` sweep, the matching `f64` CORE-MATH function as the
-oracle-free cross-check, and `mod ziv_soundness` in the same commit as the
-fast leg it certifies.  Budget the generator at roughly half the work of the
-function.
-
-Benchmark baselines split three ways.  libquadmath binds the hyperbolics,
-`erfq`, `lgammaq` and `tgammaq`; it has no entry point at all for the seven
-π-scaled functions, `exp2m1q`, `exp10m1q` or `compoundq`, which therefore get
-no external lane (as `log2p1q` and `log10p1q` already do not) and fall back to
-`tools/analysis.py` cycles as the headline.
-
-### Order
-
-**Phase 0 — exports.**  ~~`fmaq`, `frexpq`, `ldexpq`, `roundq`, `sincosq`~~
-(done).  `sincosq` was the only real work of the five, and the point was to
-share one `reduce` rather than call `trig` twice: the pair costs about what
-the sine alone does, against the two calls' sum.
-
-**Phase 1 — `exp2m1q`, `exp10m1q` (done).** Both reuse the exponential
-frame and carry their own base's Taylor ratio near zero; see below.
-
-**Phase 2 — the π-scaled seven.** `sinpiq`, `cospiq`, and `tanpiq` are
-implemented: `trigpi.rs` splits `n = round(256x)` and the residual exactly,
-then scales the residual by π inside the existing `trig.rs`/`tan.rs` frames.
-`asinpiq` and `acospiq` are also implemented: `asin.rs` shares both precision
-tiers, with `1/π` folded into the breakpoint angles and exact quadrant offsets
-0, ½, 1. `tools/gen_asin_f128.py --pi` generates those mathematical constants.
-`atanpiq` and `atan2piq` remain; the same change of units fits their tables.
-The direct three return the exact integer, half-integer, and tangent
-quarter-integer values explicitly, including IEEE signed-zero and pole parity.
-Their corpora cover those seams and their neighbors through the all-integer
-range above 2^112.
-
-**Phase 3 — the hyperbolics (complete).**
-`sinhq`, `coshq`, and `tanhq` share `hyp.rs`; `asinhq`, `acoshq`, and `atanhq`
-share `invhyp.rs`, combining integer roots with the logarithm tables and
-using direct series near their zeros. `atanhq` combines unrounded
-`½·(log(1+x) − log(1−x))`, sharing `log1pq`'s exact `1 ± x` front end.
-
-**Phase 4 — `compoundq` (complete).** Reuses the power engine with an
-unrounded `1+x` front end and a floating logarithm near zero. The exact tier
-also handles perfect roots of sums wider than binary128; the 640-bit tier
-refines against `1+x` directly or evaluates `log1p(x)/x` near zero.
-
-**Phase 5 — `erfq`, `erfcq`, then `tgammaq`, `lgammaq`.**  Each larger than
-everything above it combined — `f64`'s `gamma.rs` alone is 11 000 lines — with
-no table, no generator and no upstream oracle.  `lgammaq`'s reflection formula
-needs `sinpiq`, so Phase 2 is a hard prerequisite.  Treat it as a separate
-project, and split `erfq`/`erfcq` off from the gamma pair: one minimax family
-per band, no reflection, no poles.
-
-One decision worth making before Phase 2 starts: the π-scaled inverses can
-fold `1/π` into the tables (exact dyadic offsets, more generated table files)
-or divide by π at the end (no new tables, one more rounding to certify).
-Folding is the recommendation — it is what makes the offsets exact.
+libquadmath and nightly std supply timing lanes for the error and gamma
+families. Neither is a correctness oracle. The seven π-scaled functions,
+`exp2m1q`, `exp10m1q`, `log2p1q`, `log10p1q`, and `compoundq` have no
+corresponding libquadmath entry point and keep standalone benchmarks.
 
 ## How the functions work
 
@@ -567,6 +519,91 @@ The logarithmic path at `x = 0.7` costs 366 llvm-mca cycles with no
 out-of-line calls: `python3 tools/analysis.py asm --only atanhq --isa v3`,
 then `python3 tools/analysis.py mca --only atanhq`.
 
+`erfq` and `erfcq` share `erf.rs`. Below `|x| = 1/2`, the alternating
+factorial series for `erf(x)/x` multiplies the exact input significand last,
+preserving the irrational `2/√π` slope through subnormal outputs. The term
+count follows the input binade. Above that band, `erfc(x)` is evaluated as
+`exp(-x²) · erfcx(x)`, with an exact 226-bit square. Sixteen dyadic centers
+per binade reduce the scaled complementary function to a Taylor series in
+`t = (x-c)/c`, with `|t| ≤ 1/33`. The normalized coefficient magnitudes are
+bounded by one, giving a geometric remainder bound: 28 terms serve the fast
+leg, and 78 the accurate leg. The upper fourteen fast coefficients need
+only 64 bits. `tools/gen_erf_f128.py` independently generates every value
+and derivative; there are no fitted or borrowed coefficients.
+
+The accurate leg uses 384-bit arithmetic and the shared exponential table
+engine in `hyp::exp2_384`. Its relative precision policy is `2^-360`.
+Both million-input soundness checks measure worst `|err|/gate = 0.259560`
+(3.85× margin); the positive complementary tail alone measures `0.120101`.
+The measured accurate error is below `0.003765 · 2^-360` relative. Tests
+also force the accurate leg, sample every exponent field with MPFR, and
+cross-check CORE-MATH's f64 functions. The answer-carrying corpora include
+continued fractions of the tiny slope on both rounding grids, inverse
+output midpoints, table seams, saturation, and underflow thresholds.
+
+`tgammaq` and `lgammaq` share `gamma.rs`. The core is an integer floating
+frame with 192 significand bits on the fast leg and 512 on the accurate
+leg. Original log-Gamma derivatives at seventeen dyadic centers cover
+`[31/32, 2]`; recurrence multiplies factors before taking a single
+logarithm for larger arguments below 64, and a Bernoulli expansion with
+a first-omitted-term bound serves arguments above 64. Logarithm,
+exponential, and sine ratios use generated exact Taylor coefficients, so
+their polynomial loops need no division. `tools/gen_gamma_f128.py` emits
+the mathematical constants and integer-rounded factorials.
+
+Negative arguments reduce their dyadic fractional part exactly. Reflection
+uses `sin(πf)/(πf)` and cancels π symbolically, preserving unrounded
+logarithms until the final sum. Near the exact positive log-Gamma zeros,
+the Taylor series keeps its zero constant and multiplies the displacement
+last. The fast gate tracks the magnitude of the terms before cancellation;
+the accurate leg follows a `2^-350` relative precision policy. Auditing
+the negative zeros gives 57 distinct nonpole input neighborhoods, with
+smallest sampled `|lgamma(x)| = 2^-111.5099`, leaving room for cancellation
+inside the 512-bit frame. Tiny gamma uses an analytically bounded reciprocal;
+positive integer gamma values use exact integer factorial rounding,
+including ties. Signed zero gives signed infinity for gamma; negative
+integer poles give NaN. Log-Gamma returns positive infinity at poles and
+does not update a global `signgam`.
+
+The million-input gamma certifications measure worst `|err|/gate` of
+`2.24e-8` for `tgammaq` and `2.61e-11` for `lgammaq`. The latter deliberately
+crowds both sides of the negative zeros and refuses 3,008 fast results;
+direct 512-bit checks cover every identified zero neighborhood. Measured
+accurate errors stay below `1.22e-44` and `1.87e-15` of the `2^-350` policy
+respectively. The corpora include inverse output midpoints, factorial ties,
+pole neighbors through the final nonzero subnormal outputs, and all reduction
+seams. Each of the four functions also has a 20-million-input MPFR scan.
+The frozen corpora contain **213,981 / 339,182 / 364,217 / 386,920**
+input/answer pairs for `erfq` / `erfcq` / `tgammaq` / `lgammaq`, with exact
+count guards. All **1,304,300** pairs replay bit for bit. Separate MPFR sweeps
+check 917,504 inputs per function, covering every exponent field, subnormals,
+and the targeted active bands and seams.
+
+The [initial four-function benchmark](benchmarks/2026-09-17/f128-special/README.md)
+records medians of **54.78 ns / 71.96 ns / 2.18 µs / 1.81 µs** for
+`erfq` / `erfcq` / `tgammaq` / `lgammaq` on the Intel Core i9-14900K,
+x86-64-v3 (2026-09-17). Same-run metallic/libquadmath ratios are
+**0.097× / 0.099× / 0.767× / 0.979×**. The recorded workloads differ by
+family, and these comparisons have different accuracy contracts; there is
+no CORE-MATH ratio for any of the four. Nightly std's log-Gamma lane was
+faster at 1.61 µs on this workload. The archive contains the exact input
+bands, raw estimates, toolchains, and source hashes.
+
+The separate 200,000-input MPFR accuracy surveys reported the following
+maximum errors in ulps. Metallic had zero misroundings or nonfinite-result
+errors in all four samples. The libquadmath/glibc agreement reflects their
+shared implementation ancestry.
+
+| Function | Metallic | glibc | libquadmath |
+| --- | ---: | ---: | ---: |
+| `erfq` | 0.5000 | 1.1718 | 1.1718 |
+| `erfcq` | 0.5000 | 2.3357 | 2.3357 |
+| `tgammaq` | 0.5000 | 5.9367 | 5.9367 |
+| `lgammaq` | 0.5000 | 6.0830 | 6.0830 |
+
+Reproduce with `CC=clang cargo +nightly run --release --features "f128 mpfr"
+--example f128_ulp_survey -- 200000 erfq erfcq tgammaq lgammaq`.
+
 ## Baselines
 
 Three other binary128 implementations are within reach on a GNU/Linux box, and
@@ -581,15 +618,13 @@ they are not interchangeable:
   precision as "non-deterministic … varies by platform, Rust version, and can
   even differ within the same execution".  `f128::sqrt` is the one method with
   a contract (IEEE 754 `squareRoot`), and on x86-64 it does not reach glibc at
-  all: the static linker binds it to `compiler_builtins`' own `sqrtf128`,
-  which is why it is the one `f128::` lane within 2× of metallic instead of
-  10× off.
+  all: the static linker binds it to `compiler_builtins`' own `sqrtf128`.
 - **libquadmath** is GCC's `__float128` runtime: a mechanical 2018 copy of
   glibc's `ldbl-128` sources (fdlibm and Moshier's Cephes) that GCC documents
   no accuracy for whatsoever.  Where it and glibc agree — bit for bit on every
   function here but `sqrt` and `hypot` — that is shared ancestry, not
-  independent confirmation, and the two time within a few percent of each
-  other.
+  independent confirmation. Their timings can differ; the gamma benchmarks
+  above measure each library separately.
 
 `examples/f128_ulp_survey.rs` measures all three against MPFR at 300 bits:
 

@@ -70,12 +70,12 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acoshq acospiq acosq asinhq asinpiq asinq atan2piq atan2q atanhq atanpiq atanq cbrtq compoundq coshq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
-        log2p1q log2q log10p1q log10q logq powq rsqrtq sinhq sinpiq sinq sqrtq tanhq tanpiq tanq""".split(),
+    "f128": """acoshq acospiq acosq asinhq asinpiq asinq atan2piq atan2q atanhq atanpiq atanq cbrtq compoundq coshq cospiq cosq erfcq erfq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq lgammaq log1pq
+        log2p1q log2q log10p1q log10q logq powq rsqrtq sinhq sinpiq sinq sqrtq tanhq tanpiq tanq tgammaq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound compoundq fma fmaf frexp frexpf ldexp ldexpf round roundf
-    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq""".split())
+    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq erfq erfcq tgammaq lgammaq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -589,6 +589,23 @@ FN = {
     },
     "powq": {
         "m": {"cov": ["f128_/pow.rs: fn accurate("], "leg": "sym:pow::accurate", "prec": "128/256-bit fixed → 256/384-bit fixed → exact integer / 640-bit fixed"},
+        "c": None,
+    },
+    "erfq": {
+        # `wide` is inlined; x=0.7 reaches the shared complementary-tail kernel.
+        "m": {"cov": ["f128_/erf.rs: fn wide<const COMPLEMENT: bool>("], "leg": "sym:erf::tail_384", "prec": "128-bit fixed → 384-bit fixed (tail kernel)"},
+        "c": None,
+    },
+    "erfcq": {
+        "m": {"cov": ["f128_/erf.rs: fn wide<const COMPLEMENT: bool>("], "leg": "sym:erf::tail_384", "prec": "128-bit fixed → 384-bit fixed (tail kernel)"},
+        "c": None,
+    },
+    "tgammaq": {
+        "m": {"cov": ["f128_/gamma.rs: fn tgamma_accurate("], "leg": "sym:gamma::tgamma_accurate", "prec": "192-bit integer floating → 512-bit integer floating"},
+        "c": None,
+    },
+    "lgammaq": {
+        "m": {"cov": ["f128_/gamma.rs: fn lgamma_accurate("], "leg": "sym:gamma::lgamma_accurate", "prec": "192-bit integer floating → 512-bit integer floating"},
         "c": None,
     },
     "rsqrtq": {
@@ -2079,7 +2096,7 @@ def cmd_render(args):
         "## Method",
         "**Function.** One row per public function, cells `metallic / CORE-MATH`; `—` where "
         "the `core_math` crate has no binding (`fma*`, `frexp*`, `ldexp*`, `round*`, "
-        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq`).",
+        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq erfq erfcq tgammaq lgammaq`).",
         "**v3, v4, native.** Cycles of the fast path from `llvm-mca -mcpu=x86-64-v3`, "
         "`x86-64-v4` and the host model (`{}`), each on the assembly rustc and clang emit for "
         "that level. GDB traces one call from the wrapper's entry (`metallic_<fn>`, "
