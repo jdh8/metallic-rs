@@ -30,6 +30,7 @@ assert_eq!(metallic::log1pq(1.0_f128), core::f128::consts::LN_2);
 assert_eq!(metallic::log2p1q(3.0_f128), 2.0);
 assert_eq!(metallic::log10p1q(99.0_f128), 2.0);
 assert_eq!(metallic::powq(2.0_f128, 0.5), core::f128::consts::SQRT_2);
+assert_eq!(metallic::compoundq(0.5_f128, 2.0), 2.25);
 assert_eq!(metallic::sinpiq(0.5_f128), 1.0);
 assert_eq!(metallic::cospiq(1.0_f128), -1.0);
 assert_eq!(metallic::tanpiq(0.25_f128), 1.0);
@@ -58,11 +59,11 @@ Each function is done when both gates hold:
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
   `asinhq`/`acoshq`/`atanhq`/`sinhq`/`coshq`/`tanhq`/`exp2m1q`/`exp10m1q`/
   `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
-  `asinpiq`/`acospiq`/`atanpiq`/`atan2piq`/`log1pq`/`log2p1q`/`log10p1q`/`powq`
+  `asinpiq`/`acospiq`/`atanpiq`/`atan2piq`/`log1pq`/`log2p1q`/`log10p1q`/`powq`/`compoundq`
   have no CORE-MATH binding yet:
   their strict gate replays a home-grown corpus that carries its
   MPFR answers, and the matching CORE-MATH `f64` functions cross-check
-  them oracle-free.
+  them oracle-free (`compoundq` uses CORE-MATH's `compoundf`).
 - **Perf** — measured same-run median ratio `metallic::<fn>q / core_math::<fn>q`
   ≈ 1× or better on the recorded workload and hardware. Archived results are in
   [BENCHMARKS.md](BENCHMARKS.md); [ANALYSIS.md](ANALYSIS.md) helps diagnose costs.
@@ -87,6 +88,7 @@ Each function is done when both gates hold:
 | `atan2piq` | ✅ |
 | `atan2q` | ✅ |
 | `cbrtq`  | ✅ |
+| `compoundq` | ✅ |
 | `cosq`   | ✅ |
 | `coshq` | ✅ |
 | `cospiq` | ✅ |
@@ -124,7 +126,7 @@ replayed over both corpora, is its gate; libquadmath binds it, `f128::` does
 not.
 
 `exp2m1q`, `exp10m1q`, `log2p1q`, `log10p1q`, `sinpiq`, `cospiq`,
-`tanpiq`, `asinpiq`, `acospiq`, `atanpiq`, and `atan2piq` have standalone
+`tanpiq`, `asinpiq`, `acospiq`, `atanpiq`, `atan2piq`, and `compoundq` have standalone
 benchmarks; neither CORE-MATH nor libquadmath currently provides these entry points. They are
 not in the historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
 The initial `exp2m1q` / `exp10m1q` x86-64-v3 traces at `x = 1.7` cost
@@ -149,6 +151,15 @@ argument (2026-09-16). In that run the shared radian functions measured
 **0.85× / 1.02× CORE-MATH** (`atanq` / `atan2q`). The pi-scaled functions
 have no external binary128 baseline.
 
+The initial `compoundq` medians were **62.92 ns** in the general band
+(`x` binades −18..13, negative rates restricted to x > −1;
+`|y|` binades −16..8) and **70.01 ns** for tiny rates
+(`|x|` binades −120..−20, `|y|` scaled so `|xy|` is about 2^-16..2^10),
+on the same Intel Core i9-14900K with x86-64-v3 (2026-09-16).
+The general trace at `(x,y) = (1.7,0.7)` costs **485 llvm-mca cycles**;
+regenerate with `python3 tools/analysis.py asm --only compoundq --isa v3`
+and `python3 tools/analysis.py mca --only compoundq`.
+
 `fmaq`, `frexpq`, `ldexpq` and `roundq` are exact operations rather than
 approximations, so neither column means what it does for the rest of the
 table.  `frexpq`, `ldexpq` and `roundq` are bit manipulation, gated on their
@@ -162,7 +173,7 @@ Keep it off any path that has to be right everywhere; see its rustdoc.
 
 ## Coverage gap
 
-Five `f64` entry points have no binary128 counterpart yet.  `fmaq`,
+Four `f64` entry points have no binary128 counterpart yet.  `fmaq`,
 `frexpq`, `ldexpq`, `roundq` and `sincosq` are done — the first three were
 written already, `roundq` is the few lines of bit manipulation its row
 promised, and `sincosq` hoisted `trig::reduce` once across both legs as
@@ -170,7 +181,6 @@ planned.  For the rest, what follows is the plan, not a status report.
 
 | to do | rides on |
 |-------|----------|
-| `compoundq` | `pow.rs`'s three tiers with `log::one_plus` in front |
 | `erfq`, `erfcq`, `tgammaq`, `lgammaq` | nothing yet — new tables, new generators |
 
 `sqrtq` is the one entry point that goes the other way: `f64` defers to
@@ -223,9 +233,10 @@ share `invhyp.rs`, combining integer roots with the logarithm tables and
 using direct series near their zeros. `atanhq` combines unrounded
 `½·(log(1+x) − log(1−x))`, sharing `log1pq`'s exact `1 ± x` front end.
 
-**Phase 4 — `compoundq`.**  `powq`'s engine with `log::one_plus` ahead of the
-logarithm.  The `exact` tier needs its own analysis (`(1+x)^y`'s exact cases
-are not `pow`'s); the 640-bit `wide` tier is untouched.
+**Phase 4 — `compoundq` (complete).** Reuses the power engine with an
+unrounded `1+x` front end and a floating logarithm near zero. The exact tier
+also handles perfect roots of sums wider than binary128; the 640-bit tier
+refines against `1+x` directly or evaluates `log1p(x)/x` near zero.
 
 **Phase 5 — `erfq`, `erfcq`, then `tgammaq`, `lgammaq`.**  Each larger than
 everything above it combined — `f64`'s `gamma.rs` alone is 11 000 lines — with
@@ -282,6 +293,32 @@ Ziv gate widened by `|y|`; a 384-by-256-bit accurate leg decides what the fast
 one refuses, an exact-case detector rounds the dyadic-rational powers
 (`x^y = m^N·2^k`, the only midpoints there are) from their integer value, and a
 table-free 640-bit tier settles the rest.
+`compoundq` computes (1+x)<sup>y</sup> on the same three tiers. Above
+|x| = 2<sup>−18</sup>, `log::one_plus` forms the 256-bit base for the shared
+logarithm reduction. Below it, the unrounded `log2p1q` ratio multiplies the
+exact input significand, retaining relative precision even when a subnormal
+rate is amplified by a huge exponent. The fast gate includes this amplification.
+The accurate tier shares `powq`'s 384-bit logarithm and 256-bit exponential.
+Its exact detector includes 256-bit perfect-power bases: for example,
+`x = 2^226 + 2^114` is representable, while `1+x = (2^113+1)^2` is not;
+`compoundq(x, 0.5)` is an exact midpoint and rounds to `2^113`.
+The 640-bit tier refines the general logarithm against the unrounded sum,
+and uses the Taylor ratio `ln(1+x)/x` for tiny rates. It retains `powq`'s
+2<sup>−490</sup> relative error policy.
+
+The million-pair soundness check measures worst |error|/gate **0.316259**
+(general) and **0.315190** (small), at least **3.16×** margin. Accurate-tier
+ratios are **0.005660 / 0.030760**; forced wide-tier measurements reach
+2<sup>−589.5</sup> / 2<sup>−617.6</sup>. `gen_f128_compound_cases` freezes MPFR
+135,993 answers from exact powers, wide roots, half-ulp products through every tiny
+input binade, inverse output midpoints, and 20 million scan pairs. A parser
+count guard, full-representation MPFR sweeps, forced-tier edge checks,
+`powq` identities on exact sums, and CORE-MATH `compoundf` comparisons gate it.
+MPFR's real-exponent oracle uses directed `exp(y*log1p(x))` bounds, falling
+back to a precision-113 power of an exactly formed base when needed; its
+ternary result handles subnormal rounding. No external binary128 baseline
+exists, so its benchmark and accuracy-survey lanes stand alone.
+
 `atan2q` reduces on dyadic breakpoints: one float divide picks
 `i ≈ round(64·min/max)`, the 6-bit dyadic `i/64` makes both sides of
 tan(θ &minus; atan(i/64)) exact 128-bit integers, and one hardware 128-by-64
@@ -588,6 +625,12 @@ and crowds the endpoints where the reflection cancels.  Correct rounding is
 | `sinq`    | **0.500** | 1.095 | 1.095 |
 | `sqrtq`   | **0.500** | **0.500** | 0.750 |
 | `tanq`    | **0.500** | 0.804 | 0.804 |
+
+`compoundq` measured **0.5000 ulp maximum**, with zero incorrectly rounded
+results in 200,000 samples of its active general band:
+`CC=clang cargo +nightly run --release --features "f128 mpfr"
+--example f128_ulp_survey -- 200000 compoundq`. It has no glibc or
+libquadmath entry point for this comparison.
 
 The new `log2p1q` and `log10p1q` also stay at or below 0.5 ulp in a separate
 200 000-draw survey of the same `log1pq` band. Neither has a glibc or

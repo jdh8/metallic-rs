@@ -224,6 +224,23 @@ exponents on either sign, and the bench band), CORE-MATH's f64 `pow` as the
 oracle-free cross-check, MPFR sweeps; bench baseline libquadmath `powq` —
 do not add `pow` to `FUNCS128` until upstream binds it.
 
+`compoundq` shares `pow.rs`'s three tiers for `(1+x)^y`. Above `|x| = 2^-18`,
+`log::one_plus` and `reduce_significand` preserve the unrounded base. Below
+it, `log::small_leg` / `small_wide::<Binary>` keep the logarithm in floating
+form, multiplying the exact input significand before the exponent; this
+covers subnormal rates under huge exponents. The fast gate includes the
+amplified logarithm error (worst |err|/gate 0.316259 / 0.315190, >3.16× margin).
+The accurate exponential and gate are pow's, with measured ratios
+0.005660 / 0.030760. Exact cases include perfect-power bases up to 228 bits:
+`1+x` need not fit binary128, even when its root is an exact result or midpoint.
+The 640-bit tier refines against unrounded `1+x` in the general band and
+sums `ln(1+x)/x` near zero; the relative error policy stays 2^-490.
+`gen_f128_compound_cases` supplies answer-carrying MPFR corpora (wide roots,
+midpoint products through the tiny binades, inverse midpoints, 20M scans).
+The precision-113 MPFR oracle forms the base exactly when directed log1p/exp
+bounds do not settle rounding; CORE-MATH's `compoundf` is the independent
+cross-check. Keep standalone benchmarks and leave compound out of `FUNCS128`.
+
 `asinq`/`acosq` split at `|x| = 2^-3` (`BAND`).  Below it the arc sine is its
 own reduced argument: no square root is formed and the fast leg is the bare
 Taylor series `asin(x)/x = Σ A_k·x^(2k)` (exact rational coefficients, the

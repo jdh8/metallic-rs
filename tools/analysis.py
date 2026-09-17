@@ -70,11 +70,11 @@ FUNCTIONS = {
         compound cos cosh cospi erf erfc exp exp2 exp2m1 exp10 exp10m1 expm1 fma frexp
         hypot ldexp lgamma log log1p log2 log2p1 log10 log10p1 pow round rsqrt sin sincos
         sinh sinpi tan tanh tanpi tgamma""".split(),
-    "f128": """acoshq acospiq acosq asinhq asinpiq asinq atan2piq atan2q atanhq atanpiq atanq cbrtq coshq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
+    "f128": """acoshq acospiq acosq asinhq asinpiq asinq atan2piq atan2q atanhq atanpiq atanq cbrtq compoundq coshq cospiq cosq exp2m1q exp2q exp10m1q exp10q expm1q expq hypotq log1pq
         log2p1q log2q log10p1q log10q logq powq rsqrtq sinhq sinpiq sinq sqrtq tanhq tanpiq tanq""".split(),
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
-NO_CORE_MATH = set("""compound fma fmaf frexp frexpf ldexp ldexpf round roundf
+NO_CORE_MATH = set("""compound compoundq fma fmaf frexp frexpf ldexp ldexpf round roundf
     acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
@@ -582,6 +582,10 @@ FN = {
     "logq": {
         "m": {"cov": ["f128_/log.rs: fn accurate<B: Base>(e: i32, j: u32, d: [u128; 3]) -> f128 {"], "leg": "sym:log::accurate<Natural>", "prec": "256-bit fixed → 384-bit fixed"},
         "c": {"cov": ["binary128/log/logq.c: static u64 __attribute__((noinline)) as_logq_refine(i64 el, u2x64 m, __float128 x0){"], "leg": "sym:as_logq_refine", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed (448-bit product)"},
+    },
+    "compoundq": {
+        "m": {"cov": ["f128_/pow.rs: fn compound_accurate("], "leg": "sym:pow::compound_accurate", "prec": "128/256-bit fixed → 256/384-bit fixed → exact integer / 640-bit fixed"},
+        "c": None,
     },
     "powq": {
         "m": {"cov": ["f128_/pow.rs: fn accurate("], "leg": "sym:pow::accurate", "prec": "128/256-bit fixed → 256/384-bit fixed → exact integer / 640-bit fixed"},

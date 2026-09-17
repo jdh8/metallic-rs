@@ -587,6 +587,7 @@ probes! {
         log2q = metallic_log2q: unary;
         log10q = metallic_log10q: unary;
         logq = metallic_logq: unary + core_math;
+        compoundq = metallic_compoundq: binary;
         powq = metallic_powq: binary;
         rsqrtq = metallic_rsqrtq: unary + core_math;
         sinq = metallic_sinq: unary;

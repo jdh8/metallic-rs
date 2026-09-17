@@ -786,6 +786,20 @@ fn table() -> Vec<Entry> {
             ],
         ),
         binary(
+            "compoundq",
+            |i| {
+                let (u, v) = mix128_pair(i);
+                let x = if u >> 127 != 0 {
+                    band(u, -18, -1)
+                } else {
+                    positive_band(u, -18, 13)
+                };
+                (x, band(v, -16, 8))
+            },
+            |x, y| (Float::with_val(WORK, x).ln_1p() * y).exp(),
+            [Some(metallic::compoundq), None, None],
+        ),
+        binary(
             "powq",
             |i| {
                 let (u, v) = mix128_pair(i);

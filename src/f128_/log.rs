@@ -474,7 +474,7 @@ fn small<B: Base>(bits: u128) -> f128 {
 /// ratio's slip — a few units of 2^-128 from its truncated products, plus
 /// `log_b(e)·x⁷/8` past its last term — is all the error there is.
 #[inline]
-fn small_leg<B: Base>(m: u128, e: i32, negative: bool) -> (u128, u128) {
+pub(super) fn small_leg<B: Base>(m: u128, e: i32, negative: bool) -> (u128, u128) {
     // `z·2^145 = ±m·2^(e + 33)`, cut at 2^-145 below `e = −33`, which moves
     // the ratio by at most log_b(e)/2 times that.
     let z = if e >= -33 {
@@ -492,19 +492,9 @@ fn small_leg<B: Base>(m: u128, e: i32, negative: bool) -> (u128, u128) {
 #[cold]
 #[inline(never)]
 fn small_accurate<B: Base>(m: u128, e: i32, negative: bool) -> f128 {
-    // `z·2^273 = ±m·2^(e + 161)`. Cutting tiny z here changes the
-    // ratio by < 2^-273; the exact input significand still multiplies it.
-    let z = if e >= -161 {
-        shl_256([m, 0], (e + 161) as u32)
-    } else {
-        shr_256_sat([m, 0], (-161 - e) as u32)
-    };
-    let z = if negative { sub_256([0, 0], z) } else { z };
-    // A truncated negative z may be zero. Signed multiplication must then
-    // see zero, not a negative 256-bit value with an implicit high limb.
-    let w = log1p_wide::<B>(z, [0, m << 15], negative && z != [0; 2]);
-    let leading = w[1].leading_zeros();
-    let n = shl_256(w, leading);
+    let (_, [_, low, high], k) = small_wide::<B>(m, e, negative);
+    let n = [low, high];
+    let leading = (e + 1 - k) as u32;
     if e + 2 - (leading as i32) < f128::MIN_EXP {
         return super::atan2::round_384(
             [0, n[0], n[1]],
@@ -523,6 +513,25 @@ fn small_accurate<B: Base>(m: u128, e: i32, negative: bool) -> f128 {
                 + (mantissa - IMPLICIT_BIT)
                 + u128::from(up)),
     )
+}
+
+/// Unrounded small logarithm in the floating frame used by the power engine.
+/// Its relative error stays below 2^-251 even for subnormal inputs.
+pub(super) fn small_wide<B: Base>(m: u128, e: i32, negative: bool) -> (bool, [u128; 3], i32) {
+    // `z·2^273 = ±m·2^(e + 161)`. Cutting tiny z here changes the
+    // ratio by < 2^-273; the exact input significand still multiplies it.
+    let z = if e >= -161 {
+        shl_256([m, 0], (e + 161) as u32)
+    } else {
+        shr_256_sat([m, 0], (-161 - e) as u32)
+    };
+    let z = if negative { sub_256([0, 0], z) } else { z };
+    // A truncated negative z may be zero. Signed multiplication must then
+    // see zero, not a negative 256-bit value with an implicit high limb.
+    let w = log1p_wide::<B>(z, [0, m << 15], negative && z != [0; 2]);
+    let leading = w[1].leading_zeros();
+    let n = shl_256(w, leading);
+    (negative, [0, n[0], n[1]], e + 1 - leading as i32)
 }
 
 /// `⌊2^18·log2(m) + ½⌋` to within one unit, for a significand `m·2^-112`.

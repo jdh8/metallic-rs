@@ -662,3 +662,12 @@ required-features = ["f128"]
 name = "atanhq"
 harness = false
 required-features = ["f128"]
+
+[[example]]
+name = "gen_f128_compound_cases"
+required-features = ["f128", "mpfr"]
+
+[[bench]]
+name = "compoundq"
+harness = false
+required-features = ["f128"]

@@ -33,6 +33,12 @@
 //! Everything is unsigned fixed point in integer limbs, like the engines it
 //! rides: an `f128` multiply is soft-float on every target without hardware
 //! binary128.
+//!
+//! [`compoundq`] uses the same exponential tiers with the unrounded base
+//! `1+x`. Below |x| = 2^-18 its logarithm stays in floating form, preserving
+//! tiny rates under large exponents. Its exact tier admits wide perfect
+//! powers, and its 640-bit tier refines against the sum or uses log1p's
+//! Taylor ratio directly. No new fitted coefficients or tables are needed.
 
 use super::exp::{self, GUARD, GUARD_HALF, GUARD_MASK};
 use super::log::{self, Binary};
@@ -125,6 +131,263 @@ pub fn powq(x: f128, y: f128) -> f128 {
         ),
         sign,
     )
+}
+
+/// Compound interest, `(1 + x)^y`, rounded once to binary128.
+///
+/// Follows [`crate::compound`]: `x < -1` is a domain error, including when
+/// `y = 0`; zero `x` or zero `y` otherwise returns 1, quiet NaNs included.
+/// Signaling NaNs propagate. At `x = -1`, positive exponents return +0 and
+/// negative exponents return +infinity. The sum `1+x` is never rounded before
+/// exponentiation.
+#[must_use]
+pub fn compoundq(x: f128, y: f128) -> f128 {
+    let xb = x.to_bits();
+    let yb = y.to_bits();
+    let ax = xb & !SIGN_MASK;
+    let ay = yb & !SIGN_MASK;
+    let snan = |a: u128| a > EXP_MASK && a & QUIET_BIT == 0;
+    if snan(ax) || snan(ay) {
+        return f128::from_bits(if snan(ax) { xb } else { yb } | QUIET_BIT);
+    }
+    if xb > (SIGN_MASK | ONE) && ax <= EXP_MASK {
+        return f128::NAN;
+    }
+    if ax == 0 || ay == 0 {
+        return 1.0;
+    }
+    if ax > EXP_MASK || ay > EXP_MASK {
+        return f128::from_bits(if ax > EXP_MASK { xb } else { yb } | QUIET_BIT);
+    }
+    if ay == EXP_MASK || ax == EXP_MASK || xb == (SIGN_MASK | ONE) {
+        let infinite = if xb == (SIGN_MASK | ONE) {
+            yb >> 127 != 0
+        } else {
+            (xb >> 127 == 0) == (yb >> 127 == 0)
+        };
+        return if infinite { f128::INFINITY } else { 0.0 };
+    }
+    if yb == ONE {
+        return 1.0 + x;
+    }
+    let (m, e) = split(ax);
+    let (my, ey) = split(ay);
+    let negative_x = xb >> 127 != 0;
+    let negative_y = yb >> 127 != 0;
+    let (l, scale, gate, reduction) = compound_log_fast(m, e, negative_x, my, ey);
+    // The exact product lies between 2^(top-2) and 2^top. The small
+    // logarithm has relative error < 2^-125, the general one < 2^-140 absolute.
+    let top = ey + scale + 43 - leading_zeros_256(l) as i32;
+    if top >= 17 {
+        return if negative_x ^ negative_y {
+            0.0
+        } else {
+            f128::INFINITY
+        };
+    }
+    if top <= -120 {
+        return 1.0;
+    }
+    // A saturated gate must always fall back, including subnormal results
+    // whose discarded field is wider than the usual fifteen bits.
+    if gate < GUARD_HALF {
+        let (n, r) = fast(l, my, ey + scale, negative_x ^ negative_y);
+        if !exp::undecided(n, r, gate) {
+            return exp::round(n, r, 0);
+        }
+    }
+    compound_accurate(xb, yb, reduction)
+}
+
+/// The two refinement tiers, reached only when the fast gate refuses.
+#[cold]
+#[inline(never)]
+fn compound_accurate(xb: u128, yb: u128, reduction: (i32, u32, [u128; 3])) -> f128 {
+    let (m, e) = split(xb & !SIGN_MASK);
+    let ay = yb & !SIGN_MASK;
+    let (my, ey) = split(ay);
+    let negative_x = xb >> 127 != 0;
+    let negative_y = yb >> 127 != 0;
+    let wide_log = compound_log_accurate(m, e, negative_x, reduction);
+    let (n, r) = exp_accurate(wide_log, my, ey, negative_y);
+    if !undecided(n, r) {
+        return exp::round(n, r[1], r[0]);
+    }
+    if let Some(value) = compound_exact(m, e, negative_x, ay, negative_y) {
+        return value;
+    }
+    let (n, r) = compound_wide_raw(m, e, negative_x, my, ey, negative_y, wide_log);
+    round_wide(n, r)
+}
+
+/// General inputs use the log-space reduction of exact `1+x`. Below 2^-18
+/// the logarithm is `x` times log2p1q's ratio, with scale `e-40` relative to
+/// pow's 2^-214 frame. Its <2^-125 relative slip amplifies by at most
+/// `2^(e+ey+2)` before exponentiation; `2^(e+ey+6)` units cover it with margin.
+#[inline]
+fn compound_log_fast(
+    m: u128,
+    e: i32,
+    negative: bool,
+    my: u128,
+    ey: i32,
+) -> ([u128; 2], i32, u128, (i32, u32, [u128; 3])) {
+    if e < -18 {
+        let (high, low) = log::small_leg::<Binary>(m, e, negative);
+        let gate = 1_u128 << (e + ey + 6).clamp(0, 14);
+        return ([low, high], e - 40, exp::ZIV_GATE + gate, (0, 0, [0; 3]));
+    }
+    let (big, e) = log::one_plus(m, e, negative);
+    let (e, j, d) = log::reduce_significand(big, e);
+    let s = log::fast::<Binary>(e, j, log::z_fast(d));
+    (
+        log::negate_if(s, negative),
+        0,
+        exp::ZIV_GATE + extra(my, ey),
+        (e, j, d),
+    )
+}
+
+fn compound_log_accurate(
+    m: u128,
+    e: i32,
+    negative: bool,
+    (eb, j, d): (i32, u32, [u128; 3]),
+) -> (bool, [u128; 3], i32) {
+    if e < -18 {
+        log::small_wide::<Binary>(m, e, negative)
+    } else {
+        log::wide::<Binary>(eb, j, d)
+    }
+}
+
+/// The exact base `1+x = M*2^E`, with M odd, if M fits 256 bits.
+fn compound_base(m: u128, e: i32, negative: bool) -> Option<([u128; 2], i32)> {
+    use super::uint::{add_256, shr_256_sat};
+    let t = m.trailing_zeros();
+    let m = m >> t;
+    let e = e - 112 + t as i32;
+    let g = e.min(0);
+    if -g >= 256 || e.max(0) + (128 - m.leading_zeros()) as i32 > 256 {
+        return None;
+    }
+    let a = shl_256([m, 0], (e - g) as u32);
+    let one = shl_256([1, 0], (-g) as u32);
+    let b = if negative {
+        sub_256(one, a)
+    } else {
+        add_256(one, a)
+    };
+    let t = if b[0] == 0 {
+        128 + b[1].trailing_zeros()
+    } else {
+        b[0].trailing_zeros()
+    };
+    Some((shr_256_sat(b, t), g + t as i32))
+}
+
+/// Compound's dyadic exact/midpoint family. A noninteger y requires an odd
+/// perfect 2^k-th power. The 113-bit spacing of x bounds such a base to 228
+/// bits when its root can round at a binary128 midpoint: below 1 this follows
+/// from the gap between consecutive powers; above 1, from
+/// v2(r^(2^k)-1) = v2(r-1)+v2(r+1)+k-1. Thus 256 bits suffice even though
+/// the exact sum can in general have 16,495 bits. Ordinary integer powers
+/// reuse pow's exact detector; a wide square is reduced before doing so.
+fn compound_exact(m: u128, e: i32, negative_x: bool, ay: u128, negative_y: bool) -> Option<f128> {
+    let (base, e) = compound_base(m, e, negative_x)?;
+    if base[1] == 0 {
+        return exact_dyadic(base[0], e, ay, negative_y);
+    }
+    if negative_y {
+        return None;
+    }
+    let (n, f) = split(ay);
+    let t = n.trailing_zeros();
+    let n = n >> t;
+    let f = f - 112 + t as i32;
+    let k = -f;
+    if !(1..=7).contains(&k) || e & ((1 << k) - 1) != 0 || n > 71 {
+        return None;
+    }
+    // Exact integer square root by trial bits, only on accurate-gate refusal.
+    let mut root = 0_u128;
+    for bit in (0..128).rev() {
+        let candidate = root | 1 << bit;
+        let (high, low) = wmul(candidate, candidate);
+        if (high, low) <= (base[1], base[0]) {
+            root = candidate;
+        }
+    }
+    let (high, low) = wmul(root, root);
+    if [low, high] != base {
+        return None;
+    }
+    for _ in 1..k {
+        let r = root.isqrt();
+        if r * r != root {
+            return None;
+        }
+        root = r;
+    }
+    Some(scaled(
+        checked_pow(root, n as u32)?,
+        i64::from(e >> k) * n as i64,
+    ))
+}
+
+/// The 640-bit tier. Near zero, sum ln(1+x)/x at 2^-639 and multiply the
+/// exact input significand last. A 36-term Taylor sum has tail <2^-648;
+/// for x below 2^-640 its omitted correction is already below this tier's
+/// error policy. Elsewhere Newton refines the logarithm against exact 1+x.
+/// Both routes have relative output error <2^-490 over the active range.
+#[allow(clippy::too_many_arguments)]
+fn compound_wide_raw(
+    m: u128,
+    e: i32,
+    negative_x: bool,
+    my: u128,
+    ey: i32,
+    negative_y: bool,
+    wide_log: (bool, [u128; 3], i32),
+) -> (i32, Big) {
+    if e < -18 {
+        // a = |x| at 2^-640; terms and ratio at 2^-639.
+        let a = if e >= -528 {
+            shl(&from_384([m, 0, 0]), (e + 528) as u32)
+        } else {
+            shr(&from_384([m, 0, 0]), (-e - 528) as u32)
+        };
+        let mut term = one();
+        let mut ratio = term;
+        for k in 1..=35 {
+            term = mul_hi(&term, &a);
+            if term == [0; LIMBS] {
+                break;
+            }
+            let part = div_small(&term, k + 1);
+            ratio = if negative_x || k % 2 == 0 {
+                add(&ratio, &part)
+            } else {
+                sub(&ratio, &part)
+            };
+        }
+        let ratio = shl(&mul_hi(&ratio, &LOG2E), 1);
+        let product = mul_u128(&ratio, m);
+        let l = shr(&product, 113);
+        let l: Big = l[..LIMBS].try_into().unwrap();
+        // L = l*2^(e-638); y*L*2^640 = my*l*2^(e+ey-110).
+        exp_product_wide(&l, my, 110 - e - ey, negative_x ^ negative_y)
+    } else {
+        let l = refine_log(m, e, true, negative_x, wide_log);
+        let l = if negative_x { neg(&l) } else { l };
+        exp_product_wide(&l, my, 92 - ey, negative_x ^ negative_y)
+    }
+}
+
+fn round_wide(n: i32, r: Big) -> f128 {
+    let high = (u128::from(r[LIMBS - 1]) << 64) | u128::from(r[LIMBS - 2]);
+    let sticky = u128::from(r[..LIMBS - 2].iter().any(|&limb| limb != 0));
+    exp::round(n, high, sticky)
 }
 
 /// `log2 |x|` in the logarithm's fast frame, 2^-214, from the exact reduction
@@ -272,7 +535,18 @@ fn accurate_leg(
     negative_y: bool,
 ) -> (i32, [u128; 2], (bool, [u128; 3], i32)) {
     let wide_log = log::wide::<Binary>(e, j, d);
-    let (negative_l, mag, k) = wide_log;
+    let (n, r) = exp_accurate(wide_log, my, ey, negative_y);
+
+    (n, r, wide_log)
+}
+
+/// Exponentiate a floating logarithm times the exact exponent.
+fn exp_accurate(
+    (negative_l, mag, k): (bool, [u128; 3], i32),
+    my: u128,
+    ey: i32,
+    negative_y: bool,
+) -> (i32, [u128; 2]) {
     let negative = negative_y ^ negative_l;
 
     // `|y·log2 x| = my·mag·2^(ey + k − 495)`, under 2^16 and over 2^-122, so
@@ -282,9 +556,7 @@ fn accurate_leg(
     let w = shr_sat(p, shift);
     let dropped = any_below(p, shift);
     let y = negate_frame([w[0], w[1], w[2]], negative, dropped);
-    let (n, r) = exp::exp2_frame(y);
-
-    (n, r, wide_log)
+    exp::exp2_frame(y)
 }
 
 /// [`frame`] on the 256-bit fraction and its integer limb.
@@ -368,6 +640,11 @@ fn exact(ax: u128, ay: u128, negative_y: bool) -> Option<f128> {
     let (m, e) = split(ax);
     let t = m.trailing_zeros();
     let (m, e) = (m >> t, e - 112 + t as i32);
+    exact_dyadic(m, e, ay, negative_y)
+}
+
+/// Exact powers of an odd integer times a power of two.
+fn exact_dyadic(m: u128, e: i32, ay: u128, negative_y: bool) -> Option<f128> {
     let (n, f) = split(ay);
     let t = n.trailing_zeros();
     let (n, f) = (n >> t, f - 112 + t as i32);
@@ -502,6 +779,21 @@ fn wide_raw(
     negative_y: bool,
     (negative_l, mag, k): (bool, [u128; 3], i32),
 ) -> (i32, Big) {
+    let l = refine_log(m, e, false, false, (negative_l, mag, k));
+    let negative = negative_y ^ (l[LIMBS - 1] >> 63 != 0);
+    let l = if l[LIMBS - 1] >> 63 != 0 { neg(&l) } else { l };
+    exp_product_wide(&l, my, 92 - ey, negative)
+}
+
+/// One Newton correction to a logarithm at 2^-620. For compound, form
+/// `(1+x)·2^-L0` as two integer products; no rounded `1+x` enters this tier.
+fn refine_log(
+    m: u128,
+    e: i32,
+    compound: bool,
+    negative_x: bool,
+    (negative_l, mag, k): (bool, [u128; 3], i32),
+) -> Big {
     // `|L0|·2^620 = mag·2^(k + 237)`, at most 636 bits.
     let l0 = shl(&from_384(mag), (k + 237) as u32);
     let l0 = if negative_l { neg(&l0) } else { l0 };
@@ -516,8 +808,26 @@ fn wide_raw(
     // at 2^-640, is the low 640 bits of the product placed at the point.
     let p = mul_u128(&e1, m);
     let s = 111 - e - n1 as i32;
-    let q = shr(&p, s as u32);
-    let eps: Big = q[..LIMBS].try_into().unwrap();
+    let q = if s >= 0 {
+        shr(&p, s as u32)
+    } else {
+        shl(&p, (-s) as u32)
+    };
+    let q: Big = q[..LIMBS].try_into().unwrap();
+    let eps = if compound {
+        let unit = if n1 + 1 >= 0 {
+            shl(&e1, (n1 + 1) as u32)
+        } else {
+            shr(&e1, (-n1 - 1) as u32)
+        };
+        if negative_x {
+            sub(&unit, &q)
+        } else {
+            add(&unit, &q)
+        }
+    } else {
+        q
+    };
     let negative_eps = eps[LIMBS - 1] >> 63 != 0;
     let eps_magnitude = if negative_eps { neg(&eps) } else { eps };
 
@@ -526,20 +836,17 @@ fn wide_raw(
     let c1 = shr(&mul_hi(&eps_magnitude, &LOG2E), 19);
     let c2 = shr(&mul_hi(&mul_hi(&eps_magnitude, &eps_magnitude), &LOG2E), 20);
     let l = add(&l0, &if negative_eps { neg(&c1) } else { c1 });
-    let l = sub(&l, &c2);
-    let negative_l = l[LIMBS - 1] >> 63 != 0;
-    let l = if negative_l { neg(&l) } else { l };
-    let negative = negative_y ^ negative_l;
+    sub(&l, &c2)
+}
 
-    // `|y·L|·2^640 = my·l·2^(ey − 92)`: under 2^656, so twelve limbs hold it.
-    let p = mul_u128(&l, my);
-    let (w, dropped) = if ey <= 92 {
-        (
-            shr(&p, (92 - ey) as u32),
-            any_below_64(&p, (92 - ey) as u32),
-        )
+/// Multiply a wide floating logarithm by `y`, cut its exponential frame,
+/// and reuse the table-free exponential. `shift` locates the 640-bit fraction.
+fn exp_product_wide(l: &Big, my: u128, shift: i32, negative: bool) -> (i32, Big) {
+    let p = mul_u128(l, my);
+    let (w, dropped) = if shift >= 0 {
+        (shr(&p, shift as u32), any_below_64(&p, shift as u32))
     } else {
-        (shl(&p, (ey - 92) as u32), false)
+        (shl(&p, (-shift) as u32), false)
     };
     let w = negate_wide(w, negative, dropped);
 
@@ -1098,5 +1405,166 @@ mod ziv_soundness {
             at.1
         );
         assert!(worst < 2_f64.powi(-480));
+    }
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod compound_ziv_soundness {
+    use super::*;
+    use rug::{Float, ops::Pow};
+    const PREC: u32 = 800;
+
+    fn sample_compound(i: u64) -> (f128, f128) {
+        let a = mix128(2 * i);
+        let b = mix128(2 * i + 1);
+        let ex = match i % 4 {
+            0 => (i / 4 % 32767) as i32,
+            1 => 16383 - 120 + (i / 4 % 140) as i32,
+            2 => 16383 - 19 + (i / 4 % 20) as i32,
+            _ => 0,
+        };
+        let x = f128::from_bits(
+            (ex as u128) << 112
+                | a & MANTISSA_MASK
+                | 1
+                | if ex < 16383 { a & SIGN_MASK } else { 0 },
+        );
+        let k = Float::with_val(113, x).ln_1p().abs().get_exp().unwrap() - 1;
+        let ey = (-k - 118 + ((b >> 112) % 132) as i32).clamp(-16382, 16383);
+        let y = f128::from_bits(b & SIGN_MASK | ((ey + BIAS) as u128) << 112 | b & MANTISSA_MASK);
+        (x, y)
+    }
+
+    fn truth(x: f128, y: f128) -> Float {
+        (Float::with_val(PREC, x).ln_1p() * y).exp()
+    }
+
+    #[test]
+    fn compound_fast_legs_are_sound() {
+        let mut worst = [0.0_f64; 2];
+        let mut counts = [0; 2];
+        for i in 0..1_000_000 {
+            let (x, y) = sample_compound(i);
+            let (m, e) = split(x.to_bits() & !SIGN_MASK);
+            let (my, ey) = split(y.to_bits() & !SIGN_MASK);
+            let (l, scale, gate, _) = compound_log_fast(m, e, x < 0.0, my, ey);
+            let top = ey + scale + 43 - leading_zeros_256(l) as i32;
+            if gate >= GUARD_HALF || !(-119..17).contains(&top) {
+                continue;
+            }
+            let (n, r) = fast(l, my, ey + scale, (x < 0.0) ^ (y < 0.0));
+            let reference = truth(x, y) / Float::with_val(PREC, 2).pow(n - 127);
+            let error = Float::with_val(PREC, reference - Float::with_val(PREC, r))
+                .abs()
+                .to_f64();
+            let band = usize::from(e < -18);
+            counts[band] += 1;
+            worst[band] = worst[band].max(error / gate as f64);
+        }
+        println!("compoundq fast general/small: |err|/gate={worst:?}, checked={counts:?}");
+        assert!(counts.iter().all(|&n| n > 100_000));
+        assert!(worst.iter().all(|&r| r < 0.5));
+    }
+
+    #[test]
+    fn compound_accurate_leg_is_sound() {
+        let mut worst = [0.0_f64; 2];
+        for i in 0..100_000 {
+            let (x, y) = sample_compound(i);
+            let (m, e) = split(x.to_bits() & !SIGN_MASK);
+            let (my, ey) = split(y.to_bits() & !SIGN_MASK);
+            let (l, scale, _, reduction) = compound_log_fast(m, e, x < 0.0, my, ey);
+            let top = ey + scale + 43 - leading_zeros_256(l) as i32;
+            if !(-119..17).contains(&top) {
+                continue;
+            }
+            let l = compound_log_accurate(m, e, x < 0.0, reduction);
+            let (n, r) = exp_accurate(l, my, ey, y < 0.0);
+            let reference = truth(x, y) / Float::with_val(PREC, 2).pow(n - 255);
+            let got = Float::with_val(PREC, r[1]) * Float::with_val(PREC, 2).pow(128) + r[0];
+            let ratio =
+                Float::with_val(PREC, reference - got).abs().to_f64() / ACCURATE_GATE as f64;
+            let band = usize::from(e < -18);
+            worst[band] = worst[band].max(ratio);
+        }
+        println!("compoundq accurate general/small: |err|/gate={worst:?}");
+        assert!(worst.iter().all(|&r| r < 0.5));
+    }
+
+    #[test]
+    fn compound_wide_tier_is_accurate() {
+        let mut worst = [0.0_f64; 2];
+        for i in 0..12_500 {
+            let (x, y) = sample_compound(i);
+            let (m, e) = split(x.to_bits() & !SIGN_MASK);
+            let (my, ey) = split(y.to_bits() & !SIGN_MASK);
+            let (l, scale, _, reduction) = compound_log_fast(m, e, x < 0.0, my, ey);
+            let top = ey + scale + 43 - leading_zeros_256(l) as i32;
+            if !(-119..17).contains(&top) {
+                continue;
+            }
+            let l = compound_log_accurate(m, e, x < 0.0, reduction);
+            let (n, r) = compound_wide_raw(m, e, x < 0.0, my, ey, y < 0.0, l);
+            let reference = truth(x, y) / Float::with_val(PREC, 2).pow(n - 639);
+            let mut got = Float::with_val(PREC, 0);
+            for &limb in r.iter().rev() {
+                got <<= 64;
+                got += limb;
+            }
+            let error = Float::with_val(PREC, reference - got).abs().to_f64() / 2_f64.powi(639);
+            worst[usize::from(e < -18)] = worst[usize::from(e < -18)].max(error);
+            let want = super::super::mpfr::cr_compound(x, y);
+            assert_eq!(
+                round_wide(n, r).to_bits(),
+                want.to_bits(),
+                "x={x:?} y={y:?}"
+            );
+        }
+        println!(
+            "compoundq wide relative error general/small: 2^{:?}",
+            worst.map(f64::log2)
+        );
+        assert!(worst.iter().all(|&r| r < 2_f64.powi(-490)));
+    }
+
+    #[test]
+    fn compound_forced_tiers_edges() {
+        for e in [
+            -16494, -16382, -1000, -640, -256, -128, -114, -113, -112, -19, -18, -1, 0, 1, 113,
+            114, 224, 226, 255, 256, 639, 640, 16383,
+        ] {
+            for sign in [-1.0, 1.0] {
+                for offset in -2_i128..=2 {
+                    let bits = super::super::exp2i(e).to_bits().wrapping_add_signed(offset);
+                    let x = f128::from_bits(bits) * sign;
+                    if !x.is_finite() || x <= -1.0 || x == 0.0 {
+                        continue;
+                    }
+                    let k = Float::with_val(113, x).ln_1p().abs().get_exp().unwrap() - 1;
+                    let y = super::super::exp2i((-k).clamp(-16382, 16383).into());
+                    for y in [y, -y, 0.5, 2.0] {
+                        let (m, e) = split(x.to_bits() & !SIGN_MASK);
+                        let (my, ey) = split(y.to_bits() & !SIGN_MASK);
+                        let (l, scale, _, reduction) = compound_log_fast(m, e, x < 0.0, my, ey);
+                        let top = ey + scale + 43 - leading_zeros_256(l) as i32;
+                        if !(-119..17).contains(&top) {
+                            continue;
+                        }
+                        let l = compound_log_accurate(m, e, x < 0.0, reduction);
+                        let (n, r) = exp_accurate(l, my, ey, y < 0.0);
+                        let want = super::super::mpfr::cr_compound(x, y);
+                        if !undecided(n, r) {
+                            assert_eq!(exp::round(n, r[1], r[0]).to_bits(), want.to_bits());
+                        }
+                        let got = compound_exact(m, e, x < 0.0, y.to_bits() & !SIGN_MASK, y < 0.0)
+                            .unwrap_or_else(|| {
+                                let (n, r) = compound_wide_raw(m, e, x < 0.0, my, ey, y < 0.0, l);
+                                round_wide(n, r)
+                            });
+                        assert_eq!(got.to_bits(), want.to_bits(), "x={x:?} y={y:?}");
+                    }
+                }
+            }
+        }
     }
 }

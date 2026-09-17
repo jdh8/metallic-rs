@@ -142,6 +142,7 @@ mod f128_ {
     mod atanpiq;
     mod atanq;
     mod cbrtq;
+    mod compoundq;
     mod coshq;
     mod cospiq;
     mod cosq;
