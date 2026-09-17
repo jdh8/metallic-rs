@@ -2452,6 +2452,56 @@ fn atan2_fast_raw(
     (value, eps)
 }
 
+/// Double-double tier shared by [`atan2_mag`] and [`atan2pi_mag`]:
+/// `φ = atan(small/big) ∈ [0, π/4]` as an unrounded pair, ≈2⁻¹⁰² accurate, for
+/// the relative Ziv gate [`ziv`] after the quadrant fold.  `q = small/big` is
+/// the IEEE quotient already in hand; it only picks the branch and the cell.
+///
+/// Both legs scale so the larger lands in `[1, 2)`: exact and ratio-preserving,
+/// keeping `small − c·big` / `big + c·small` clear of overflow and the small leg
+/// out of the subnormals (near the subnormal floor the raw quotient's fma
+/// residual quantizes and the low word degrades to ≈2⁻⁵⁵).
+///
+/// Below `q < 2⁻⁴⁰` the answer is the *exact* double-double quotient
+/// (`from_quotient`): atan's own `−q³/3` sits at `≤ 2⁻⁸¹` relative, inside the
+/// 2⁻⁶³ gate.  The rounded IEEE `q` alone is **not** enough (issue #11): its
+/// residual can put the exact ratio within `2⁻¹⁰⁶` of a rounding midpoint, where
+/// `−q³/3` decides the last bit — `atan2(2⁻⁵², 1 − 2⁻⁵³)` rounds *down* to
+/// `2⁻⁵²` while the quotient rounds up.  Certified by
+/// `ziv_soundness::atan2_dd_tier_is_sound`.
+#[inline]
+fn atan2_inner_dd(big: f64, small: f64, q: f64) -> DoubleDouble {
+    let (_, exp) = super::frexp(big);
+    let big = super::ldexp(big, 1 - exp);
+    let small = super::ldexp(small, 1 - exp);
+
+    if q < 9.094_947_017_729_282e-13 {
+        return DoubleDouble::from_quotient(small, big);
+    }
+
+    // Cell reduction without forming small/big as a double-double: with
+    // ratio = small/big, `u = (ratio − c)/(1 + ratio·c) = (small − c·big)/(big +
+    // c·small)`.  `k = round(8·ratio)` reuses the `q` already in hand (scaling
+    // preserves the ratio exactly).  `small − c·big` is exact (c·big ≈ small
+    // in-cell, `from_product` exact), so `u` is accurate and `|u| ≤ 1/16`.
+    let k = (q * 8.0).round_ties_even();
+    let c = k * 0.125;
+    // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
+    let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
+
+    let num = DoubleDouble {
+        high: small,
+        low: 0.0,
+    } + neg(DoubleDouble::from_product(c, big));
+    let den = DoubleDouble {
+        high: big,
+        low: 0.0,
+    } + DoubleDouble::from_product(c, small);
+    let u = num * den.recip();
+
+    atan_cell_fast(table, u)
+}
+
 /// Magnitude of `atan2(y, x)` in `[0, π]` for finite nonzero `a = |x|`, `b = |y|`.
 #[inline]
 fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
@@ -2460,16 +2510,14 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
 
     // Subnormal-result corner: the magnitude can only be subnormal in the
     // first-quadrant direct case (`!swapped && !x_negative`), where it is
-    // `atan(q) ≈ q` with `q = small/big`.  The fast leg's tiny-ratio shortcut
-    // returns the bare IEEE quotient with a degenerate (point) Ziv interval, so it
-    // cannot defer the handful of subnormal-boundary ties where `atan(t) < t` tips
-    // the last bit — route them straight to the 192-bit accurate path.  The danger
-    // zone is `0 < q ≤ 2⁻¹⁰²²`: for normal `q > 2⁻¹⁰²²` the dropped `−q³/3` is
-    // `≪ ulp(q)` so the bare `q` is already correctly rounded, and `q = 0` (a fully
-    // underflowed quotient) means the true ratio is `≤ 2⁻¹⁰⁷⁵`, whose `atan` rounds
-    // to `0` — which the fast leg's `0` already gives.  Astronomically rare on real
-    // input (needs `|y/x| ≤ 2⁻¹⁰²²`), and `q` is the quotient the fast leg already
-    // needs, so the hot path is untouched.
+    // `atan(q) ≈ q` with `q = small/big`.  Below `q ≤ 2⁻¹⁰²²` the double-double
+    // tier's scaled quotient residual quantizes to subnormals and its low word
+    // degrades, so the 192-bit accurate path owns the handful of
+    // subnormal-boundary ties where `atan(t) < t` tips the last bit.  `q = 0` (a
+    // fully underflowed quotient) means the true ratio is `≤ 2⁻¹⁰⁷⁵`, whose `atan`
+    // rounds to `0` — which the fast leg's `0` already gives.  Astronomically rare
+    // on real input (needs `|y/x| ≤ 2⁻¹⁰²²`), and `q` is the quotient the fast leg
+    // already needs, so the hot path is untouched.
     if !swapped && !x_negative && q > 0.0 && q <= f64::MIN_POSITIVE {
         return atan2_tint_mag(a, b, x_negative);
     }
@@ -2491,42 +2539,19 @@ fn atan2_mag(a: f64, b: f64, x_negative: bool) -> f64 {
         }
     }
 
-    // φ = atan(q) ∈ [0, π/4] (`q = small/big`) in double-double, ≈2⁻¹⁰² accurate.
-    let inner = if q < 9.094947017729282e-13 {
-        // Tiny ratio: atan(q) = q far below ½ ulp, and the *unscaled* IEEE
-        // quotient `small/big` is correctly rounded down into the subnormals.
-        DoubleDouble { high: q, low: 0.0 }
-    } else {
-        // Scale both legs so the larger lands in [1, 2): exact and ratio-preserving,
-        // keeping `small − c·big` / `big + c·small` clear of overflow and the small
-        // leg out of the subnormals.
-        let (_, exp) = super::frexp(big);
-        let big = super::ldexp(big, 1 - exp);
-        let small = super::ldexp(small, 1 - exp);
+    // Deep direct band `2⁻¹⁰²² < q < 2⁻⁹⁵⁹`: the IEEE quotient *is* the answer.
+    // atan's `−q³/3` is under `2⁻¹⁹¹⁸·q`, while a ratio of two 53-bit
+    // significands never lands on a 54-bit midpoint `M/2ʲ` (`M·B` is odd and
+    // `≥ 2⁵³`, too wide for `small`) and keeps `≥ 1/(B·2ʲ) > 2⁻¹⁰⁸·q` clear of
+    // one — so correctly rounded division is correctly rounded atan2.  The
+    // relative gate below underflows here (`|v|·2⁻⁶³ < 2⁻¹⁰²²`) and could not
+    // defer the double-double quotient's own `2⁻¹⁰⁶·q` rounding, which that
+    // margin does not cover.
+    if !swapped && !x_negative && q < crate::exp2i(-959) {
+        return q;
+    }
 
-        // Cell reduction without forming small/big as a double-double: with
-        // ratio = small/big, `u = (ratio − c)/(1 + ratio·c) = (small − c·big)/(big +
-        // c·small)`.  `k = round(8·ratio)` reuses the `q` already in hand (scaling
-        // preserves the ratio exactly).  `small − c·big` is exact (c·big ≈ small
-        // in-cell, `from_product` exact), so `u` is accurate and `|u| ≤ 1/16`.
-        let k = (q * 8.0).round_ties_even();
-        let c = k * 0.125;
-        // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
-        let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
-
-        let num = DoubleDouble {
-            high: small,
-            low: 0.0,
-        } + neg(DoubleDouble::from_product(c, big));
-        let den = DoubleDouble {
-            high: big,
-            low: 0.0,
-        } + DoubleDouble::from_product(c, small);
-        let u = num * den.recip();
-
-        atan_cell_fast(table, u)
-    };
-
+    let inner = atan2_inner_dd(big, small, q);
     ziv(atan2_octant(inner, swapped, x_negative))
         .unwrap_or_else(|| atan2_tint_mag(a, b, x_negative))
 }
@@ -2615,39 +2640,7 @@ fn atan2pi_mag(a: f64, b: f64, x_negative: bool) -> f64 {
         }
     }
 
-    #[allow(clippy::branches_sharing_code)] // the scaling mirrors atan2_mag's shape
-    let inner = if q < 9.094_947_017_729_282e-13 {
-        // Unlike atan2, the rounded IEEE quotient is *not* the answer after
-        // the 1/π lift — its ½-ulp rounding error survives the multiply — so
-        // the tiny ratio needs the exact double-double quotient.  Scale the
-        // larger leg into [1, 2) first: near the subnormal floor the raw
-        // quotient's fma residual quantizes to subnormals and the low word
-        // degrades to ≈2⁻⁵⁵ (caught by the wide-magnitude sweep).  atan's own
-        // −q³/3 term sits at ≈2⁻⁸¹ relative, inside the gate.
-        let (_, exp) = super::frexp(big);
-        DoubleDouble::from_quotient(super::ldexp(small, 1 - exp), super::ldexp(big, 1 - exp))
-    } else {
-        let (_, exp) = super::frexp(big);
-        let big = super::ldexp(big, 1 - exp);
-        let small = super::ldexp(small, 1 - exp);
-
-        let k = (q * 8.0).round_ties_even();
-        let c = k * 0.125;
-        // SAFETY: q = small/big ∈ [0, 1] puts k in 0..=8 (see `atan_dd_fast`).
-        let table = ATAN_TABLE[unsafe { k.to_int_unchecked::<i64>() } as usize];
-
-        let num = DoubleDouble {
-            high: small,
-            low: 0.0,
-        } + neg(DoubleDouble::from_product(c, big));
-        let den = DoubleDouble {
-            high: big,
-            low: 0.0,
-        } + DoubleDouble::from_product(c, small);
-        let u = num * den.recip();
-
-        atan_cell_fast(table, u)
-    };
+    let inner = atan2_inner_dd(big, small, q);
 
     // The relative gate is scale-invariant, so the parent's width carries
     // over; the 1/π multiply adds only ≈2⁻¹⁰⁴ relative.
@@ -3506,6 +3499,124 @@ mod ziv_soundness {
         for (i, name) in ["atan2", "atan2pi"].into_iter().enumerate() {
             println!(
                 "{name} fast leg: worst |err|/gate = {:.6} at {:?}",
+                worst[i], worst_case[i]
+            );
+        }
+        assert!(
+            worst.iter().all(|&ratio| ratio < 0.5),
+            "insufficient gate margin"
+        );
+    }
+
+    /// Certify the shared double-double tier ([`atan2_inner_dd`]) behind
+    /// [`ziv`]'s relative gate, after the quadrant fold — plain and π-scaled.
+    /// Log-uniform ratios reach the tiny band's `from_quotient` leg (issue
+    /// #11's family included) and the magnitude spans the whole normal range,
+    /// beyond the plain-`f64` leg's `[2⁻⁹⁶⁰, 2¹⁰²⁰]` band.
+    #[test]
+    fn atan2_dd_tier_is_sound() {
+        const PREC: u32 = 250;
+        let pi = Float::with_val(PREC, rug::float::Constant::Pi);
+        let half_pi = Float::with_val(PREC, &pi / 2);
+        let mut worst = [0.0_f64; 2];
+        let mut worst_case = [(0.0, 0.0, false, false); 2];
+        let mut check = |big: f64, small: f64| {
+            if !(big.is_normal() && small.is_normal()) || small > big {
+                return;
+            }
+            let q = small / big;
+            let inner = atan2_inner_dd(big, small, q);
+            let mut angle = Float::with_val(PREC, small);
+            angle /= big;
+            angle.atan_mut();
+            for swapped in [false, true] {
+                let phi = if swapped {
+                    Float::with_val(PREC, &half_pi - &angle)
+                } else {
+                    angle.clone()
+                };
+                for x_negative in [false, true] {
+                    let direct = !swapped && !x_negative;
+                    // The deep direct band is the IEEE quotient outright
+                    // (`q < 2⁻⁹⁵⁹`, atan2) or the 192-bit tier's (`q ≤ 2⁻⁹⁵⁵`,
+                    // atan2pi); the relative gate would underflow there.
+                    if direct && q < crate::exp2i(-959) {
+                        continue;
+                    }
+                    let truth = if x_negative {
+                        Float::with_val(PREC, &pi - &phi)
+                    } else {
+                        phi.clone()
+                    };
+                    let v = atan2_octant(inner, swapped, x_negative);
+                    let w = v * INV_PI;
+                    let scaled_truth = Float::with_val(PREC, &truth / &pi);
+                    for (j, (pair, reference)) in
+                        [(v, &truth), (w, &scaled_truth)].into_iter().enumerate()
+                    {
+                        if j == 1 && direct && q <= crate::exp2i(-955) {
+                            continue;
+                        }
+                        let got =
+                            Float::with_val(PREC, pair.high) + Float::with_val(PREC, pair.low);
+                        let mut error = Float::with_val(PREC, got - reference).abs();
+                        error /= pair.high.abs() * ATAN_ZIV_EPS;
+                        let ratio = error.to_f64();
+                        if ratio > worst[j] {
+                            worst[j] = ratio;
+                            worst_case[j] = (big, small, swapped, x_negative);
+                        }
+                    }
+                }
+            }
+        };
+        for i in 0..1_000_000_u64 {
+            let h = mix(i);
+            let exponent = -1022 + ((h >> 52) % 2046) as i64;
+            let big = f64::from_bits((((exponent + 1023) as u64) << 52) | (h & (u64::MAX >> 12)));
+            let r = mix(i ^ 0x9e37_79b9);
+            let ratio = if i & 1 == 0 {
+                r as f64 / u64::MAX as f64
+            } else {
+                let e = -1021 + ((r >> 52) % 1021) as i64;
+                f64::from_bits((((e + 1023) as u64) << 52) | (r & (u64::MAX >> 12)))
+            };
+            check(big, big * ratio);
+        }
+        // Seams: the tiny-band cut, every cell boundary `(2k+1)/16`, and issue
+        // #11's family — a power-of-two `small` against `big = 1 − 2⁻⁵³` (and
+        // neighbours), whose exact ratio sits 2⁻¹⁰⁶ past a midpoint.
+        for exponent in [-1022, -1000, -960, -500, -40, 0, 40, 500, 1020, 1023] {
+            let big = crate::exp2i(exponent);
+            let tiny = 9.094_947_017_729_282e-13_f64.to_bits();
+            for bits in [tiny - 1, tiny, tiny + 1] {
+                check(big, big * f64::from_bits(bits));
+            }
+            for k in 0..8 {
+                let seam = (f64::from(k) + 0.5) / 8.0;
+                for step in -2..=2_i64 {
+                    check(
+                        big,
+                        big * f64::from_bits(seam.to_bits().wrapping_add_signed(step)),
+                    );
+                }
+            }
+        }
+        for e in -960..=1023_i64 {
+            let one = f64::from_bits(1.0f64.to_bits() - 1);
+            for step in -4..=4_i64 {
+                let big = super::super::ldexp(
+                    f64::from_bits(one.to_bits().wrapping_add_signed(step)),
+                    e as i32,
+                );
+                for k in 20..=70 {
+                    check(big, super::super::ldexp(crate::exp2i(-k), e as i32));
+                }
+            }
+        }
+        for (i, name) in ["atan2", "atan2pi"].into_iter().enumerate() {
+            println!(
+                "{name} dd tier: worst |err|/gate = {:.6} at {:?}",
                 worst[i], worst_case[i]
             );
         }

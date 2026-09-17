@@ -220,9 +220,21 @@ pub fn mix64(i: u64) -> u64 {
 }
 
 /// Value-uniform `f64` in `[lo, hi]` drawn from a 64-bit hash.
+///
+/// All 64 hash bits reach the result and the final addition *rounds*, so the
+/// last significand bit is as random as the rest.  A 53-bit `unit` folded
+/// exactly by one `fma` into `[−1, 1]` is a multiple of `2⁻⁵²` and can never
+/// set that bit — `1 − 2⁻⁵³`, issue #11's input, was unreachable.
 pub fn uniform(hash: u64, lo: f64, hi: f64) -> f64 {
-    let unit = (hash >> 11) as f64 / (1u64 << 53) as f64; // [0, 1)
-    metallic::fma(unit, hi - lo, lo)
+    let width = hi - lo;
+    let unit_hi = (hash >> 11) as f64 / (1u64 << 53) as f64; // [0, 1)
+    let unit_lo = (hash & 0x7ff) as f64 / 18_446_744_073_709_551_616.0; // < 2⁻⁵³
+    let p = unit_hi * width;
+    let pl = metallic::fma(unit_hi, width, -p);
+    let s = lo + p;
+    let b = s - lo;
+    let e = (lo - (s - b)) + (p - b);
+    s + metallic::fma(unit_lo, width, e + pl)
 }
 
 /// Independent gold-standard cross-check (CORE-MATH uses MPFR as its reference):

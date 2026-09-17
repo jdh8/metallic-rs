@@ -209,6 +209,24 @@ Every f64 function follows the same shape:
 - Overflow/underflow guards must test the **exact first-overflowing bit
   pattern** with the right comparator — five edge bugs (cosh/sinh/exp10/
   lgamma/tgamma) came from `>` vs `>=` on a rounded threshold (`3691a69`).
+- A **rounded intermediate is not a point**: feeding an IEEE quotient (or
+  any rounded value) into a Ziv gate as `{high: q, low: 0}` charges nothing
+  for its own ½-ulp error, and the gate accepts blindly.  Issue #11:
+  `atan2(2⁻⁵², 1 − 2⁻⁵³)` — the exact ratio sits 2⁻¹⁰⁶ past a midpoint, the
+  division rounds up, `atan`'s `−q³/3` rounds down, and the "atan(q) ≈ q far
+  below ½ ulp" shortcut returned the quotient.  Either carry the exact
+  residual (`DoubleDouble::from_quotient`) under the real gate, or *prove*
+  the shortcut against the midpoint grid (a ratio of two 53-bit significands
+  keeps `> 2⁻¹⁰⁸·q` clear of every 54-bit midpoint and never lands on one —
+  enough only when the dropped term is far below that, as in atan2's deep
+  `q < 2⁻⁹⁵⁹` band).
+- A **relative gate underflows**: `|v|·2⁻⁶³` is zero for `|v| < 2⁻⁹⁵⁹`, so a
+  scale-invariant gate silently becomes a point gate near the subnormal
+  floor.  Route that band to a tier whose rounding is proved outright.
+- **Samplers with even LSBs**: `k/2⁵³` folded exactly into `[−1, 1]` by one
+  `fma` is a multiple of 2⁻⁵² — every draw has a zero last bit, and inputs
+  like `1 − 2⁻⁵³` are unreachable.  `tests/all/common::uniform` now adds 64
+  hash bits with a *rounding* final add; build any new sampler the same way.
 
 **The hard tier: port CORE-MATH's own accurate path.** When a function's ties
 run past what dd or `Dint` can resolve, the reliable route to zero misses is

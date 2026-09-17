@@ -57,3 +57,41 @@ fn test_atan2_vs_mpfr() {
         2_000_000,
     );
 }
+
+/// Issue #11: a power-of-two `y` against `x = 1 − 2⁻⁵³` puts the exact ratio
+/// `2⁻¹⁰⁶` past a rounding midpoint, where atan's `−q³/3` decides the last
+/// bit — the double-double tier must not return the bare IEEE quotient.  The
+/// whole exact-scaling family, both signs, every quadrant, and a neighbour scan
+/// around `x = 1`, `y = 2⁻ᵏ` for `k = 20..=70`.
+#[test]
+fn test_atan2_issue_11() {
+    let one = f64::from_bits(1.0f64.to_bits() - 1);
+    let quadrants = |y: f64, x: f64| {
+        [
+            [y, x],
+            [-y, x],
+            [y, -x],
+            [-y, -x],
+            [x, y],
+            [-x, y],
+            [x, -y],
+            [-x, -y],
+        ]
+    };
+    let scaled = (-970..=1024_i64).flat_map(move |e| {
+        // `(1 − 2⁻⁵³)·2ᵉ`: biased exponent `1022 + e`, all-ones significand.
+        let x = f64::from_bits((((1022 + e) as u64) << 52) | (u64::MAX >> 12));
+        let y = f64::from_bits(((1023 + e - 52) as u64) << 52);
+        quadrants(y, x)
+    });
+    let neighbours = (20..=70_i64).flat_map(move |k| {
+        (-4..=4_i64).flat_map(move |dx| {
+            (-4..=4_i64).flat_map(move |dy| {
+                let x = f64::from_bits(one.to_bits().wrapping_add_signed(dx));
+                let y = f64::from_bits((((1023 - k) as u64) << 52).wrapping_add_signed(dy));
+                quadrants(y, x)
+            })
+        })
+    });
+    common::test_bivariate_cases(metallic::atan2, core_math::atan2, scaled.chain(neighbours));
+}
