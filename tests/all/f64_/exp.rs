@@ -9,6 +9,28 @@ fn test_exp() {
     common::test_univariate_cases(metallic::exp, core_math::exp, dense.chain(bits));
 }
 
+/// The subnormal-result band (issue #10's inline pre-scaled leg): a dense sweep
+/// of `[-745.2, -708.3]`, every representation around the first normal input, and
+/// the neighbourhood of every `2^-k` result boundary (`k = 1022..=1074`), where
+/// the leg's scale `s` and the table index both change — bit-exact against the
+/// oracle.
+#[test]
+fn test_exp_subnormal_band() {
+    let width = -708.3_f64 - (-745.2_f64);
+    let dense = (0..=2_000_000).map(|i| metallic::fma(f64::from(i), width / 2_000_000.0, -745.2));
+    let threshold = f64::from_bits(0xc086_232b_dd7a_bcd2);
+    let around = |c: f64| {
+        let b = c.to_bits();
+        (b - 512..=b + 512).map(f64::from_bits)
+    };
+    let boundaries = (1022..=1074).flat_map(|k| around(-f64::from(k) * core::f64::consts::LN_2));
+    common::test_univariate_cases(
+        metallic::exp,
+        core_math::exp,
+        dense.chain(around(threshold)).chain(boundaries),
+    );
+}
+
 #[test]
 fn test_exp_worst_cases() {
     common::test_worst_univariate("exp", metallic::exp, core_math::exp);

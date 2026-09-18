@@ -171,6 +171,19 @@ in the shadow of a division is already free, and removing it buys nothing
   Correction-scaled gates `eps = |z|·(C·|r|+F)+G` (asin/acos) and per-region
   gates (lgamma near its zeros) are the same idea. Have the fast leg **return
   its own gate** so regions can differ.
+- **Inline the subnormal-result band; never guard the whole fast leg on
+  `q ≥ MIN_EXP`.** exp/exp2/exp10 sent every subnormal result (2.5% of the
+  value-uniform bench band) to the cold accurate leg: 56 ns against CORE-MATH's
+  10 on that band, and the *whole* 1.20× headline — the normal band alone was
+  1.02×.  The cure is CORE-MATH's pre-scaled leg (`two_level_subnormal_raw`,
+  2026-09-17): Fast2Sum `s + th` with `s = 2^(−q−1022)` so `ulp(fh)` *is* the
+  subnormal ulp lifted into the mantissa frame, gate `fh + (fl' ± ε')`, mask
+  the exponent field off.  Folding the Fast2Sum residual into `fl` rounds it,
+  and that slip (`≤ |fl'|·2⁻⁵³`) can dwarf the fixed ε — charge it in the gate
+  (`ε' = ε + |fl'|·2⁻⁵¹`) rather than argue it harmless; the refusal rate stays
+  `2ε'/ulp(fh)`, which *shrinks* with depth.  Split the bench at the guard
+  first (`exp_norm`/`exp_sub`, the `lgamma_reflect` precedent) — it prices the
+  fallback in one run, no source change.
 - **Two-tier fallback**: fast leg → *cheap* dd refinement (~50–70 ns) → the
   heavyweight tier (triple-double/`Dint`, ~10³ ns) only on genuine TMD misses.
   Wiring the heavy tier directly onto first-gate misses costs +12 ns on the
@@ -287,7 +300,10 @@ Live status (ratio table, open laggards, per-function notes) is maintained in
 **issue #5** — read it with `gh api repos/jdh8/metallic-rs/issues/5 --jq
 .body` and its comments before picking a target; the binary128 table lives in
 BINARY128.md § Status (as of 2026-08-24 no `q` function is above
-1.13x). As of 2026-07-02 (calm box):
-no function above 1.15×, and the remaining ~1.05–1.10 cluster (asinh, asin,
-atanh, log1p, exp2/exp10) has no known mechanism — treat those as research,
-not backlog.
+1.13x).  #5 is closed; newer findings get their own issue (#8 f32 rows, #9,
+#10 the 2026-09-11 Intel re-baseline).  As of 2026-09-17 (i9-14900K, cpu14):
+#10's five SLOW rows are all addressed but `lgamma_reflect` (a diagnostic band
+bench, ~1.2×; public `lgamma` is 1.10×), and the remaining ~1.05–1.10 cluster
+(asinh, asin, atanh, log1p) has no known mechanism — treat those as research,
+not backlog.  Before calling a value-uniform band "fast-leg-bound", split the
+bench at every fast-leg guard: exp's 1.20× was 100% forced fallback.

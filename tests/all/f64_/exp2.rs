@@ -7,6 +7,28 @@ fn test_exp2() {
     common::test_univariate_cases(metallic::exp2, core_math::exp2, dense.chain(bits));
 }
 
+/// The subnormal-result band (issue #10's inline pre-scaled leg): a dense sweep
+/// of `[-1075.0, -1021.9]`, every representation around the first normal input, and
+/// the neighbourhood of every `2^-k` result boundary (`k = 1022..=1074`), where
+/// the leg's scale `s` and the table index both change — bit-exact against the
+/// oracle.
+#[test]
+fn test_exp2_subnormal_band() {
+    let width = -1021.9_f64 - (-1075.0_f64);
+    let dense = (0..=2_000_000).map(|i| metallic::fma(f64::from(i), width / 2_000_000.0, -1075.0));
+    let threshold = -1022.0;
+    let around = |c: f64| {
+        let b = c.to_bits();
+        (b - 512..=b + 512).map(f64::from_bits)
+    };
+    let boundaries = (1022..=1074).flat_map(|k| around(-f64::from(k) * 1.0));
+    common::test_univariate_cases(
+        metallic::exp2,
+        core_math::exp2,
+        dense.chain(around(threshold)).chain(boundaries),
+    );
+}
+
 /// Correct-rounding gate on CORE-MATH's hard-to-round corpus.
 #[test]
 fn test_exp2_worst_cases() {

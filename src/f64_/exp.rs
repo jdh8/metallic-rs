@@ -252,6 +252,29 @@ const EXP10_FAST3_COEFFS: [f64; 4] = [
 /// while still gating in the fast result for all but a ~2⁻⁹ fraction of inputs.
 const EXP_TWO_LEVEL_ZIV_EPS: f64 = 2.168_404_344_971_009e-19; // 2^-62
 
+/// Extra Ziv slack per unit of the *subnormal* leg's low word, `2⁻⁵¹`.
+///
+/// [`two_level_subnormal_raw`] folds the Fast2Sum residual `e` of `s + th` into
+/// `fl`, and `RN(fl + e)` can drop up to `ulp(fl')/2 ≤ |fl'|·2⁻⁵³` — far more
+/// than [`EXP_TWO_LEVEL_ZIV_EPS`] once `|e| ≫ |fl|` (the deep subnormals, where
+/// `s = 2⁵²` makes `|e|` reach `½`).  Charging `|fl'|·2⁻⁵¹` makes the gate a
+/// rigorous bound on that slip with a 4× margin of its own, and it costs nothing
+/// where it does not matter: the rate the gate refuses is `2·ε'/ulp(fh)`, and
+/// `ulp(fh) = s·2⁻⁵²` grows with `s` faster than `|fl'| ≤ s·2⁻⁵³ + 2⁻¹²` does.
+const SUBNORMAL_FL_SLIP: f64 = 4.440_892_098_500_626e-16; // 2^-51
+
+/// Smallest `x` with `eˣ ≥ 2⁻¹⁰²²` — `−1022·ln2` rounded *up* to a double
+/// (`eˣ/2⁻¹⁰²² − 1 ≈ +2.7e-14` here, `≈ −8.6e-14` one ulp below).  Below it
+/// every result is subnormal and [`exp`] takes the pre-scaled leg.
+const EXP_MIN_NORMAL_ARG: f64 = f64::from_bits(0xc086_232b_dd7a_bcd2);
+
+/// [`EXP_MIN_NORMAL_ARG`] for [`exp10`]: `−1022·log₁₀2` rounded up
+/// (`10ˣ/2⁻¹⁰²² − 1 ≈ +1.2e-13` here, `≈ −6.3e-15` one ulp below).
+const EXP10_MIN_NORMAL_ARG: f64 = f64::from_bits(0xc073_3a71_46f7_2a41);
+
+/// [`EXP_MIN_NORMAL_ARG`] for [`exp2`]: `2ˣ ≥ 2⁻¹⁰²²` exactly when `x ≥ −1022`.
+const EXP2_MIN_NORMAL_ARG: f64 = -1022.0;
+
 /// `ln(2)/4096` split into three words for the *accurate* two-level reduction
 /// (`exp_accurate`): `dx = x − L2H·t + L2L·t + L2LL·t` carried as a double-double.
 /// `L2H` has enough trailing zero bits that `L2H·t` is exact for `|t| < 2²³`, and
@@ -505,6 +528,46 @@ fn exp_two_level_fold(t: i64, dx: f64) -> (f64, f64, i64) {
     two_level_fold(t, dx, &EXP_FAST3_COEFFS)
 }
 
+/// Pre-scale a lean fold `(th + fl)·2^q` with `q ≤ −1022` onto the subnormal
+/// grid: returns the raw pair `(fh, fl')` and its Ziv half-width `ε'`.
+///
+/// CORE-MATH's shape (`exp.c`, the `subnormal case`): with `s = 2^(−q−1022)`
+/// (`s ≥ 1`, exponent field `1 − q`), `fh + fl' = s + th + fl` and `ulp(fh) =
+/// s·2⁻⁵² = 2⁻¹⁰⁷⁴·2^(−q)` — the result's own ulp lifted into `th`'s frame — so
+/// rounding `fh + fl'` to a double rounds the mantissa exactly where the
+/// subnormal result must round, and its fraction field *is* the result's bit
+/// pattern ([`two_level_subnormal`] masks the exponent away).  `s + th` is one
+/// Fast2Sum (`s ≥ th`: `s ≥ 2` for `q ≤ −1023`, and `q = −1022` only ever
+/// arrives with `th = 1`, since `x < EXP_MIN_NORMAL_ARG` puts `2^(−1022 + j/4096)`
+/// out of reach for `j ≥ 1`); its residual `e` rides into `fl`, whose rounding
+/// the gate charges through [`SUBNORMAL_FL_SLIP`].  `th + fl < 2 ≤ s` (the
+/// reduction keeps `th·bᵈˣ < 2^(1 − 1/8192)`), so the fraction never carries
+/// into the hidden bit, and `fh + fl' → s` exactly is the underflow to `+0`.
+#[inline]
+fn two_level_subnormal_raw(th: f64, fl: f64, q: i64) -> (DoubleDouble, f64) {
+    let s = f64::from_bits(((1 - q) as u64) << super::EXP_SHIFT);
+    let sum = fast_sum(s, th);
+    let fl = fl + sum.low;
+    let eps = crate::fma(fl.abs(), SUBNORMAL_FL_SLIP, EXP_TWO_LEVEL_ZIV_EPS);
+    (
+        DoubleDouble {
+            high: sum.high,
+            low: fl,
+        },
+        eps,
+    )
+}
+
+/// Gate [`two_level_subnormal_raw`]'s pair: the subnormal result when the Ziv
+/// window `fh + (fl' ± ε')` rounds to one double, `None` for the accurate leg.
+#[inline]
+fn two_level_subnormal(th: f64, fl: f64, q: i64) -> Option<f64> {
+    let (m, eps) = two_level_subnormal_raw(th, fl, q);
+    let lo = m.high + (m.low - eps);
+    let hi = m.high + (m.low + eps);
+    (lo == hi).then_some(f64::from_bits(lo.to_bits() & (u64::MAX >> 12)))
+}
+
 /// Shared core of the lean two-level fold: returns `(th, fl, q)` with
 /// `(th + fl)·2`<sup>`q`</sup> the function value, where `th = 2`<sup>`j/4096`</sup>`
 /// ∈ [1, 2)`, `q = t >> 12`, `j = t & 4095`.  `dx` is the reduced residual and
@@ -729,17 +792,21 @@ pub fn exp(x: f64) -> f64 {
     // CORE-MATH style.  `th ∈ [1, 2)` and `|fl| ≲ ln2/8192`, so `ε = 2⁻⁶²` is
     // ~11 ulp of `fl` and survives the inner `fl ± ε`; the outer `th + …` then
     // resolves the nearest rounding without the renormalizing `fast_sum` + branch
-    // the reuse contract needs.  `q ≥ −1021` keeps `(th + fl)·2^q ≥ 2⁻¹⁰²¹·⁰`
-    // comfortably normal (so `fast_ldexp` is exact and the subnormal boundary
-    // stays on the accurate path).
+    // the reuse contract needs.  Above `EXP_MIN_NORMAL_ARG` the result is normal
+    // (`q ≥ −1022`, and `q = −1022` only with `lo ≥ 1`), so `fast_ldexp` is
+    // exact; below it every result is subnormal and the pre-scaled leg
+    // (`two_level_subnormal`) rounds on that grid inline — sending the whole
+    // band to the accurate leg cost 56 ns against CORE-MATH's 10 (issue #10).
     let (t, dx) = exp_two_level_reduce(x);
     let (th, fl, q) = exp_two_level_fold(t, dx);
-    if q >= -1021 {
+    if x >= EXP_MIN_NORMAL_ARG {
         let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
         let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);
         if lo == hi {
             return fast_ldexp(lo, q);
         }
+    } else if let Some(y) = two_level_subnormal(th, fl, q) {
+        return y;
     }
 
     exp_accurate(x)
@@ -1057,23 +1124,34 @@ pub fn exp2(x: f64) -> f64 {
     // of two).  `th ∈ [1, 2)` dominates `|fl| ≲ ln2/8192`, so the raw `th + (fl ± ε)`
     // gate resolves the rounding without `exp_two_level_mantissa`'s renormalizing
     // `fast_sum` + branch (that step exists only for the reuse consumers that add an
-    // `e⁻ˣ` term).  `q ≥ −1021` keeps `(th + fl)·2^q` comfortably normal so
-    // `fast_ldexp` is exact and the subnormal boundary stays on the accurate path.
-    let scaled4 = (x * 4096.0).round_ties_even();
-    // SAFETY: `|x| < 1075`, so `|scaled4| < 2^22`.
-    let t = unsafe { scaled4.to_int_unchecked::<i64>() };
-    let sigma4 = crate::fma(x, 4096.0, -scaled4);
-    let dx = crate::fma(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
+    // `e⁻ˣ` term).  `x ≥ −1022` keeps the result normal (`fast_ldexp` exact);
+    // below it the pre-scaled subnormal leg rounds inline, as in [`exp`].
+    let (t, dx) = exp2_fast_reduce(x);
     let (th, fl, q) = exp_two_level_fold(t, dx);
-    if q >= -1021 {
+    if x >= EXP2_MIN_NORMAL_ARG {
         let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
         let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);
         if lo == hi {
             return fast_ldexp(lo, q);
         }
+    } else if let Some(y) = two_level_subnormal(th, fl, q) {
+        return y;
     }
 
     exp2_accurate(x)
+}
+
+/// [`exp2`]'s fast reduction: `(t, dx)` with `2ˣ = 2^(t/4096)·exp(dx)`,
+/// `t = round(4096·x)` and `dx = (4096·x − t)·ln2/4096`; `sigma = 4096·x − t`
+/// is exact (4096 is a power of two).  `x` must be finite with `|x| < 1075`.
+#[inline]
+fn exp2_fast_reduce(x: f64) -> (i64, f64) {
+    let scaled4 = (x * 4096.0).round_ties_even();
+    // SAFETY: `|x| < 1075`, so `|scaled4| < 2^22`.
+    let t = unsafe { scaled4.to_int_unchecked::<i64>() };
+    let sigma4 = crate::fma(x, 4096.0, -scaled4);
+    let dx = crate::fma(sigma4, LN2_OVER_4096_LO, sigma4 * LN2_OVER_4096_HI);
+    (t, dx)
 }
 
 /// `ln 2` as a double-double, the tiny-band slope of [`exp2m1`].
@@ -1298,33 +1376,44 @@ pub fn exp10(x: f64) -> f64 {
     // `|δ| ≤ log₁₀(2)/8192`.  The fold then evaluates `10^δ` with [`EXP10_FAST3_COEFFS`]
     // (`ln10` baked in), so no double-double `x·ln10` is formed — `δ` costs two FMAs
     // instead of the old base-`e` reduction's `from_product` + four-FMA chain.
-    let scaled = (x * N_LOG2_10_4096).round_ties_even();
+    let (t, delta) = exp10_fast_reduce(x);
 
-    // SAFETY: `|x| < 324`, so `|scaled| < 324·N_LOG2_10_4096 < 2²³`.
-    let t = unsafe { scaled.to_int_unchecked::<i64>() };
-
-    // `δ = (x − scaled·HI) + scaled·MID` as one f64 (`log₁₀(2)/4096 = HI − MID − LO`,
-    // so the residual *adds* `MID`/`LO`, mirroring the accurate path's `dx0 + dxl`).
-    // `scaled·HI` is exact (`HI` has 23 trailing zero bits, `|scaled| < 2²³`) and
-    // cancels against `x` down to `|δ|` scale (Sterbenz), so the first FMA is exact;
-    // the second carries `MID`.  The dropped `scaled·LO ≈ 2⁻⁷⁸` rides far below the
-    // leg's budget.
-    let dh = crate::fma(-scaled, LOG10_2_OVER_4096_HI, x);
-    let delta = crate::fma(scaled, LOG10_2_OVER_4096_MID, dh);
-
-    // Fast path: the two-level lean fold, gated like `exp`.  `q ≥ −1021` keeps the
-    // subnormal transition (where the mantissa's normalization can shift `q`) on the
-    // accurate path.
+    // Fast path: the two-level lean fold, gated like `exp`: normal results
+    // (`x ≥ EXP10_MIN_NORMAL_ARG`) through `fast_ldexp`, subnormal ones through
+    // the pre-scaled leg.
     let (th, fl, q) = two_level_fold(t, delta, &EXP10_FAST3_COEFFS);
-    if q >= -1021 {
+    if x >= EXP10_MIN_NORMAL_ARG {
         let lo = th + (fl - EXP_TWO_LEVEL_ZIV_EPS);
         let hi = th + (fl + EXP_TWO_LEVEL_ZIV_EPS);
         if lo == hi {
             return fast_ldexp(lo, q);
         }
+    } else if let Some(y) = two_level_subnormal(th, fl, q) {
+        return y;
     }
 
     exp10_accurate(x)
+}
+
+/// [`exp10`]'s fast reduction: `(t, δ)` with `10ˣ = 2^(t/4096)·10^δ`,
+/// `t = round(4096·x·log₂10)`, `|δ| ≤ log₁₀(2)/8192`.
+///
+/// `δ = (x − scaled·HI) + scaled·MID` as one f64 (`log₁₀(2)/4096 = HI − MID − LO`,
+/// so the residual *adds* `MID`/`LO`, mirroring the accurate path's `dx0 + dxl`).
+/// `scaled·HI` is exact (`HI` has 23 trailing zero bits, `|scaled| < 2²³`) and
+/// cancels against `x` down to `|δ|` scale (Sterbenz), so the first FMA is exact;
+/// the second carries `MID`.  The dropped `scaled·LO ≈ 2⁻⁷⁸` rides far below the
+/// leg's budget.  `x` must be finite with `|x| < 324`.
+#[inline]
+fn exp10_fast_reduce(x: f64) -> (i64, f64) {
+    let scaled = (x * N_LOG2_10_4096).round_ties_even();
+
+    // SAFETY: `|x| < 324`, so `|scaled| < 324·N_LOG2_10_4096 < 2²³`.
+    let t = unsafe { scaled.to_int_unchecked::<i64>() };
+
+    let dh = crate::fma(-scaled, LOG10_2_OVER_4096_HI, x);
+    let delta = crate::fma(scaled, LOG10_2_OVER_4096_MID, dh);
+    (t, delta)
 }
 
 /// Hard-to-round database for [`exp10_accurate`]: inputs whose `10ˣ` lies within
@@ -1983,6 +2072,222 @@ mod accurate_dd_tests {
         assert!(
             worst < 2.0_f64.powi(-103),
             "exp_dd_of_dd_accurate only reached 2^-{bits:.1} (want < 2^-103)"
+        );
+    }
+}
+
+#[cfg(all(test, feature = "mpfr"))]
+mod ziv_soundness {
+    use super::*;
+    use rug::Float;
+
+    fn mix(i: u64) -> u64 {
+        let mut z = i.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Value-uniform `x` in `[lo, hi)` from the deterministic stream.
+    fn uniform(i: u64, lo: f64, hi: f64) -> f64 {
+        let unit = (mix(i) >> 11) as f64 / (1u64 << 53) as f64;
+        crate::fma(unit, hi - lo, lo)
+    }
+
+    /// Worst `|leg − truth| / gate` over `n` value-uniform draws from `[lo, hi)`.
+    /// `leg` returns the raw pair the Ziv test sees, its half-width, and the
+    /// binary exponent `q` the pair is scaled by; `truth` is `bˣ` at 250 bits,
+    /// shifted by `−q` (exact) and offset by `s` so the comparison happens in
+    /// the pair's own frame.  `< 0.5` everywhere certifies the 2× margin.
+    fn worst_ratio(
+        lo: f64,
+        hi: f64,
+        n: u64,
+        leg: impl Fn(f64) -> (DoubleDouble, f64, i64, f64),
+        pow: impl Fn(Float) -> Float,
+    ) -> (f64, f64) {
+        let mut worst = 0.0_f64;
+        let mut worst_x = lo;
+        for i in 0..n {
+            let x = uniform(i, lo, hi);
+            let (m, gate, q, s) = leg(x);
+            let got = Float::with_val(250, m.high) + Float::with_val(250, m.low);
+            let q32 = i32::try_from(-q).expect("q fits i32");
+            let truth = (pow(Float::with_val(250, x)) << q32) + Float::with_val(250, s);
+            let ratio = Float::with_val(250, &got - &truth).abs().to_f64() / gate;
+            if ratio > worst {
+                worst = ratio;
+                worst_x = x;
+            }
+        }
+        (worst, worst_x)
+    }
+
+    fn certify(name: &str, (worst, x): (f64, f64)) {
+        println!("{name}: worst |err|/gate = {worst:.6} at x={x:e}");
+        assert!(
+            worst < 0.5,
+            "{name} gate covers only {:.2}× the slip at x={x:e}",
+            1.0 / worst
+        );
+    }
+
+    /// The normal lean pair `(th, fl)` under the fixed [`EXP_TWO_LEVEL_ZIV_EPS`].
+    fn normal_leg((th, fl, q): (f64, f64, i64)) -> (DoubleDouble, f64, i64, f64) {
+        (
+            DoubleDouble { high: th, low: fl },
+            EXP_TWO_LEVEL_ZIV_EPS,
+            q,
+            0.0,
+        )
+    }
+
+    /// The pre-scaled subnormal pair and its `|fl'|`-dependent gate; `s` is the
+    /// scale the truth must be offset by.
+    fn subnormal_leg((th, fl, q): (f64, f64, i64)) -> (DoubleDouble, f64, i64, f64) {
+        let (m, eps) = two_level_subnormal_raw(th, fl, q);
+        (
+            m,
+            eps,
+            q,
+            f64::from_bits(((1 - q) as u64) << super::super::EXP_SHIFT),
+        )
+    }
+
+    fn exp_fold(x: f64) -> (f64, f64, i64) {
+        let (t, dx) = exp_two_level_reduce(x);
+        exp_two_level_fold(t, dx)
+    }
+
+    fn exp2_fold(x: f64) -> (f64, f64, i64) {
+        let (t, dx) = exp2_fast_reduce(x);
+        exp_two_level_fold(t, dx)
+    }
+
+    fn exp10_fold(x: f64) -> (f64, f64, i64) {
+        let (t, delta) = exp10_fast_reduce(x);
+        two_level_fold(t, delta, &EXP10_FAST3_COEFFS)
+    }
+
+    /// [`EXP_TWO_LEVEL_ZIV_EPS`] must cover the lean fold's slip on every normal
+    /// band [`exp`], [`exp2`] and [`exp10`] gate with it.
+    #[test]
+    fn exp_normal_legs_are_sound() {
+        let n = 2_000_000;
+        certify(
+            "exp normal leg",
+            worst_ratio(
+                EXP_MIN_NORMAL_ARG,
+                709.78,
+                n,
+                |x| normal_leg(exp_fold(x)),
+                Float::exp,
+            ),
+        );
+        certify(
+            "exp2 normal leg",
+            worst_ratio(
+                EXP2_MIN_NORMAL_ARG,
+                1024.0,
+                n,
+                |x| normal_leg(exp2_fold(x)),
+                Float::exp2,
+            ),
+        );
+        certify(
+            "exp10 normal leg",
+            worst_ratio(
+                EXP10_MIN_NORMAL_ARG,
+                308.25,
+                n,
+                |x| normal_leg(exp10_fold(x)),
+                Float::exp10,
+            ),
+        );
+    }
+
+    /// The subnormal leg's gate `ε' = ε + |fl'|·2⁻⁵¹` must cover the lean slip
+    /// *and* the rounding of `fl + e` over the whole subnormal-result band of
+    /// each function, down to the underflow threshold.
+    #[test]
+    fn exp_subnormal_legs_are_sound() {
+        let n = 2_000_000;
+        certify(
+            "exp subnormal leg",
+            worst_ratio(
+                f64::from_bits(0xc087_4910_d52d_3051),
+                EXP_MIN_NORMAL_ARG,
+                n,
+                |x| subnormal_leg(exp_fold(x)),
+                Float::exp,
+            ),
+        );
+        certify(
+            "exp2 subnormal leg",
+            worst_ratio(
+                -1074.999,
+                EXP2_MIN_NORMAL_ARG,
+                n,
+                |x| subnormal_leg(exp2_fold(x)),
+                Float::exp2,
+            ),
+        );
+        certify(
+            "exp10 subnormal leg",
+            worst_ratio(
+                -323.607,
+                EXP10_MIN_NORMAL_ARG,
+                n,
+                |x| subnormal_leg(exp10_fold(x)),
+                Float::exp10,
+            ),
+        );
+    }
+
+    /// The `q = −1022` corner of the subnormal leg (`s = 1`, `th = 1`, `fl < 0`):
+    /// the band just under each normal threshold, where `x` rounds to the
+    /// `t = −1022·4096` grid point.
+    #[test]
+    fn exp_subnormal_top_corner_is_sound() {
+        let n = 200_000;
+        let w = core::f64::consts::LN_2 / 8192.0;
+        certify(
+            "exp subnormal q=-1022",
+            worst_ratio(
+                EXP_MIN_NORMAL_ARG - w,
+                EXP_MIN_NORMAL_ARG,
+                n,
+                |x| {
+                    let f = exp_fold(x);
+                    assert_eq!(
+                        (f.0, f.2),
+                        (1.0, -1022),
+                        "corner band left t = -1022·4096 at x={x:e}"
+                    );
+                    subnormal_leg(f)
+                },
+                Float::exp,
+            ),
+        );
+        certify(
+            "exp2 subnormal q=-1022",
+            worst_ratio(
+                -1022.0 - 1.0 / 8192.0,
+                EXP2_MIN_NORMAL_ARG,
+                n,
+                |x| subnormal_leg(exp2_fold(x)),
+                Float::exp2,
+            ),
+        );
+        certify(
+            "exp10 subnormal q=-1022",
+            worst_ratio(
+                EXP10_MIN_NORMAL_ARG - core::f64::consts::LOG10_2 / 8192.0,
+                EXP10_MIN_NORMAL_ARG,
+                n,
+                |x| subnormal_leg(exp10_fold(x)),
+                Float::exp10,
+            ),
         );
     }
 }
