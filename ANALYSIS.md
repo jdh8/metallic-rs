@@ -145,7 +145,7 @@ AMD Ryzen 7 8700F 8-Core Processor: 16 logical CPUs; 1-minute load 18.79 before 
 | `atan2q` | 313† / 251† | 273† / 235† | 233† / 269† | 0 / 0 | 6.32 / 0.0137 | 756† / 855† | 128-bit fixed (256-bit frame) → 384-bit fixed / 128-bit fixed (192-bit frame) → 384-bit fixed | 4272 / 4403 |
 | `atanq` | 353† / 199† | 303† / 183† | 219† / 200† | 0 / 0 | 0.00514 / 7.79e-05 | 756† / 809† | 128-bit fixed (256-bit frame) → 384-bit fixed / 128-bit fixed (192-bit frame) → 384-bit fixed | 4248 / 4130 |
 | `cbrtq` | 130 / 127 | 129 / 124 | 127 / 160 | 0 / 0 | 3.17 / 1.56 | 120 / 55 | 128-bit fixed → exact 384-bit integer / 128-bit fixed → 256-bit or modular 128-bit integer | 1584 / 168 |
-| `cosq` | 279 / — | 240 / — | 227 / — | 0 / — | 0.0504 / — | 1100 / — | 128-bit fixed (256-bit frame) → 384-bit fixed / — | 16152 / — |
+| `cosq` | 279 / — | 240 / — | 227 / — | 0 / — | 0.0504 / — | 1100 / — | 128-bit fixed (192-bit frame) → 384-bit fixed / — | 16152 / — |
 | `exp2q` | 158 / 97 | 143 / 84 | 145 / 95 | 0 / 0 | 0.000777 / 0.00133 | 356 / 584 | 128-bit fixed → 256-bit fixed / 128-bit fixed → 192-bit fixed → 384-bit fixed | 6632 / 5720 |
 | `exp10q` | 158 / 105 | 143 / 91 | 145 / 102 | 0 / 0 | 0.000771 / 0.00132 | 356 / 633 | 128-bit fixed → 256-bit fixed / 128-bit fixed → 192-bit fixed → 384-bit fixed | 6632 / 5720 |
 | `expm1q` | 167 / 129 | 155 / 107 | 146 / 163 | 0 / 0 | 0.00132 / 0.000178 | 368 / 140 | 128-bit fixed → 256-bit fixed (384-bit product) / 128-bit fixed → 192-bit fixed → 384-bit fixed | 6632 / 3176 |
@@ -157,7 +157,7 @@ AMD Ryzen 7 8700F 8-Core Processor: 16 logical CPUs; 1-minute load 18.79 before 
 | `logq` | 162 / 151 | 134 / 145 | 140 / 142 | 0 / 0 | 0 / 0 | 1165† / 517 | 256-bit fixed → 384-bit fixed / 128-bit fixed (192-bit frame) → 384-bit fixed (448-bit product) | 12564 / 6896 |
 | `powq` | 283 / — | 256 / — | 254 / — | 0 / — | 0.000431 / — | 562 / — | 128/256-bit fixed → 256/384-bit fixed → exact integer or 640-bit fixed / — | 19116 / — |
 | `rsqrtq` | 117 / 97 | 113 / 93 | 102 / 133 | 0 / 0 | 1.59 / 0.0973 | 117 / 53 | 128-bit fixed → exact 384-bit integer / 128-bit fixed → exact 256-bit integer | 1576 / 1040 |
-| `sinq` | 279 / — | 240 / — | 227 / — | 0 / — | 0.0506 / — | 1100 / — | 128-bit fixed (256-bit frame) → 384-bit fixed / — | 16152 / — |
+| `sinq` | 279 / — | 240 / — | 227 / — | 0 / — | 0.0506 / — | 1100 / — | 128-bit fixed (192-bit frame) → 384-bit fixed / — | 16152 / — |
 | `sqrtq` | 143 / 97 | 135 / 93 | 116 / 90 | 0 / 0 | 0.397 / 0.0396 | 69 / 27 | 128-bit fixed → exact 256/384-bit integer / 128-bit fixed → modular 128-bit integer | 1576 / 1040 |
 | `tanq` | 360† / — | 313† / — | 292† / — | 0 / — | 0.198 / — | 1238† / — | 128-bit fixed (256-bit frame) → 384-bit fixed / — | 9480 / — |
 

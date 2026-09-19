@@ -329,13 +329,14 @@ normalizes into a floating fraction at its own exponent, so `θ = g·π/2`
 keeps full relative precision however close `x` sits to a multiple of π/2.
 A degree-four minimax for sine and six Taylor terms for cosine in `θ²`
 (eighteen Taylor coefficients each on the accurate leg) and a 128-entry
-`sin`/`cos(j·π/256)` table recombine in `atan2q`'s frames; below 2^-8 the
+`sin`/`cos(j·π/256)` table recombine in a 192-bit frame (384 bits on the
+accurate leg); below 2^-8 the
 argument is its own reduced angle, below 2^-57 the results are `x` and 1.
 
 `sincosq` is that same pipeline run once: one Payne–Hanek reduction, one
-`sin θ` and one `1 − cos θ`, and only the breakpoint recombination happens
-twice — the two results differ solely in which quadrant and which table
-product they take.  Each half is rounded on its own; if either lands in the
+`sin θ` and one `1 − cos θ`, and the breakpoint recombination forms `sin A`
+and `cos A` once each — the quadrant only picks which result takes which, and
+with what sign.  Each half is rounded on its own; if either lands in the
 tie window, one wide reduction feeds both accurate legs.
 
 `tanq` shares that reduction and evaluates `tan θ` with a degree-six minimax

@@ -528,7 +528,7 @@ FN = {
         "c": None,
     },
     "cosq": {
-        "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed"},
         "c": None,
     },
     "exp2q": {
@@ -617,7 +617,7 @@ FN = {
         "c": None,
     },
     "sinq": {
-        "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
+        "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed"},
         "c": None,
     },
     "sqrtq": {

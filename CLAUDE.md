@@ -414,10 +414,19 @@ so the unsigned residuals never wrap (`quotient`, `quotient_384`, `refine`).
 `j = 0` is the relative band — `tan θ` outright, or `1/tan θ` a quadrant on.
 
 `sincosq` is `sinq` and `cosq` off *one* reduction: `fast_both` reduces once
-and evaluates `sin θ` and `1 − cos θ` once, and only `combine` runs twice, on
-the two quadrants the pair asks for (`fast` itself now goes through the same
-`combine`, computing the cosine correction unconditionally — it only ever
-went unused in the `j = 0` sine band).  The Ziv gate is joint: either half
+and evaluates `sin θ` and `1 − cos θ` once, and `combine_both` forms `sin A`
+and `cos A` once each, the quadrant only picking which result takes which and
+with what sign — so neither the table rows nor the add-or-subtract depend on
+it (`fast` goes through the single-result `combine`, computing the cosine
+correction unconditionally — it only ever went unused in the `j = 0` sine
+band).  The fast recombination frame is 192 bits cut on a 64-bit limb
+(`Frame`): with `−63 ≤ et ≤ −7` the sine term is an exact left shift of
+`et + 64` and the cosine term two truncating right shifts of `−et`, so every
+variable shift is narrower than 64 bits; the 64 bits dropped from the old
+256-bit frame sit 2^-57 guard units down (ziv unchanged at 0.2334).  Ported
+back from CORE-MATH's `sinq.c`, where it bought 12% (20% for `sincosq`); here
+`place_256`/`top_256` were already cut from 64-bit funnels, so it is ~1% on
+`sinq`/`cosq` and 5% on `sincosq`.  The Ziv gate is joint: either half
 landing in the tie window sends both to `accurate_both`, one `reduce_wide`
 and one `series_384` feeding two `combine_384`s.  Both legs being correctly
 rounded, each half must equal the separate function bit for bit, and that
