@@ -26,7 +26,7 @@
 //! 4. **Recombine.** With `A = j·π/256 + θ`, `sin |x|` is `±sin A` or
 //!    `±cos A` by quadrant, and `sin A = S_j·cos θ + C_j·sin θ`, `cos A =
 //!    C_j·cos θ − S_j·sin θ` from tables of `sin(j·π/256)` and `cos(j·π/256)`:
-//!    two products into a frame at 2^-256 (fast) or 2^-384 (accurate).
+//!    two products into a frame at 2^-192 (fast) or 2^-384 (accurate).
 //!    `sin A ≥ sin(π/512)` and `cos A ≥ cos(257π/512)` keep the frame normal
 //!    unless `j = 0` and the sine is wanted — then `sin A = sin θ` keeps its
 //!    floating form the whole way, like `atan2q`'s sectorless band.
@@ -40,14 +40,14 @@
 //! `cos x = 1` outright, subnormals and zero included.
 //!
 //! [`sincosq`] is that pipeline run once for both results: steps 1 to 3 are
-//! shared outright, and only step 4 happens twice, on the two quadrants the
-//! pair asks for.  Step 5 is joint — either half landing in the tie window
+//! shared outright, and step 4 forms `sin A` and `cos A` once, the quadrant
+//! only picking which result takes which.  Step 5 is joint — either half landing in the tie window
 //! sends both to the accurate leg, which likewise reduces once.
 //!
 //! [`tanq`](super::tan::tanq) shares the reduction, the bands, and the
 //! squares; the items below are `pub(super)` for it.
 
-use super::atan2::{add_signed_256, place_256, round_384, round_fast, shr_round, top_256};
+use super::atan2::{place_256, round_384, round_fast, shr_round};
 use super::trig_tables::{COS_COEF, FRAC_2_PI, PIO2_128, PIO2_384, SIN_COEF, SIN_FAST, SINCOS};
 use super::uint::{
     add_384, funnel_down, leading_zeros_384, mhi_approx, mul_hi_256, mul_hi_384, shl_384,
@@ -243,13 +243,18 @@ pub(super) fn reduce(m: u128, e: i32) -> Option<Residual> {
     let low = (g1 << lz) | (g0 >> (64 - lz));
     let g = (u128::from(high) << 64) | u128::from(low);
     let (high, low) = wmul(g, PIO2_128);
-    let lzt = high.leading_zeros();
+    // `g` and π/2 are normalized, so `high ≥ 2^126`: one bit decides.
+    let short = high >> 127 == 0;
 
     Some(Residual {
         n,
         negative,
-        t1: top_256([low, high], lzt),
-        et: 1 - (lz + lzt) as i32,
+        t1: if short {
+            (high << 1) | (low >> 127)
+        } else {
+            high
+        },
+        et: 1 - (lz + u32::from(short)) as i32,
     })
 }
 
@@ -304,6 +309,118 @@ fn below_one(c1: u128, et: i32) -> (u128, i32, u128) {
     (sub_256([u128::MAX; 2], c)[1], 0, 0)
 }
 
+/// The recombination frame `hi·2^-64 + lo·2^-192`.  The 64 bits a 256-bit
+/// frame would add sit 2^-57 guard units down, and cutting the frame on a
+/// 64-bit limb keeps every variable shift narrower than 64 bits — a 128-bit
+/// variable shift is a double shift and a `cmov` per limb.
+#[derive(Clone, Copy)]
+struct Frame {
+    lo: u128,
+    hi: u64,
+}
+
+impl Frame {
+    /// The top 192 bits of a [`SINCOS`] entry.
+    #[inline]
+    const fn table(entry: &[u128; 3]) -> Self {
+        Self {
+            lo: (entry[1] >> 64) | (entry[2] << 64),
+            hi: (entry[2] >> 64) as u64,
+        }
+    }
+
+    /// `p·2^(2·et−128)`, the cosine term riding `θ²`: two truncating right
+    /// shifts of `−et`, each below 64 and each dropping less than 2^-192.
+    #[inline]
+    const fn squared(p: u128, et: i32) -> Self {
+        let down = (-et) as u32;
+        let top = Self {
+            lo: p << 64,
+            hi: (p >> 64) as u64,
+        };
+
+        top.shr(down).shr(down)
+    }
+
+    /// `p·2^(et−128)`, the sine term: an exact left shift of `et + 64`.
+    #[inline]
+    const fn linear(p: u128, et: i32) -> Self {
+        let up = (et + 64) as u32;
+
+        Self {
+            lo: p << up,
+            hi: ((p >> 64) as u64) >> (64 - up),
+        }
+    }
+
+    /// `self >> shift` for `0 < shift < 64`.
+    #[inline]
+    const fn shr(self, shift: u32) -> Self {
+        debug_assert!(0 < shift && shift < 64);
+
+        Self {
+            lo: (self.lo >> shift) | ((self.hi as u128) << 64 << (64 - shift)),
+            hi: self.hi >> shift,
+        }
+    }
+
+    #[inline]
+    const fn sub(self, other: Self) -> Self {
+        let (lo, borrow) = self.lo.overflowing_sub(other.lo);
+
+        Self {
+            lo,
+            hi: self.hi.wrapping_sub(other.hi).wrapping_sub(borrow as u64),
+        }
+    }
+
+    /// `self + other` or `self − other` without a data-dependent branch.
+    #[inline]
+    const fn add_signed(self, other: Self, negative: bool) -> Self {
+        let mask = 0u128.wrapping_sub(negative as u128);
+        let (t, c0) = (other.lo ^ mask).overflowing_add(negative as u128);
+        let (lo, c1) = self.lo.overflowing_add(t);
+        let hi = self
+            .hi
+            .wrapping_add(other.hi ^ mask as u64)
+            .wrapping_add(c0 as u64)
+            .wrapping_add(c1 as u64);
+
+        Self { lo, hi }
+    }
+
+    /// Normalized into a floating fraction.  `sin A ≥ sin(π/512)` and
+    /// `cos A ≥ cos(257π/512)` keep the frame above 2^-8, so `hi` is not zero.
+    #[inline]
+    const fn normalize(self) -> (u128, i32) {
+        let lz = self.hi.leading_zeros();
+        let top = ((self.hi as u128) << 64) | (self.lo >> 64);
+
+        (
+            (top << lz) | ((self.lo as u64 >> 1 >> (63 - lz)) as u128),
+            -(lz as i32),
+        )
+    }
+}
+
+/// `sin A` and `cos A` for `A = j·π/256 ± θ` as frames, from the two series.
+/// Needs `−63 ≤ et ≤ −7` for the placements' shifts; a zero residual (`t1 = 0`
+/// at any such `et`) leaves the table entries.
+#[inline]
+fn angle(r: &Residual, s1: u128, c1: u128, j: usize) -> [Frame; 2] {
+    debug_assert!((-63..=-7).contains(&r.et));
+    let [sin, cos] = &SINCOS[j];
+    let sc = Frame::squared(mhi_approx(sin[2], c1), r.et);
+    let cc = Frame::squared(mhi_approx(cos[2], c1), r.et);
+    let cs = Frame::linear(mhi_approx(cos[2], s1), r.et);
+    let ss = Frame::linear(mhi_approx(sin[2], s1), r.et);
+
+    [
+        Frame::table(sin).sub(sc).add_signed(cs, r.negative),
+        Frame::table(cos).sub(cc).add_signed(ss, !r.negative),
+    ]
+}
+
 /// `sin |x|` or `cos |x|` from the residual and the two series, as a floating
 /// 128-bit fraction with the sign it contributes.  The cosine is the sine a
 /// quadrant on: the top bit of the quadrant is the sign, the low bit which of
@@ -322,15 +439,46 @@ fn combine(r: &Residual, s1: u128, c1: u128, cosine: bool) -> (u128, i32, u128) 
     }
     let first = &SINCOS[j][usize::from(want_cos)];
     let second = &SINCOS[j][usize::from(!want_cos)];
-    let base = [first[1], first[2]];
-    let c = place_256(mhi_approx(first[2], c1), (2 * r.et + 128) as u32);
-    let s = place_256(mhi_approx(second[2], s1), (r.et + 128) as u32);
-    let f = add_signed_256(sub_256(base, c), s, r.negative != want_cos);
-    let lz = f[1].leading_zeros();
+    let c = Frame::squared(mhi_approx(first[2], c1), r.et);
+    let s = Frame::linear(mhi_approx(second[2], s1), r.et);
+    let (frac, e2) = Frame::table(first)
+        .sub(c)
+        .add_signed(s, r.negative != want_cos)
+        .normalize();
 
-    (top_256(f, lz), -(lz as i32), flip)
+    (frac, e2, flip)
 }
 
+/// [`combine`] for both results at once: `sin A` and `cos A` are formed once
+/// and the quadrant only picks which one each result takes and with what
+/// sign, so neither the table rows nor the add-or-subtract depend on it.
+#[inline]
+fn combine_both(r: &Residual, s1: u128, c1: u128) -> [(u128, i32, u128); 2] {
+    let k = r.n >> 7;
+    let j = r.n & 127;
+    let [sin_a, cos_a] = angle(r, s1, c1, j);
+    let (cos_frac, cos_e2) = cos_a.normalize();
+    // `sin A = sin θ` keeps its floating form at `j = 0`, and `g`'s sign.
+    let (sin_frac, sin_e2, sin_sign) = if j == 0 {
+        let (frac, e2, _) = normalize(s1, r.et);
+
+        (frac, e2, if r.negative { SIGN_MASK } else { 0 })
+    } else {
+        let (frac, e2) = sin_a.normalize();
+
+        (frac, e2, 0)
+    };
+    let sign = |k: usize| if k & 2 == 0 { 0 } else { SIGN_MASK };
+    let sin_leg = (sin_frac, sin_e2, sin_sign);
+    let cos_leg = (cos_frac, cos_e2, 0);
+    let [(sf, se, ss), (cf, ce, cs)] = if k & 1 == 0 {
+        [sin_leg, cos_leg]
+    } else {
+        [cos_leg, sin_leg]
+    };
+
+    [(sf, se, ss ^ sign(k)), (cf, ce, cs ^ sign(k + 1))]
+}
 /// The fast leg: the magnitude as a floating 128-bit fraction `frac·2^(e2−128)`
 /// with the sign it contributes, or `None` when the reduction cannot vouch for
 /// it.  Shared with [`ziv_soundness`].
@@ -380,7 +528,7 @@ fn fast_both(m: u128, e: i32) -> Option<[(u128, i32, u128); 2]> {
     let s1 = sin_frac(r.t1, u, v);
     let c1 = cos_corr(u1, u, v);
 
-    Some([combine(&r, s1, c1, false), combine(&r, s1, c1, true)])
+    Some(combine_both(&r, s1, c1))
 }
 
 /// [`reduce`] on ten limbs of 2/π and a 448-bit fraction, the residual as a
