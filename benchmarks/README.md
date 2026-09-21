@@ -1,6 +1,6 @@
 # Benchmark measurements
 
-[BENCHMARKS.md](../BENCHMARKS.md) preserves the September 5, 2026 measurements
+[The September 5 report](2026-09-05/README.md) preserves the September 5, 2026 measurements
 on Apple M4 and Ryzen 9 7950X3D. These are historical results for their recorded
 source and toolchains, not current-checkout performance claims. The raw records,
 dependency locks, source hashes and machine conditions are retained unchanged.
