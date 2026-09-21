@@ -1,0 +1,165 @@
+UTC start: 2026-09-21T08:27:08+00:00
+9f502251e315e0f6638802bc44c0540f89acb7ad
+rustc 1.100.0-nightly (a36d05efa 2026-09-09)
+Ubuntu clang version 21.1.8 (6ubuntu1)
+=== round 1 cpu 4 expq 2026-09-21T08:27:08+00:00
+loadavg: 1.68 1.37 1.34 3/5143 1292757
+MemAvailable: MemAvailable:    4339988 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195612
+psi-cpu: some avg10=0.13 avg60=0.15 avg300=0.16 total=66582559910
+    PID PSR %CPU COMMAND
+1067829   4  0.4 claude
+1067060   4  0.3 claude
+ 945663   5  0.3 claude
+ 943051  31  0.2 claude
+=== round 1 cpu 4 exp2q 2026-09-21T08:27:16+00:00
+loadavg: 1.71 1.38 1.35 2/5190 1293093
+MemAvailable: MemAvailable:    4340644 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.80 avg60=0.28 avg300=0.19 total=66582685293
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   5  0.3 claude
+ 945663   5  0.3 claude
+ 943051  31  0.2 claude
+=== round 1 cpu 4 exp10q 2026-09-21T08:27:25+00:00
+loadavg: 1.75 1.40 1.36 2/5147 1293326
+MemAvailable: MemAvailable:    4340016 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.35 avg60=0.25 avg300=0.18 total=66582733691
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   5  0.3 claude
+ 945663   5  0.3 claude
+ 943051  30  0.2 claude
+=== round 1 cpu 4 expm1q 2026-09-21T08:27:34+00:00
+loadavg: 1.71 1.41 1.36 2/5135 1293504
+MemAvailable: MemAvailable:    4339780 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.21 avg60=0.24 avg300=0.18 total=66582762009
+    PID PSR %CPU COMMAND
+1067829  31  0.4 claude
+1067060   5  0.3 claude
+ 945663   5  0.3 claude
+ 943051  30  0.2 claude
+=== round 1 cpu 30 expq 2026-09-21T08:27:42+00:00
+loadavg: 1.73 1.42 1.36 2/5131 1293666
+MemAvailable: MemAvailable:    4341564 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.09 avg60=0.21 avg300=0.18 total=66582785847
+    PID PSR %CPU COMMAND
+1067829  31  0.4 claude
+1067060   5  0.3 claude
+ 945663  30  0.3 claude
+ 943051  31  0.2 claude
+=== round 1 cpu 30 exp2q 2026-09-21T08:27:50+00:00
+loadavg: 1.77 1.44 1.37 4/5117 1293783
+MemAvailable: MemAvailable:    4339700 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.04 avg60=0.18 avg300=0.17 total=66582814342
+    PID PSR %CPU COMMAND
+1067829  31  0.4 claude
+1067060  31  0.3 claude
+ 945663   4  0.3 claude
+ 943051   5  0.2 claude
+=== round 1 cpu 30 exp10q 2026-09-21T08:27:59+00:00
+loadavg: 1.74 1.44 1.37 3/5114 1293927
+MemAvailable: MemAvailable:    4339860 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.11 avg60=0.18 avg300=0.17 total=66582844343
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   4  0.3 claude
+ 945663   5  0.3 claude
+ 943051   4  0.2 claude
+=== round 1 cpu 30 expm1q 2026-09-21T08:28:07+00:00
+loadavg: 1.76 1.45 1.37 2/5127 1294167
+MemAvailable: MemAvailable:    4340592 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.05 avg60=0.16 avg300=0.17 total=66582870538
+    PID PSR %CPU COMMAND
+1067829   4  0.4 claude
+1067060  31  0.3 claude
+ 945663   5  0.3 claude
+ 943051   5  0.2 claude
+=== round 2 cpu 4 expq 2026-09-21T08:28:17+00:00
+loadavg: 1.71 1.45 1.37 1/5135 1294466
+MemAvailable: MemAvailable:    4338332 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.26 avg60=0.20 avg300=0.17 total=66582946719
+    PID PSR %CPU COMMAND
+1067829   4  0.4 claude
+1067060   4  0.3 claude
+ 945663   5  0.3 claude
+ 943051   5  0.2 claude
+=== round 2 cpu 4 exp2q 2026-09-21T08:28:25+00:00
+loadavg: 1.76 1.47 1.38 2/5129 1294654
+MemAvailable: MemAvailable:    4346904 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.11 avg60=0.17 avg300=0.17 total=66582972725
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   5  0.3 claude
+ 945663   5  0.3 claude
+ 943051  30  0.2 claude
+=== round 2 cpu 4 exp10q 2026-09-21T08:28:34+00:00
+loadavg: 1.72 1.47 1.38 6/5133 1294839
+MemAvailable: MemAvailable:    4347120 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.19 avg60=0.17 avg300=0.17 total=66583032152
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   5  0.3 claude
+ 945663  30  0.3 claude
+ 943051   5  0.2 claude
+=== round 2 cpu 4 expm1q 2026-09-21T08:28:43+00:00
+loadavg: 1.66 1.46 1.38 2/5127 1295014
+MemAvailable: MemAvailable:    4348896 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.08 avg60=0.15 avg300=0.16 total=66583057064
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   5  0.3 claude
+ 945663  31  0.3 claude
+ 943051   5  0.2 claude
+=== round 2 cpu 30 expq 2026-09-21T08:28:51+00:00
+loadavg: 1.78 1.50 1.39 2/5130 1295200
+MemAvailable: MemAvailable:    4347912 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.03 avg60=0.13 avg300=0.16 total=66583083874
+    PID PSR %CPU COMMAND
+1067829  31  0.4 claude
+1067060  30  0.3 claude
+ 945663  31  0.3 claude
+ 943051  30  0.2 claude
+=== round 2 cpu 30 exp2q 2026-09-21T08:28:59+00:00
+loadavg: 1.81 1.51 1.40 1/5111 1295274
+MemAvailable: MemAvailable:    4346392 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.01 avg60=0.11 avg300=0.15 total=66583113703
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   4  0.3 claude
+ 945663  31  0.3 claude
+ 943051   5  0.2 claude
+=== round 2 cpu 30 exp10q 2026-09-21T08:29:07+00:00
+loadavg: 1.83 1.52 1.40 2/5128 1295541
+MemAvailable: MemAvailable:    4354736 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.10 avg60=0.13 avg300=0.15 total=66583144685
+    PID PSR %CPU COMMAND
+1067829   5  0.4 claude
+1067060   5  0.3 claude
+ 945663   5  0.3 claude
+ 943051   5  0.2 claude
+=== round 2 cpu 30 expm1q 2026-09-21T08:29:16+00:00
+loadavg: 1.85 1.54 1.41 1/5122 1295711
+MemAvailable: MemAvailable:    4353944 kB
+psi-mem: some avg10=0.00 avg60=0.00 avg300=0.00 total=2434195623
+psi-cpu: some avg10=0.03 avg60=0.11 avg300=0.14 total=66583170226
+    PID PSR %CPU COMMAND
+1067829   4  0.4 claude
+1067060   4  0.3 claude
+ 945663   4  0.3 claude
+ 943051   5  0.2 claude
+UTC end: 2026-09-21T08:29:26+00:00

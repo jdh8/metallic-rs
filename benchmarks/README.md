@@ -11,6 +11,8 @@ Later campaigns:
 - [f64 optimizations, September 5](2026-09-05/f64-optimization/README.md)
 - [binary128 trig, September 9](2026-09-09/trig-v2/README.md)
 - [Intel atan2f and cbrt, September 11](2026-09-11/intel-issue9/README.md)
+- [binary128 error and gamma functions, September 17](2026-09-17/f128-special/README.md)
+- [binary128 exp family on P- and E-cores, September 21](2026-09-21/f128-exp/README.md)
 
 ## Measurement policy
 
