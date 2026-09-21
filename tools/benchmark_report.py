@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Generate BENCHMARKS.md from complete, independently archived host snapshots.
+"""Generate a campaign report from complete, independently archived host snapshots.
 
     python3 tools/benchmark_report.py --snapshots benchmarks/2026-09-05
+
+The report is written to README.md inside the snapshot directory, with its
+links relative to that directory.
 
 The three required directories are local, dl02, and dl02-f128. Every measured
 lane must be represented in the report, and the audited historical API and source hashes
@@ -12,6 +15,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shlex
@@ -37,6 +41,14 @@ def require(condition, message):
 
 def link(path):
     return Path(path).resolve().relative_to(ROOT).as_posix()
+
+
+def relink(text, base):
+    """Rewrite repository-relative Markdown link targets relative to `base`."""
+    def target(match):
+        path = os.path.relpath(ROOT / match.group(1), base)
+        return "]({}{})".format(Path(path).as_posix(), match.group(2) or "")
+    return re.sub(r"\]\(([^)#:\s]+)(#[^)\s]*)?\)", target, text)
 
 
 def cell(value):
@@ -365,7 +377,7 @@ def render(directory):
     probe = directory / "local" / "f128-probe.txt"
     require(probe.is_file(), "Missing recorded local binary128 compiler probe: " + str(probe))
     sections = [
-        "# Benchmarks",
+        "# Benchmarks, September 5, 2026",
         "**Historical measurements, not timings of the current checkout.** "
         "The measured source, dependency locks and machine conditions are recorded below. "
         "See the [measurement policy](benchmarks/README.md) for later campaigns and refresh guidance.",
@@ -458,18 +470,18 @@ def render(directory):
                      "recorded lane. Raw Criterion files and build/run logs remain in the "
                      "target directories recorded in each snapshot.",
                      STATIC_ESTIMATE))
-    return "\n\n".join(sections) + "\n"
+    return relink("\n\n".join(sections) + "\n", directory)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--snapshots", type=Path, default=Path("benchmarks/2026-09-05"))
-    parser.add_argument("--output", type=Path, default=Path("BENCHMARKS.md"))
     args = parser.parse_args()
-    report = render(args.snapshots.resolve())
-    args.output.write_text(report)
-    print("Wrote {} (112 public functions; all measured lanes accounted for)".format(args.output))
+    directory = args.snapshots.resolve()
+    output = directory / "README.md"
+    output.write_text(render(directory))
+    print("Wrote {} (112 public functions; all measured lanes accounted for)".format(link(output)))
 
 
 if __name__ == "__main__":

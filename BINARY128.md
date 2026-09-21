@@ -71,7 +71,7 @@ Each function is done when both gates hold:
   them oracle-free (`compoundq` uses CORE-MATH's `compoundf`).
 - **Perf** — measured same-run median ratio `metallic::<fn>q / core_math::<fn>q`
   ≈ 1× or better on the recorded workload and hardware. Archived results are in
-  [BENCHMARKS.md](BENCHMARKS.md); [ANALYSIS.md](ANALYSIS.md) helps diagnose costs.
+  [benchmarks/](benchmarks/README.md); [ANALYSIS.md](ANALYSIS.md) helps diagnose costs.
   To time one function on your own machine run
   `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo +nightly bench --features f128
   --bench <fn>q`, then `python3 tools/bench_ratio.py median`.  Each bench also
@@ -137,7 +137,7 @@ not.
 `exp2m1q`, `exp10m1q`, `log2p1q`, `log10p1q`, `sinpiq`, `cospiq`,
 `tanpiq`, `asinpiq`, `acospiq`, `atanpiq`, `atan2piq`, and `compoundq` have standalone
 benchmarks; neither CORE-MATH nor libquadmath currently provides these entry points. They are
-not in the historical snapshots in [BENCHMARKS.md](BENCHMARKS.md).
+not in the historical [September 5 snapshots](benchmarks/2026-09-05/README.md).
 The initial `exp2m1q` / `exp10m1q` x86-64-v3 traces at `x = 1.7` cost
 169 / 183 llvm-mca cycles (2026-09-16); regenerate with
 `python3 tools/analysis.py asm --only exp2m1q,exp10m1q --isa v3`, then

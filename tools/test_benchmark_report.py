@@ -11,7 +11,7 @@ class HistoricalReportTest(unittest.TestCase):
     def test_archive_renders_but_mixed_sources_are_rejected(self):
         directory = report.ROOT / "benchmarks/2026-09-05"
         self.assertEqual(report.render(directory),
-                         (report.ROOT / "BENCHMARKS.md").read_text())
+                         (directory / "README.md").read_text())
         load = report.load_snapshot
 
         def mismatched_source(directory, precision, expected):

@@ -6,7 +6,7 @@
 
 A fast correctly rounded math library in Rust!
 
-See [BENCHMARKS.md](BENCHMARKS.md) for archived measurements on Apple M4 and
+See the [September 5 benchmarks](benchmarks/2026-09-05/README.md) for archived measurements on Apple M4 and
 AMD Ryzen 9 7950X3D, with same-run CORE-MATH ratios and recorded source/toolchain
 provenance. [ANALYSIS.md](ANALYSIS.md) complements them with static path costs,
 accurate-leg coverage and table footprints; measured workloads support performance
