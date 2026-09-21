@@ -1,0 +1,382 @@
+{
+ "campaign": "binary128 exp family, P-core vs E-core (issue #12)",
+ "date_utc": "2026-09-21",
+ "commit": "9f502251e315e0f6638802bc44c0540f89acb7ad",
+ "host": {
+  "cpu": "Intel Core i9-14900K",
+  "cgroup_cpus": "4-5,30-31",
+  "cores": {
+   "4": "P-core (Raptor Cove), SMT sibling cpu5 online, 5.7 GHz max",
+   "30": "E-core (Gracemont), 4.4 GHz max"
+  }
+ },
+ "toolchain": {
+  "rustc": "rustc 1.100.0-nightly (a36d05efa 2026-09-09)",
+  "cc": "Ubuntu clang version 21.1.8 (6ubuntu1)",
+  "core-math": "1.3.0",
+  "core-math-sys": "1.3.0",
+  "criterion": "0.8.2"
+ },
+ "environment": {
+  "CC": "clang",
+  "RUSTFLAGS": "-Ctarget-cpu=x86-64-v3",
+  "TARGET_CPU": "unset (core-math-sys default -march=native)",
+  "global_cargo_config": "~/.cargo/config.toml sets -Ctarget-cpu=native; RUSTFLAGS overrides it"
+ },
+ "criterion": {
+  "warm_up_s": 1,
+  "measurement_s": 2,
+  "sample_size": 100,
+  "nresamples": 100000,
+  "filter": "^(metallic|core_math)::"
+ },
+ "sampler": "bench::Exponents: signed, exponent uniform in -120..=13 (expq, exp2q, exp10q) or -114..=13 (expm1q), f64 mantissa uniform in [1,2), converted to f128; RNG timed",
+ "conditions": "Serial runs, rounds interleaved P-core then E-core per round. SMT sibling cpu5 could not be offlined (no root in container). No tests or other benchmarks ran. Editor, rust-analyzer and agent sessions idle in the background; loadavg ~1.0-1.3, PSI cpu/memory avg10 0.00, MemAvailable ~4.3 GB of 16 GB, recorded per run in timing.log. A replication pass with identical settings ran immediately before; its ratios are recorded as replication_pass_ratios.",
+ "lock_sha256": "45c7b42a8caa7d844843db211be079c076b016c8f0448bff1291b2790c9f91db",
+ "source_sha256": {
+  "src/f128_/exp.rs": "b8f7c29a264b89c3fd1387707a5338160af555fb02d23e56b48fc717463a2b41",
+  "src/f128_/exp_tables.rs": "677d3c2935f7139298442160976be5b70353b3d5b3439519c141e8aaad001f22",
+  "src/f128_/uint.rs": "141e55c96e9fec1b2ced4682dc63833971dc86263abefe6508a978b927080fb3",
+  "benches/bench.rs": "2a97f6165c62893f3f57c25697357590ccf450ebf7bfc18b761304e04e8b59b9",
+  "benches/expq.rs": "ade288529f8096f6a4ed312d156e7c6a4e9adadd4c20bc7f428423c90aa39458",
+  "benches/exp2q.rs": "9bc326141fc5b7c00f82a49c436acd05aa9f9674ef807b277bba48bdd0c8caaf",
+  "benches/exp10q.rs": "8db7f199f5f401bdb0c3c5551af9935d3b78dc396cc483d27fb7f7d9c0f2c378",
+  "benches/expm1q.rs": "bd403ff210733e628bdfba3c2dfae866c526ec4bcdd7f98151d56e14b9f7a081"
+ },
+ "executable_sha256": {
+  "expq": "94eb715f1de9b65e140e5bd6f0a5f3a0a8ceb684cbfda6b23fb842a19f9356b6",
+  "exp2q": "c28123f32e1b93cbe04ddd02e008aa70be4fb7620c2ae23d0624b88e43d8afcc",
+  "exp10q": "ac264b2327c51ac127b171a0bbc873f9a5f7e87569320bd7d4c75f77641aabc6",
+  "expm1q": "afc87a3845d7d7500dff5752c5e27bd61de7d559cbacfa8b898a48fa1ab0b8f4"
+ },
+ "functions": {
+  "expq": {
+   "cpu4": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 24.174,
+        "lower": 24.167,
+        "upper": 24.186
+       },
+       "core_math": {
+        "point": 28.375,
+        "lower": 28.365,
+        "upper": 28.386
+       }
+      },
+      "ratio": 0.8519
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 24.176,
+        "lower": 24.171,
+        "upper": 24.181
+       },
+       "core_math": {
+        "point": 28.501,
+        "lower": 28.49,
+        "upper": 28.51
+       }
+      },
+      "ratio": 0.8483
+     }
+    ],
+    "replication_pass_ratios": [
+     0.8561,
+     0.8553
+    ]
+   },
+   "cpu30": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 63.404,
+        "lower": 63.264,
+        "upper": 64.328
+       },
+       "core_math": {
+        "point": 44.524,
+        "lower": 44.519,
+        "upper": 44.533
+       }
+      },
+      "ratio": 1.424
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 62.793,
+        "lower": 61.95,
+        "upper": 62.966
+       },
+       "core_math": {
+        "point": 44.414,
+        "lower": 44.408,
+        "upper": 44.427
+       }
+      },
+      "ratio": 1.4138
+     }
+    ],
+    "replication_pass_ratios": [
+     1.3784,
+     1.3897
+    ]
+   }
+  },
+  "exp2q": {
+   "cpu4": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 23.979,
+        "lower": 23.964,
+        "upper": 23.997
+       },
+       "core_math": {
+        "point": 28.186,
+        "lower": 28.177,
+        "upper": 28.196
+       }
+      },
+      "ratio": 0.8507
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 23.984,
+        "lower": 23.969,
+        "upper": 24.003
+       },
+       "core_math": {
+        "point": 28.319,
+        "lower": 28.309,
+        "upper": 28.324
+       }
+      },
+      "ratio": 0.8469
+     }
+    ],
+    "replication_pass_ratios": [
+     0.851,
+     0.8517
+    ]
+   },
+   "cpu30": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 61.577,
+        "lower": 61.488,
+        "upper": 61.954
+       },
+       "core_math": {
+        "point": 42.969,
+        "lower": 42.951,
+        "upper": 42.995
+       }
+      },
+      "ratio": 1.4331
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 61.679,
+        "lower": 61.598,
+        "upper": 62.055
+       },
+       "core_math": {
+        "point": 42.965,
+        "lower": 42.874,
+        "upper": 43.016
+       }
+      },
+      "ratio": 1.4356
+     }
+    ],
+    "replication_pass_ratios": [
+     1.4492,
+     1.462
+    ]
+   }
+  },
+  "exp10q": {
+   "cpu4": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 24.322,
+        "lower": 24.314,
+        "upper": 24.333
+       },
+       "core_math": {
+        "point": 28.733,
+        "lower": 28.724,
+        "upper": 28.741
+       }
+      },
+      "ratio": 0.8465
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 24.317,
+        "lower": 24.307,
+        "upper": 24.325
+       },
+       "core_math": {
+        "point": 28.706,
+        "lower": 28.698,
+        "upper": 28.714
+       }
+      },
+      "ratio": 0.8471
+     }
+    ],
+    "replication_pass_ratios": [
+     0.8461,
+     0.846
+    ]
+   },
+   "cpu30": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 62.128,
+        "lower": 62.07,
+        "upper": 62.22
+       },
+       "core_math": {
+        "point": 44.55,
+        "lower": 44.546,
+        "upper": 44.561
+       }
+      },
+      "ratio": 1.3946
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 61.502,
+        "lower": 61.03,
+        "upper": 62.315
+       },
+       "core_math": {
+        "point": 44.536,
+        "lower": 44.529,
+        "upper": 44.543
+       }
+      },
+      "ratio": 1.381
+     }
+    ],
+    "replication_pass_ratios": [
+     1.4145,
+     1.3646
+    ]
+   }
+  },
+  "expm1q": {
+   "cpu4": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 29.764,
+        "lower": 29.751,
+        "upper": 29.781
+       },
+       "core_math": {
+        "point": 32.432,
+        "lower": 32.421,
+        "upper": 32.442
+       }
+      },
+      "ratio": 0.9177
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 29.752,
+        "lower": 29.739,
+        "upper": 29.755
+       },
+       "core_math": {
+        "point": 32.445,
+        "lower": 32.438,
+        "upper": 32.454
+       }
+      },
+      "ratio": 0.917
+     }
+    ],
+    "replication_pass_ratios": [
+     0.9224,
+     0.9235
+    ]
+   },
+   "cpu30": {
+    "rounds": [
+     {
+      "round": 1,
+      "median_ns": {
+       "metallic": {
+        "point": 58.121,
+        "lower": 58.099,
+        "upper": 58.135
+       },
+       "core_math": {
+        "point": 53.644,
+        "lower": 53.635,
+        "upper": 53.651
+       }
+      },
+      "ratio": 1.0835
+     },
+     {
+      "round": 2,
+      "median_ns": {
+       "metallic": {
+        "point": 59.284,
+        "lower": 59.246,
+        "upper": 59.309
+       },
+       "core_math": {
+        "point": 53.821,
+        "lower": 53.789,
+        "upper": 53.844
+       }
+      },
+      "ratio": 1.1015
+     }
+    ],
+    "replication_pass_ratios": [
+     1.1058,
+     1.0852
+    ]
+   }
+  }
+ }
+}
