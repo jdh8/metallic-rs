@@ -51,7 +51,14 @@ nothing was pinned to it. CPU 30 is an E-core (4.4 GHz max, no SMT).
   21.1.8. Library versions: core-math and core-math-sys 1.3.0, Criterion 0.8.2.
 - Compiler flags: `CC=clang` and `RUSTFLAGS=-Ctarget-cpu=x86-64-v3`. This
   overrides the local `~/.cargo/config.toml`, which sets `target-cpu=native`.
-  The C oracle uses core-math-sys's default `-march=native`.
+  The C oracle uses core-math-sys's default `-march=native`, as issue #12's
+  original sweep did. That departs from the archive convention of matching
+  `TARGET_CPU` to `RUSTFLAGS`, but it cannot affect the P-core/E-core
+  contrast, which ran the same executables on both cores. A check on
+  2026-09-26 rebuilt CORE-MATH with `TARGET_CPU=x86-64-v3` and ran `expq`
+  on CPU 4 twice each way, alternating targets: CORE-MATH took 28.38 / 28.52 ns
+  at native and 28.57 / 28.42 ns at x86-64-v3, for ratios 0.853 / 0.850 and
+  0.848 / 0.851. The target choice moves nothing beyond run-to-run noise.
 - Criterion: 1 s warm-up, 2 s measurement, 100 samples, 100,000 bootstrap
   resamples.
 - Sampler: the existing `bench::Exponents` samplers. Inputs are signed, with
@@ -59,9 +66,11 @@ nothing was pinned to it. CPU 30 is an E-core (4.4 GHz max, no SMT).
   generation is timed.
 - Runs were serial. No tests or other benchmarks ran alongside them.
 - An editor, rust-analyzer and agent sessions stayed idle in the background.
-  The load average was 1.0–1.3, CPU and memory PSI avg10 were 0.00, and about
-  4.3 GB of 16 GB memory was available. [timing.log](timing.log) records these
-  per run.
+  The 1-minute load average was 1.66–1.85 (5-minute 1.37–1.54), CPU PSI avg10
+  was 0.01–0.80 (avg60 0.11–0.28), memory PSI was 0.00, and about 4.3 GB of
+  16 GB memory was available. Four idle agent processes at 0.2–0.4% CPU each
+  drifted across all four allowed CPUs, including 4 and 5, between runs.
+  [timing.log](timing.log) records these per run.
 
 Source, executable and dependency-lock hashes are in [results.json](results.json);
 [Cargo.lock.snapshot](Cargo.lock.snapshot) preserves the dependencies.
