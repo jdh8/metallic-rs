@@ -21,6 +21,7 @@
   "CC": "clang",
   "RUSTFLAGS": "-Ctarget-cpu=x86-64-v3",
   "TARGET_CPU": "unset (core-math-sys default -march=native)",
+  "target_cpu_check": "2026-09-26, expq on cpu4, CORE-MATH rebuilt with TARGET_CPU=x86-64-v3, alternating with native: core_math 28.38/28.52 ns native vs 28.57/28.42 ns x86-64-v3, ratios 0.853/0.850 vs 0.848/0.851; within run-to-run noise",
   "global_cargo_config": "~/.cargo/config.toml sets -Ctarget-cpu=native; RUSTFLAGS overrides it"
  },
  "criterion": {
@@ -31,7 +32,7 @@
   "filter": "^(metallic|core_math)::"
  },
  "sampler": "bench::Exponents: signed, exponent uniform in -120..=13 (expq, exp2q, exp10q) or -114..=13 (expm1q), f64 mantissa uniform in [1,2), converted to f128; RNG timed",
- "conditions": "Serial runs, rounds interleaved P-core then E-core per round. SMT sibling cpu5 could not be offlined (no root in container). No tests or other benchmarks ran. Editor, rust-analyzer and agent sessions idle in the background; loadavg ~1.0-1.3, PSI cpu/memory avg10 0.00, MemAvailable ~4.3 GB of 16 GB, recorded per run in timing.log. A replication pass with identical settings ran immediately before; its ratios are recorded as replication_pass_ratios.",
+ "conditions": "Serial runs, rounds interleaved P-core then E-core per round. SMT sibling cpu5 could not be offlined (no root in container). No tests or other benchmarks ran. Editor, rust-analyzer and agent sessions idle in the background; loadavg 1.66-1.85 (1-minute) and 1.37-1.54 (5-minute), PSI cpu avg10 0.01-0.80 (avg60 0.11-0.28), PSI memory 0.00, MemAvailable ~4.3 GB of 16 GB, four idle agent processes at 0.2-0.4% CPU each drifting across CPUs 4, 5, 30 and 31, all recorded per run in timing.log. A replication pass with identical settings ran immediately before; its ratios are recorded as replication_pass_ratios.",
  "lock_sha256": "45c7b42a8caa7d844843db211be079c076b016c8f0448bff1291b2790c9f91db",
  "source_sha256": {
   "src/f128_/exp.rs": "b8f7c29a264b89c3fd1387707a5338160af555fb02d23e56b48fc717463a2b41",
