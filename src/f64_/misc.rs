@@ -305,7 +305,9 @@ fn hypot_hard(big_s: f64, small_s: f64) -> f64 {
         if dmid != 0 {
             rm = (rm as i64 + (dmid >> 127) as i64) as u64; // round down if below midpoint
         } else {
-            rm -= rm & 1; // exact midpoint → round to even
+            // Exact midpoint → round to even.  Above 2⁵³ the search steps by 2,
+            // so the last kept bit is bit 1, not bit 0.
+            rm -= rm & (1 << (1 - u64::from(rm <= (1u64 << 53))));
         }
     }
     if rm >= (1u64 << 53) {
