@@ -3,20 +3,29 @@ use crate::common128;
 
 use common::Identity as _;
 
-// CORE-MATH has not shipped `cosq` yet — its binary128 cosine is a corpus with
-// no implementation behind it — so the strict gate replays a home-grown corpus
-// that carries its own MPFR answers (`examples/gen_f128_trig_cases.rs`) and
-// runs under plain `--features f128`.  The parser count keeps the corpus from
-// rotting unnoticed, the f64 oracle covers every magnitude up to 2^1024 with
-// no MPFR, and the MPFR sweeps stay the independent cross-check.
+// CORE-MATH's `cosq` is the oracle: the sweeps and its own hard-to-round
+// corpus (`tests/cases/cosq.wc`) gate bit-exact against it.  Beside that
+// corpus, `f128_cos.wc` keeps metallic's own, which carries its MPFR answers
+// (`examples/gen_f128_trig_cases.rs`): edges, the per-binade convergents of
+// π/2, and a near-midpoint scan.  Upstream's `cosq.c` and metallic's share a
+// structure, so the checks that do not go through it stay: the f64 oracle
+// covers every magnitude up to 2^1024 with no MPFR, and the MPFR sweeps are
+// the independent cross-check.
 
-/// Size of `tests/cases/cosq.wc` (kept in sync with the generator).
+#[test]
+fn test_parser() {
+    assert_eq!(
+        common::parse_case_file("cosq.wc", common128::parse_f128).count(),
+        98_961
+    );
+}
+
+/// Size of `tests/cases/f128_cos.wc` (kept in sync with the generator).
 const CORPUS_LEN: usize = 96_265;
 
 const SAMPLE_COUNT: u64 = 200_000;
 
 /// A signed value with the unbiased exponent drawn from `range`.
-#[cfg(feature = "mpfr")]
 fn banded(i: u64, range: core::ops::RangeInclusive<i32>) -> f128 {
     let bits = common128::mix128(i);
     let span = (range.end() - range.start() + 1) as u128;
@@ -25,13 +34,11 @@ fn banded(i: u64, range: core::ops::RangeInclusive<i32>) -> f128 {
 }
 
 /// The direct band `[2^-57, 2^-8)`, where the argument is its own reduced angle.
-#[cfg(feature = "mpfr")]
 fn direct(i: u64) -> f128 {
     banded(i, -57..=-9)
 }
 
 /// The reduction band up to 2^20, where the breakpoints and both legs work.
-#[cfg(feature = "mpfr")]
 fn reduced(i: u64) -> f128 {
     banded(i, -8..=20)
 }
@@ -44,7 +51,7 @@ fn wide(i: u64) -> f128 {
 #[test]
 fn test_cosq_corpus() {
     let cases: Vec<[f128; 2]> =
-        common::parse_case_file("cosq.wc", common128::parse_f128_pair).collect();
+        common::parse_case_file("f128_cos.wc", common128::parse_f128_pair).collect();
     assert_eq!(
         cases.len(),
         CORPUS_LEN,
@@ -55,6 +62,22 @@ fn test_cosq_corpus() {
         let got = metallic::cosq(x);
         (!got.is(&want)).then(|| println!("cosq({x:?}) = {got:?} != {want:?} (correct)"))
     }));
+}
+
+#[test]
+fn test_cosq() {
+    for sampler in [direct, reduced, wide] {
+        common::test_univariate_cases(
+            metallic::cosq,
+            core_math::cosq,
+            (0..SAMPLE_COUNT).map(sampler),
+        );
+    }
+}
+
+#[test]
+fn test_cosq_worst_cases() {
+    common128::test_worst_univariate_f128("cos", metallic::cosq, core_math::cosq);
 }
 
 /// Every `f64` is a binary128 value, and its correctly rounded `f64` cosine can

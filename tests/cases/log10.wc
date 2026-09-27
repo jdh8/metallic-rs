@@ -65520,3 +65520,14 @@
 # errno tests
 0x0p+0
 -0x0p+0
+# the following inputs improve coverage (AI generated)
+0x1.fc00000000001p-1
+0x1.fffffffffffe0p-1
+0x1.fffffffffffe1p-1
+0x1.ffffffffffff1p-1
+0x1.ffffffffffff9p-1
+0x1.ffffffffffffdp-1
+0x1.fffffffffffffp-1
+0x1.0000000000013p+0
+0x1.010000000000ep+0
+0x1.080000000001bp+0

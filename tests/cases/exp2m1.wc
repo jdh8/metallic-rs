@@ -240859,3 +240859,5 @@
 0x1.71547652b82fdp-1022
 0x1.71547652b82fep-1022
 0x1.71547652b82ffp-1022
+# the following inputs improve coverage (AI generated)
+-0x1.0000000000000p-1

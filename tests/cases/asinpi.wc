@@ -58416,3 +58416,7 @@
 0x1.921fb54442d17p-1021
 0x1.921fb54442d18p-1021
 0x1.921fb54442d19p-1021
+# the following inputs improve coverage (AI generated)
+-0x1.fffffffff1003p-1
+0x1.0000000000000p-1
+0x1.fffffffffffffp-1

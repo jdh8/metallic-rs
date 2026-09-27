@@ -60,8 +60,9 @@ const CORPUS_LEN: usize = 2142;
 fn test_lgamma_worst_cases() {
     let cases: Vec<f64> = common::parse_case_file("lgamma.wc", common::parse_f64).collect();
     assert!(
-        cases.is_empty() || cases.len() == 1_618_129,
-        "corpus size changed; update this count"
+        cases.is_empty() || cases.len() == 1_618_158,
+        "corpus size changed to {}; update this count",
+        cases.len()
     );
     common::test_univariate_cases(metallic::lgamma, core_math::lgamma, cases.into_iter());
 }

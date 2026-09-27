@@ -1,13 +1,14 @@
 #![feature(f128)]
-//! Generate `tests/cases/sinq.wc`, `tests/cases/cosq.wc`, and
-//! `tests/cases/tanq.wc`: the hard-to-round corpora for [`metallic::sinq`],
-//! [`metallic::cosq`], and [`metallic::tanq`], each input with its correctly
-//! rounded answer.
+//! Generate `tests/cases/f128_sin.wc`, `tests/cases/f128_cos.wc`, and
+//! `tests/cases/tanq.wc`: metallic's own hard-to-round corpora for
+//! [`metallic::sinq`], [`metallic::cosq`], and [`metallic::tanq`], each input
+//! with its correctly rounded answer.
 //!
-//! CORE-MATH has no binary128 sine, cosine, or tangent yet (only the first
-//! two's corpora), so MPFR is the oracle and the answers travel with the
-//! inputs; the strict gate then replays under plain `--features f128` with no
-//! oracle at all.  Three layers:
+//! MPFR is the oracle and the answers travel with the inputs, so the strict
+//! gate replays under plain `--features f128` with no oracle at all.  CORE-MATH
+//! has no binary128 tangent; its `sinq`/`cosq` corpora are synced beside these
+//! as `sinq.wc`/`cosq.wc` and gated against `core_math::{sinq,cosq}`.  Three
+//! layers:
 //!
 //! 1. **Edges.** Specials, the tiny and direct band boundaries, the multiples
 //!    of π/2 and the breakpoints `j·π/256` as binary128 rounds them, each with
@@ -342,7 +343,7 @@ fn main() {
     );
 
     write(
-        "tests/cases/sinq.wc",
+        "tests/cases/f128_sin.wc",
         "sinq",
         &[
             ("CORE-MATH sinq.wc (e6c6cff0)", &sin_upstream),
@@ -364,7 +365,7 @@ fn main() {
         sin,
     );
     write(
-        "tests/cases/cosq.wc",
+        "tests/cases/f128_cos.wc",
         "cosq",
         &[
             ("CORE-MATH cosq.wc (e6c6cff0)", &cos_upstream),

@@ -545533,3 +545533,22 @@
 -0x1.ffffffffffff8p-1025
 # the following might raise an UB
 -0x1.fffffffffffffp+1023
+# failures found by Eric Hennenhoefer using AI
+0x1.0ff9aec139c98p+7
+-0x1.3fe13f813b1dep+3
+-0x1.807f72183941ep+1
+-0x1.807f721856cc4p+1
+-0x1.807f721976065p+1
+-0x1.807f721a1e84ep+1
+-0x1.807f721a6a882p+1
+-0x1.807f721a8ee2cp+1
+-0x1.ff8074250ba0bp+1
+-0x1.ff8074251bef6p+1
+-0x1.ff807426e02e2p+1
+-0x1.ff80742715c64p+1
+# the following inputs improve coverage (AI generated)
+-0x0p+0
+-inf
+-qnan
+0x1.0000000000000p+10
+inf

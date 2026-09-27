@@ -2,7 +2,7 @@ use crate::common;
 
 #[test]
 fn test_parser() {
-    assert!(common::parse_case_file("cbrt.wc", common::parse_f64).count() == 105_554);
+    assert!(common::parse_case_file("cbrt.wc", common::parse_f64).count() == 106_254);
 }
 
 #[test]

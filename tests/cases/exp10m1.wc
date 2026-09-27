@@ -227814,3 +227814,5 @@
 0x1.34413509f79fdp+8
 0x1.34413509f79fep+8
 0x1.34413509f79ffp+8
+# the following inputs improve coverage (AI generated)
+-0x1.0000000000000p-1

@@ -75,7 +75,7 @@ FUNCTIONS = {
 }
 # Functions the `core_math` crate does not bind (`analysis list` prints 0).
 NO_CORE_MATH = set("""compound compoundq fma fmaf frexp frexpf ldexp ldexpf round roundf
-    acospiq asinpiq atanpiq atan2piq cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq erfq erfcq tgammaq lgammaq""".split())
+    acospiq asinpiq atanpiq atan2piq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq erfq erfcq tgammaq lgammaq""".split())
 CALIBRATION = ("expf", "exp", "expq")
 
 # The argument whose instructions are the fast path: `analysis call <fn> x y z`
@@ -529,7 +529,7 @@ FN = {
     },
     "cosq": {
         "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed"},
-        "c": None,
+        "c": {"cov": ["binary128/cos/cosq.c: static u128 __attribute__((noinline, cold)) accurate(u128 m, int e, int cosine, u128 sign, unsigned rm) {"], "leg": "sym:accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
     },
     "exp2q": {
         "m": {"cov": ["f128_/exp.rs: fn accurate(m: u128, e: i32, negative: bool, l: &Reduction) -> f128 {"], "leg": "sym:exp::accurate", "prec": "128-bit fixed → 256-bit fixed"},
@@ -618,7 +618,7 @@ FN = {
     },
     "sinq": {
         "m": {"cov": ["f128_/trig.rs: fn accurate(m: u128, e: i32, cosine: bool, sign: u128) -> f128 {"], "leg": "sym:trig::accurate", "prec": "128-bit fixed (192-bit frame) → 384-bit fixed"},
-        "c": None,
+        "c": {"cov": ["binary128/sin/sinq.c: static u128 __attribute__((noinline, cold)) accurate(u128 m, int e, int cosine, u128 sign, unsigned rm) {"], "leg": "sym:accurate", "prec": "128-bit fixed (256-bit frame) → 384-bit fixed"},
     },
     "sqrtq": {
         "m": {"cov": ["f128_/roots.rs: fn correct_sqrt(mantissa: u128, exponent: i32, mut candidate: f128) -> f128 {"], "leg": "branch:5", "prec": "128-bit fixed → exact 256/384-bit integer"},
@@ -2096,7 +2096,7 @@ def cmd_render(args):
         "## Method",
         "**Function.** One row per public function, cells `metallic / CORE-MATH`; `—` where "
         "the `core_math` crate has no binding (`fma*`, `frexp*`, `ldexp*`, `round*`, "
-        "`compound`, and `cosq sinq tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq erfq erfcq tgammaq lgammaq`).",
+        "`compound`, and `tanq exp2m1q exp10m1q sinpiq cospiq tanpiq log2q log10q log1pq log2p1q log10p1q powq sinhq coshq tanhq asinhq acoshq atanhq erfq erfcq tgammaq lgammaq`).",
         "**v3, v4, native.** Cycles of the fast path from `llvm-mca -mcpu=x86-64-v3`, "
         "`x86-64-v4` and the host model (`{}`), each on the assembly rustc and clang emit for "
         "that level. GDB traces one call from the wrapper's entry (`metallic_<fn>`, "

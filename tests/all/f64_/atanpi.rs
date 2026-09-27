@@ -3,7 +3,7 @@ use crate::common;
 #[test]
 fn test_parser() {
     let count = common::parse_case_file("atanpi.wc", common::parse_f64).count();
-    assert!(count == 114_383, "parsed {count} cases");
+    assert!(count == 114_384, "parsed {count} cases");
 }
 
 #[test]

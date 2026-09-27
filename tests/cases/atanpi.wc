@@ -114392,3 +114392,5 @@
 0x1.59af9a1194efep-1020
 0x1.59af9a1194efep-1021
 0x1.59af9a1194efep-1022
+# failure found by Eric Hennenhoefer using AI
+-0x1.adf60571a51a6p-8

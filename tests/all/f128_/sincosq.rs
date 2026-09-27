@@ -6,12 +6,13 @@ use common::Identity as _;
 // `sincosq` is `sinq` and `cosq` off one Payne–Hanek reduction and one pair of
 // series, and both legs behind it are correctly rounded, so each half must
 // equal the separate function bit for bit.  That identity is the gate: it
-// inherits `sinq`'s and `cosq`'s own corpora (which carry their MPFR answers)
-// through the halves checked here, and the joint Ziv hand-over — either half
-// landing in the tie window sends *both* to the 384-bit leg — is exactly what
-// a shared-reduction pair can get wrong.
+// inherits `sinq`'s and `cosq`'s corpora — metallic's own, which carry their
+// MPFR answers, and CORE-MATH's against its `sinq`/`cosq` — through the halves
+// checked here, and the joint Ziv hand-over — either half landing in the tie
+// window sends *both* to the 384-bit leg — is exactly what a shared-reduction
+// pair can get wrong.
 
-/// Sizes of `tests/cases/{sinq,cosq}.wc` (kept in sync with the generators).
+/// Sizes of `tests/cases/f128_{sin,cos}.wc` (kept in sync with the generator).
 const SIN_CORPUS_LEN: usize = 95_321;
 const COS_CORPUS_LEN: usize = 96_265;
 
@@ -61,7 +62,7 @@ fn near_multiple(i: u64) -> f128 {
 #[test]
 fn test_sincosq_sin_corpus() {
     let cases: Vec<[f128; 2]> =
-        common::parse_case_file("sinq.wc", common128::parse_f128_pair).collect();
+        common::parse_case_file("f128_sin.wc", common128::parse_f128_pair).collect();
     assert_eq!(
         cases.len(),
         SIN_CORPUS_LEN,
@@ -78,7 +79,7 @@ fn test_sincosq_sin_corpus() {
 #[test]
 fn test_sincosq_cos_corpus() {
     let cases: Vec<[f128; 2]> =
-        common::parse_case_file("cosq.wc", common128::parse_f128_pair).collect();
+        common::parse_case_file("f128_cos.wc", common128::parse_f128_pair).collect();
     assert_eq!(
         cases.len(),
         COS_CORPUS_LEN,
@@ -89,6 +90,13 @@ fn test_sincosq_cos_corpus() {
         let (_, got) = metallic::sincosq(x);
         (!got.is(&want)).then(|| println!("sincosq({x:?}).1 = {got:?} != {want:?} (correct)"))
     }));
+}
+
+/// Both halves against CORE-MATH on its own `sinq`/`cosq` corpora.
+#[test]
+fn test_sincosq_worst_cases() {
+    common128::test_worst_univariate_f128("sin", |x| metallic::sincosq(x).0, core_math::sinq);
+    common128::test_worst_univariate_f128("cos", |x| metallic::sincosq(x).1, core_math::cosq);
 }
 
 /// The pair is the two separate functions, everywhere.

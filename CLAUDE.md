@@ -386,7 +386,7 @@ quadrant `n >> 7`, breakpoint `j = n & 127` — and the signed residual
 `θ = g·π/2 < 2^-7.34` keeps full relative precision however close `x` sits
 to a multiple of π/2.  The fast leg insists on 136 of its 192 bits (`MAX_LZ`)
 and hands the rest over; no binary128 comes within 2^-124 of a multiple of
-π/2 (the per-binade convergent families in `tests/cases/{sinq,cosq}.wc` reach
+π/2 (the per-binade convergent families in `tests/cases/f128_{sin,cos}.wc` reach
 2^-123.9), so the 448-bit residual keeps over 300 bits there.  `sin θ` and
 `1 − cos θ` use an even/odd-split degree-four minimax and six Taylor terms,
 respectively, on the fast leg (gate 16); the accurate leg keeps eighteen
@@ -430,9 +430,9 @@ back from CORE-MATH's `sinq.c`, where it bought 12% (20% for `sincosq`); here
 landing in the tie window sends both to `accurate_both`, one `reduce_wide`
 and one `series_384` feeding two `combine_384`s.  Both legs being correctly
 rounded, each half must equal the separate function bit for bit, and that
-identity replayed over both `.wc` corpora is the gate — `sincosq` needs no
-corpus of its own.  libquadmath binds it; nightly `std` has no binary128
-`sin_cos`, so that bench has no `f128::` lane.
+identity replayed over all four `sin`/`cos` corpora is the gate — `sincosq`
+needs no corpus of its own.  libquadmath binds it, CORE-MATH does not; nightly
+`std` has no binary128 `sin_cos`, so that bench has no `f128::` lane.
 
 `sinpiq`/`cospiq`/`tanpiq` share those kernels through `fast_reduced` and
 `accurate_reduced`. Their `trigpi.rs` front end cuts `n = round(256·|x|) mod
@@ -450,13 +450,17 @@ count guards. MPFR sweeps include every exponent field and subnormals;
 CORE-MATH or libquadmath entry point: keep standalone benches and do not
 add these functions to `FUNCS128` before upstream binds them.
 
-CORE-MATH has no `sinq`/`cosq`/`sincosq`/`tanq` yet, so all four are gated on a
-home-grown corpus carrying MPFR answers (`examples/gen_f128_trig_cases.rs`:
+`sinq`/`cosq` gate bit-exact against `core_math::{sinq,cosq}` (core-math 1.4)
+on upstream's `sinq.wc`/`cosq.wc` (in `FUNCS128`) and on deterministic
+samples, and keep a home-grown corpus carrying MPFR answers beside them
+(`tests/cases/f128_{sin,cos}.wc`, from `examples/gen_f128_trig_cases.rs`:
 edges, the per-binade convergents of `2^(e−111)/π` for both parities of the
-multiple, an MPFR near-midpoint scan) plus CORE-MATH's f64 `sin`/`cos`/`tan`
-as an oracle-free cross-check to 2^1024, and the bench baseline is GCC's
-libquadmath (faithful-only) until upstream binds them — do not add them to
-`FUNCS128` before then.  `log2q`, `log10q` and `log1pq` are gated the same way
+multiple, an MPFR near-midpoint scan).  Upstream's `sinq.c` shares metallic's
+structure, so CORE-MATH's f64 `sin`/`cos` stay as a structure-independent
+cross-check to 2^1024.  CORE-MATH has no `tanq` or `sincosq`: `tanq` is gated
+on its home-grown corpus (`tanq.wc`) plus the f64 `tan` cross-check, and its
+bench baseline is GCC's libquadmath (faithful-only) — do not add it to
+`FUNCS128` before upstream binds it.  `log2q`, `log10q` and `log1pq` are gated the same way
 (`examples/gen_f128_log_cases.rs -- <base>`: every power of two with sparse
 neighbours, base 10's exact `10^k`, the inverse family `round(b^z)` for
 114-bit midpoints `z`, MPFR scans over the domain and the neighbourhood of 1;

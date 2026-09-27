@@ -63,7 +63,7 @@ Each function is done when both gates hold:
   `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
   `erfq`/`erfcq`/`tgammaq`/`lgammaq`/
   `asinhq`/`acoshq`/`atanhq`/`sinhq`/`coshq`/`tanhq`/`exp2m1q`/`exp10m1q`/
-  `sinq`/`cosq`/`sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
+  `sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
   `asinpiq`/`acospiq`/`atanpiq`/`atan2piq`/`log1pq`/`log2p1q`/`log10p1q`/`powq`/`compoundq`
   have no CORE-MATH binding yet:
   their strict gate replays a home-grown corpus that carries its
@@ -129,10 +129,12 @@ Each function is done when both gates hold:
 | `tanpiq` | ✅ |
 | `tgammaq` | ✅ |
 
-`sincosq` returns the pair off one reduction and one pair of series, so both
-halves are the separately gated `sinq` and `cosq` bit for bit — that identity,
-replayed over both corpora, is its gate; libquadmath binds it, `f128::` does
-not.
+`sinq` and `cosq` gate against CORE-MATH's own `sinq`/`cosq` (core-math 1.4)
+and keep their home-grown MPFR-answer corpora (`tests/cases/f128_{sin,cos}.wc`)
+beside upstream's.  `sincosq` returns the pair off one reduction and one pair
+of series, so both halves are the separately gated `sinq` and `cosq` bit for
+bit — that identity, replayed over all four corpora, is its gate; libquadmath
+binds it, CORE-MATH and `f128::` do not.
 
 `exp2m1q`, `exp10m1q`, `log2p1q`, `log10p1q`, `sinpiq`, `cospiq`,
 `tanpiq`, `asinpiq`, `acospiq`, `atanpiq`, `atan2piq`, and `compoundq` have standalone

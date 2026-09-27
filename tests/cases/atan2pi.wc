@@ -208009,3 +208009,6 @@
 0xd.41fc21779fb98p-636,0x8p-152
 0xf.fffffp+124,0xf.ffffffffffff8p+1020
 -0x4p-1024,0xf.ffffffffffff8p+1020
+# the following inputs improve coverage (AI generated)
+-0x0.0000000000001p-1022,-0x1.0000000000000p-1
+-0x0.0000000000001p-1022,-0x1.0ffffffffffffp-66

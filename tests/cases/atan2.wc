@@ -28126,3 +28126,5 @@
 # inputs yielding an error > 0.5 ulp with LLVM 20.1.8 and rndn
 -0x1.9e973a2069033p-125,0x1.c78bd6e23ee71p-117
 -0x1.bdb2c358b0b81p-93,0x1.c717a5969be93p-86
+# the following inputs improve coverage (AI generated)
+-0x0.0000000000001p-1022,0x1.0000000000001p+0

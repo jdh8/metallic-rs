@@ -31,7 +31,7 @@ STD_ALIASES = {"log": "ln", "log1p": "ln_1p", "expm1": "exp_m1",
                "sincos": "sin_cos", "pow": "powf"}
 NO_CORE_DEFAULT = {"compound", "fma", "fmaf", "frexp", "frexpf", "ldexp",
                    "ldexpf", "round", "roundf"}
-NO_CORE_F128 = {"cosq", "sinq", "tanq", "log2q", "log10q", "log1pq", "powq"}
+NO_CORE_F128 = {"tanq", "log2q", "log10q", "log1pq", "powq"}
 
 
 def require(condition, message):

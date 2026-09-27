@@ -170,12 +170,13 @@ CORE-MATH lacks in five steps:
 5. **When upstream binds it** (`0f1c593` is the template): bump the `core-math`
    pin, switch `test_<fn>q_worst_cases` to bit-exact `core_math::<fn>q`, keep
    `test_<fn>q_vs_mpfr`, add the name to `FUNCS128` in
-   `tools/sync-worst-cases.sh` (upstream files the trig corpora as `sin.wc`,
-   not `sinq.wc`), keep our corpus beside theirs, then bench for the same-run
-   ratio — the one deliverable that genuinely waits.
+   `tools/sync-worst-cases.sh` (upstream files the trig corpora as
+   `sin/sinq.wc`), keep our corpus beside theirs under an `f128_<fn>.wc` name
+   so the sync cannot overwrite it (`sinq`/`cosq`), then bench for the
+   same-run ratio — the one deliverable that genuinely waits.
 
-Candidates, in the order the structure favours: `sinq`/`cosq` (corpus already
-upstream, unbindable for at least a release); `log2q`/`log10q`/`log1pq` on the
+Candidates, in the order the structure favours: `sinq`/`cosq` (switched with
+core-math 1.4); `log2q`/`log10q`/`log1pq` on the
 `logq` engine and the hyperbolics on `expq`/`logq`; `powq`, whose real risk is
 the exact/midpoint tier, not the corpus; `erf`/gamma last — MPFR-only for good,
 like their f64 versions.
