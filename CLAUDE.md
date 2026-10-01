@@ -1,12 +1,21 @@
 # metallic
 
 This crate provides C math functions written from scratch in Rust, aiming for
-correct rounding (error ≤ 0.5 ulp) and performance comparable to or better than
+correct rounding (round-to-nearest, ties-to-even) and performance comparable to or better than
 the system math library.  Coverage spans every C99 transcendental in both
 precisions plus CORE-MATH's C23 set (`sinpi`…`atan2pi`, `exp2m1`, `exp10m1`,
-`log2p1`, `log10p1`, `rsqrt`, `compound`), all correctly rounded (issue #7).
+`log2p1`, `log10p1`, `rsqrt`, `compound`), with strict regression tests (issue #7).
 (`compound` is metallic's own: CORE-MATH ships only `compoundf`, so the f64
 version is MPFR-verified against a home-grown corpus, like `tgamma`/`lgamma`.)
+
+**Evidence policy.** Correct rounding is a goal, not a conclusion from green
+tests. Distinguish sampled agreement, exhaustive verification for a specified
+build and oracle, and a full-domain mathematical proof. A `ziv_soundness` MPFR
+sweep measures sampled error; it does not prove a uniform error bound. A hard-case
+corpus needs a completeness argument tied to this implementation's error bounds.
+Do not describe fixed binary128 precision policies as proofs or claim all
+binary128 transcendentals are correctly rounded. See [BINARY128.md](BINARY128.md#status)
+and the skill's `reference/correct-rounding.md`.
 
 **Never port polynomial or rational coefficients from CORE-MATH** (or any
 other library): CORE-MATH is the *oracle* and a structural reference, never
@@ -113,7 +122,7 @@ The accurate leg uses 384-bit roots and series on the existing logarithm
 tables, with a 2^-320 relative precision policy. Root iterates saturate
 when approaching the frame's upper endpoint; forced-fallback tests cover
 powers of two and neighbors in every exponent. Exact Taylor rationals
-come from `tools/gen_invhyp_f128.py`. The million-input certifications
+come from `tools/gen_invhyp_f128.py`. The million-input gate-error checks
 measure worst |err|/gate 0.250035 / 0.250010 (about 4× margin).
 `examples/gen_f128_invhyp_cases.rs` generates MPFR-answer corpora from
 edges, inverse midpoints, half-ulp cubic corrections and 20M scan inputs
@@ -127,7 +136,7 @@ Above it, `log::one_plus` forms exact `1±x`, and their unrounded logarithms
 are subtracted and halved before rounding. The 384-bit accurate leg keeps
 the same 2^-320 relative precision policy. Through |x|≤2^-57 the answer is x,
 including subnormals; ±1 return signed infinity and |x|>1 returns NaN.
-Its million-input `ziv_soundness` certification measures worst |err|/gate
+Its million-input `ziv_soundness` check measures sampled worst |err|/gate
 0.2500064 (about 4× margin). `gen_f128_invhyp_cases -- atanh` freezes MPFR
 answers from poles, seams, inverse midpoints, half-ulp cubic corrections,
 and 20M scan inputs. Corpus guards, full-representation MPFR sweeps, forced
@@ -144,7 +153,7 @@ The high fourteen fast coefficients narrow to 64 bits. All constants come
 from `tools/gen_erf_f128.py`; regenerate rather than edit. The 384-bit
 accurate leg reuses `hyp::exp2_384` and the existing 380-bit log2(e), with
 a `2^-360` relative precision policy. Tiny erf retains `2/sqrt(pi)` on the
-subnormal grid. Both million-input gate certifications measure worst
+subnormal grid. Both million-input gate-error checks measure sampled worst
 `|err|/gate = 0.259560` (3.85× margin); forced accurate checks and MPFR
 sweeps cover both functions. `gen_f128_erf_cases` supplies answer-carrying
 corpora from seams, inverse midpoints, tiny-slope continued fractions and
@@ -192,7 +201,7 @@ construction — `m = 1` estimates `j = 0`, every table term and `z` vanish, and
 so the `e = −1` cancellation is exact too.  `log10q` is one more `Base`
 (`--base 10` emits `log10_tables.rs`) on the natural logarithm's gate —
 `log10 e < 1` shrinks only `z`'s cut, the products' truncations being
-absolute, so its certified slip (0.1025 of the gate) sits just under `logq`'s
+absolute, so its observed slip (0.1025 of the gate) sits just under `logq`'s
 (0.1166); its exact cases `log10(10^k) = k` (`0 ≤ k ≤ 48`, as far as
 `5^k < 2^113`) are *not* free the way base 2's are — `10^k` is no table
 reciprocal, so the frame carries `k` plus the tables' and polynomial's slip
@@ -312,7 +321,7 @@ enters the result directly against a half-ulp ≥ 2^-116.  A zero sector
 root itself.  The accurate leg is unchanged — the `atan2q` pipeline fed a
 384-bit f64-seeded root (`wide_sqrt`, `sqrt_384`), a 384-bit dyadic-tangent
 reduction, `recip_wide`, and `atan_frac_384`.  `asin.rs`'s own `ziv_soundness`
-certifies both legs together (worst |err|/gate 0.0799 ≈ 12.5× margin, in the
+checks both legs together (sampled worst |err|/gate 0.0799 ≈ 12.5× margin, in the
 series band's top binade).  Tiny inputs need no special path: once
 `x² < 2^-128` of `x` the series *is* `x`, which is what `asin(x) = x + x³/6 + …`
 rounds to, down through the subnormals.
@@ -360,7 +369,7 @@ operand folded through the reduction by hand: the sector is an integer shift
 one side of each exact product collapses into a shift, and below the first
 breakpoint the reduced tangent *is* the input significand — no quotient, no
 Newton reciprocal, both legs run the Taylor sum on exact bits.  Its own
-`ziv_soundness` test certifies that folded path separately.
+`ziv_soundness` test samples that folded path separately.
 
 `atanpiq`/`atan2piq` use those same reductions and series with a compile-time
 choice of units. The reduced arc multiplies by `asinpi_tables::INV_PI` before
@@ -371,7 +380,7 @@ the subnormal grid; axes and equal magnitudes produce exact quarter turns.
 `examples/gen_f128_atanpi_cases.rs` freezes MPFR answers from edges, inverse
 114-bit midpoints, 113-bit continued-fraction pairs of `tan(π·midpoint)`,
 continued fractions of the tiny slope, and 20M scan inputs per function.
-Each has its own `atan2::ziv_soundness` certification, MPFR sweeps and a
+Each has its own `atan2::ziv_soundness` sampled check, MPFR sweeps and a
 CORE-MATH f64 cross-check. Keep standalone benches and leave them out of
 `FUNCS128` until upstream binds them.
 
@@ -428,8 +437,8 @@ back from CORE-MATH's `sinq.c`, where it bought 12% (20% for `sincosq`); here
 `place_256`/`top_256` were already cut from 64-bit funnels, so it is ~1% on
 `sinq`/`cosq` and 5% on `sincosq`.  The Ziv gate is joint: either half
 landing in the tie window sends both to `accurate_both`, one `reduce_wide`
-and one `series_384` feeding two `combine_384`s.  Both legs being correctly
-rounded, each half must equal the separate function bit for bit, and that
+and one `series_384` feeding two `combine_384`s. Each half is intended to
+equal the separate function bit for bit, and that
 identity replayed over all four `sin`/`cos` corpora is the gate — `sincosq`
 needs no corpus of its own.  libquadmath binds it, CORE-MATH does not; nightly
 `std` has no binary128 `sin_cos`, so that bench has no `f128::` lane.
@@ -446,7 +455,7 @@ The generator is `examples/gen_f128_trigpi_cases.rs`: exact seams and
 neighbors, inverse 114-bit midpoints, continued fractions of π and π/2,
 and MPFR near-midpoint scans; the corpora carry their answers and parser
 count guards. MPFR sweeps include every exponent field and subnormals;
-`trigpi::ziv_soundness` certifies all three new fast legs. There is no
+`trigpi::ziv_soundness` samples all three new fast legs. There is no
 CORE-MATH or libquadmath entry point: keep standalone benches and do not
 add these functions to `FUNCS128` before upstream binds them.
 
@@ -473,8 +482,9 @@ IEEE subnormalization under `--features "f128 mpfr"`. Keep each corpus count
 guard current so a missing or partially parsed file cannot pass vacuously.
 A `q` function CORE-MATH has not shipped follows the skill's
 `reference/correct-rounding.md` § `f128`: MPFR gate, a home-grown corpus that
-carries its answers, then the oracle switch once upstream binds it — no upstream
-corpus is proof-grade in binary128, CORE-MATH's included.
+carries its answers, then the oracle switch once upstream binds it. The available
+binary128 transcendental corpora are regression evidence, not complete hard-case
+enumerations that certify these fixed-precision fallbacks.
 
 Refresh q corpora from `vendor/src/binary128/<fn>/<fn>q.wc` with
 `tools/sync-worst-cases.sh`. CORE-MATH remains an oracle and structural
@@ -529,9 +539,9 @@ x86-64 GNU/Linux.
 
 `examples/f128_ulp_survey.rs` (`--features "f128 mpfr"`) is the accuracy side
 of that comparison: max ulp of metallic / glibc / libquadmath against MPFR at
-300 bits, over the benches' own bands. The metallic column is the harness'
-own proof — it must read `≤ 0.5` on every function, and a `self_check` pins
-the ulp scaling against exact midpoints before the survey runs. The table it
+300 bits, over the benches' own bands. The metallic column is a sampled
+consistency check; a printed `0.500` is not proof of correct rounding.
+A `self_check` pins the ulp scaling against exact midpoints before the survey runs. The table it
 prints is in [BINARY128.md](BINARY128.md#baselines).
 
 ## Verification (reproducing CORE-MATH's checks)
@@ -556,16 +566,18 @@ git but excluded from the published crate via `exclude = ["/tests/cases"]` in
 `Cargo.toml` (big repo, small dependency).  Refresh them from a `core-math-sys`
 checkout with `tools/sync-worst-cases.sh`.
 
-**Correctness status: complete.** Every f32 and f64 function is correctly
-rounded and every strict gate is active (issue #6, closed 2026-06-14).  Default
-`cargo test` is GREEN; a red gate is a **regression** to fix before anything
-else, never something to `#[ignore]`.
+**Regression baseline.** Every strict f32 and f64 gate is active (issue #6,
+closed 2026-06-14). A red gate is a **regression** to fix before anything else,
+never something to `#[ignore]`. Passing these gates does not itself establish
+full-domain correctness; record proof coverage separately from test results.
 
 **Ziv-gate soundness rule.** A new or changed fast leg or Ziv gate ships its
-in-source `mod ziv_soundness` MPFR certification (worst `|err|/gate < 0.5`,
-i.e. ≥ 2× margin) **in the same commit**, with the printed margin quoted in the
-commit message.  See the skill's `reference/correct-rounding.md` for the
-pattern (`src/f64_/log.rs` has the model modules).
+in-source `mod ziv_soundness` MPFR check (sampled worst `|err|/gate < 0.5`,
+i.e. > 2× observed margin) **in the same commit**, with the measured margin
+quoted in the commit message. A certified gate additionally needs a rigorous
+bound covering every input on that path; sampling cannot supply it. See the
+skill's `reference/correct-rounding.md` for the distinction and test pattern
+(`src/f64_/log.rs` has the model modules).
 
 ## Performance
 
@@ -577,8 +589,9 @@ open issues for the current laggards before starting new work.  Bench with
 flag — the host default has **no FMA**), then run `python3
 tools/bench_ratio.py median` for the paired table.  The headline number is the
 **same-run CORE-MATH ratio** (`metallic::<fn>` / `core_math::<fn>`): CORE-MATH
-shares metallic's ≤ 0.5 ulp contract, while std/libm are faithful-only and do
-less work.  Never compare across runs (CORE-MATH is a moving baseline) and
+shares metallic's correct-rounding goal, while std/libm generally offer weaker
+accuracy guarantees. Check each function's proof and accuracy scope separately.
+Never compare across runs (CORE-MATH is a moving baseline) and
 check box load *and* memory pressure before trusting absolute numbers.
 `ANALYSIS.md` is the committed, deterministic view of the same comparison —
 fast-path llvm-mca cycles per ISA level, coverage-counted accurate-leg rates,

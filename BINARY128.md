@@ -57,10 +57,17 @@ which clang refuses on every Darwin target.
 
 ## Status
 
-Each function is done when both gates hold:
+The target is round-to-nearest, ties-to-even. **Full-domain correct rounding
+has not been established for the binary128 transcendental implementations.**
+The table records passing regression checks from the implementation work, not
+proof certificates or a fresh test run. Exact integer methods used by roots and
+basic operations have different proof obligations; the table does not certify
+those implementations either.
 
-- **CR** — correctly rounded, all strict gates green (bit-exact vs
-  `core_math::<fn>q` on the worst-case corpus, deterministic samples, MPFR).
+Two kinds of evidence are tracked:
+
+- **Tests** — recorded strict checks passed (bit-exact vs `core_math::<fn>q`
+  on the available hard-case corpus and deterministic samples, or MPFR checks).
   `erfq`/`erfcq`/`tgammaq`/`lgammaq`/
   `asinhq`/`acoshq`/`atanhq`/`sinhq`/`coshq`/`tanhq`/`exp2m1q`/`exp10m1q`/
   `sincosq`/`tanq`/`sinpiq`/`cospiq`/`tanpiq`/`log2q`/`log10q`/
@@ -79,8 +86,8 @@ Each function is done when both gates hold:
   a `quadmath::` one; their weaker accuracy contracts make them context rather than
   the headline — see [Baselines](#baselines).
 
-| Function | CR |
-|----------|:--:|
+| Function | Recorded tests |
+|----------|:--------------:|
 | `acoshq` | ✅ |
 | `acospiq` | ✅ |
 | `acosq`  | ✅ |
@@ -171,9 +178,10 @@ The general trace at `(x,y) = (1.7,0.7)` costs **485 llvm-mca cycles**;
 regenerate with `python3 tools/analysis.py asm --only compoundq --isa v3`
 and `python3 tools/analysis.py mca --only compoundq`.
 
-`fmaq`, `frexpq`, `ldexpq` and `roundq` are exact operations rather than
-approximations, so neither column means what it does for the rest of the
-table.  `frexpq`, `ldexpq` and `roundq` are bit manipulation, gated on their
+`fmaq`, `frexpq`, `ldexpq` and `roundq` are basic arithmetic or decomposition
+operations, rather than transcendental approximations. FMA and scaling can
+still require rounding and range handling. `frexpq`, `ldexpq` and `roundq`
+use bit manipulation, tested against their
 defining invariants — the exponent-field identity, the subnormal ladder, the
 exact round trip, an independent integer reconstruction — plus an MPFR sweep;
 none has an interesting cost.  `fmaq` is the *platform's*
@@ -196,8 +204,18 @@ bindings use generated corpora carrying MPFR answers, precision-113 MPFR
 sweeps with ternary-aware subnormalization, and independent CORE-MATH f64
 cross-checks (`compoundq` uses `compoundf`). Each fast rounding gate also
 has an in-source `ziv_soundness` check, and the accurate leg is exercised
-directly. Binary128 sampling is not an exhaustive proof; the wider legs
-follow the documented precision policies.
+directly. These are sampled gate-error checks, not uniform error proofs.
+Binary128 sampling is not an exhaustive proof; the wider legs follow the
+documented precision policies.
+
+The fixed 256-, 384-, 512-, or 640-bit fallbacks described below do not by
+themselves solve the Table Maker's Dilemma. A proof must justify every accepting
+gate and the final rounding decision, including exact cases and range boundaries.
+It needs either a sufficient worst-case precision bound for the relevant domain
+or certified interval refinement with an exact-case and termination argument.
+Storage width alone is not a bound on numerical error. Agreement with CORE-MATH
+is useful regression evidence, but shared algorithms can share errors; keep the
+independent MPFR checks.
 
 libquadmath and nightly std supply timing lanes for the error and gamma
 families. Neither is a correctness oracle. The seven π-scaled functions,
@@ -287,7 +305,7 @@ unit operand through its own reduction: the sector is an integer shift
 and below the first breakpoint the reduced tangent *is* the input significand,
 so both legs skip the quotient and its Newton reciprocal outright.  The shared
 legs, tables, and Ziv gate carry over, and the folded path ships its own
-soundness certification.
+sampled gate-error check.
 
 `asinq` and `acosq` split at `|x| = 2^-3`.  Below it the arc sine is its own
 reduced argument: no root is formed at all and the fast leg is a minimax
@@ -303,7 +321,7 @@ small-integer product and the other a 256-bit multiply by the tabulated
 `asin(j/128)` adds back in `atan2q`'s frame.  `1 − x²` is exact in fixed point and its root is
 `sqrtq`'s own integer frame plus one Newton step against all 256 bits.  The
 accurate leg is the `atan2q` pipeline fed a 384-bit root, with its own
-reduction, tables, and certified Ziv gate.
+reduction, tables, and Ziv gate checked by sampled error measurements.
 
 `asinpiq` and `acospiq` reuse that engine with `asin(j/128)/π` on the fast
 leg, `atan(i/64)/π` on the accurate leg, and exact quadrant offsets `0, 1/2, 1`.
@@ -384,7 +402,7 @@ numerator/denominator pairs of `tan(π·midpoint)`, the tiny `1/π` slope on
 both IEEE grids, and 20-million-input scans per function. Independent MPFR
 sweeps cover the full representation and subnormal results. The corpus gates
 run without MPFR, and CORE-MATH's f64 functions supply another cross-check.
-The million-input fast-leg certifications measure worst `|err|/gate` of
+The million-input fast-leg checks measure sampled worst `|err|/gate` of
 0.0835 / 0.2569 (`atanpiq` / `atan2piq`), retaining about 12× / 3.89× margin.
 Their initial x86-64-v3 traces cost 457 / 404 llvm-mca cycles at
 `x = 1.7` / `(y, x) = (1.7, 0.7)`; regenerate with
@@ -411,7 +429,7 @@ The 384-bit fallback lifts the same three-table exponential reduction using
 generates its wider exponential tables and the factorial/Bernoulli Taylor
 constants independently. The fallback retains over 360 relative bits;
 that precision policy is not an exhaustive binary128 proof. The million-input
-MPFR certifications measure worst `|err|/gate = 0.321967 / 0.321967 / 0.071981`
+MPFR checks measure sampled worst `|err|/gate = 0.321967 / 0.321967 / 0.071981`
 for sinh/cosh/tanh, giving at least 3.1× margin. The independent fallback
 checks stay below 0.006 of the stated `2^-360` relative-error bound.
 
@@ -460,7 +478,7 @@ relative precision policy is `2^-320`, checked separately from the fast
 gate. Newton roots saturate at the upper endpoint of their integer frame
 when they approach one, preventing an intermediate overshoot from wrapping.
 Forced-fallback tests cover powers of two and their neighbors over every
-exponent. The million-input certifications measure worst `|err|/gate`
+exponent. The million-input checks measure sampled worst `|err|/gate`
 0.250035 / 0.250010 (asinh/acosh), about 4× margin; fallback errors stay
 below 0.00183 of the stated relative bound.
 
@@ -502,7 +520,7 @@ precision policy. Values at ±1 return signed infinity; larger magnitudes
 return NaN.
 
 Its million-input soundness check measures worst `|err|/gate = 0.2500064`,
-about 4× margin, with a 0.0955% fallback rate on the certification sample.
+about 4× observed margin, with a 0.0955% fallback rate on the test sample.
 The 698,150-case frozen MPFR corpus includes the poles and their neighbors, every input
 binade, inverse output midpoints, half-ulp cubic corrections, and 20 million
 scan inputs across four bands. Tests also force the accurate leg near powers
@@ -568,7 +586,7 @@ including ties. Signed zero gives signed infinity for gamma; negative
 integer poles give NaN. Log-Gamma returns positive infinity at poles and
 does not update a global `signgam`.
 
-The million-input gamma certifications measure worst `|err|/gate` of
+The million-input gamma checks measure sampled worst `|err|/gate` of
 `2.24e-8` for `tgammaq` and `2.61e-11` for `lgammaq`. The latter deliberately
 crowds both sides of the negative zeros and refuses 3,008 fast results;
 direct 512-bit checks cover every identified zero neighborhood. Measured
@@ -612,9 +630,10 @@ Reproduce with `CC=clang cargo +nightly run --release --features "f128 mpfr"
 Three other binary128 implementations are within reach on a GNU/Linux box, and
 they are not interchangeable:
 
-- **[CORE-MATH]** shares metallic's ≤ 0.5 ulp contract, so it is the only fair
-  performance baseline — it is the only one doing the same work.  It binds
-  thirteen of the functions above.
+- **[CORE-MATH]** shares the goal of correct rounding and is the primary
+  performance and regression baseline. Its binary128 transcendental comparisons
+  do not establish a full-domain proof for either implementation. Use the
+  bindings available in the pinned `core-math` dependency.
 - **nightly Rust** adds no binary128 math of its own.  `f128::sin`,
   `f128::powf` and the rest are `extern "C"` calls into **glibc**'s
   `_Float128` libm (`sinf128`, `powf128`, …), and `std` documents their
@@ -638,8 +657,10 @@ $ cargo +nightly run --release --features "f128 mpfr" --example f128_ulp_survey 
 Maximum error in ulps over 50 000 draws per function, taken from the benches'
 own bands so the accuracy population is the timed one — except `asinq`/`acosq`,
 whose bench band never leaves `|x| < ½`, so the survey draws all of `[−1, 1]`
-and crowds the endpoints where the reflection cancels.  Correct rounding is
-`≤ 0.5`; anything above it is a wrong last bit.
+and crowds the endpoints where the reflection cancels. A true error above
+0.5 ulp disproves nearest rounding under this survey's ulp convention. A value
+printed as `0.500` does not certify the last bit or ties-to-even, and this
+fixed-precision, sampled survey is not a proof of correct rounding.
 
 | function | metallic | glibc 2.35 | libquadmath 12.3 |
 |----------|:--------:|:----------:|:----------------:|

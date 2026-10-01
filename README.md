@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
 [![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jdh8/metallic-rs)
 
-A fast correctly rounded math library in Rust!
+A fast math library in Rust, targeting correct rounding.
 
 See the [September 5 benchmarks](benchmarks/2026-09-05/README.md) for archived measurements on Apple M4 and
 AMD Ryzen 9 7950X3D, with same-run CORE-MATH ratios and recorded source/toolchain
@@ -42,7 +42,8 @@ focuses on difficult correctly rounded functions rather than the complete
 libc/libm surface.  Every C99 transcendental ships in both precisions, plus
 selected C23 functions and extensions: `sinpi`, `cospi`, `tanpi`, `asinpi`,
 `acospi`, `atanpi`, `atan2pi`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`,
-`rsqrt`, and `compound` (and their `f` variants) — all correctly rounded.
+`rsqrt`, and `compound` (and their `f` variants). All target
+round-to-nearest, ties-to-even; see the correctness status below.
 
 [CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 
@@ -72,6 +73,25 @@ The binary128 functions include `erfq`, `erfcq`, `tgammaq`, `lgammaq`,
 and `exp10m1q`. See
 [BINARY128.md](BINARY128.md) for the full list, how each one works, and how
 metallic compares with glibc and libquadmath.
+
+## Correctness status
+
+Correct rounding means returning the exact mathematical result rounded once to
+the destination format, with ties to even. It is the goal for every function,
+not a guarantee established by passing sampled tests.
+
+The library has strict regression tests against CORE-MATH and MPFR, including
+hard-to-round inputs. A completed exhaustive unary `f32` comparison can establish
+correctness for the tested build, conditional on a correct oracle and harness.
+For `f64`, checking a published hard-case corpus also requires a completeness
+argument and error bounds for this implementation to establish full-domain
+correctness. Sampled tests alone provide neither.
+
+**Binary128 transcendental correct rounding has not been established over the
+full domain.** Its recorded tests provide evidence on the tested inputs. The
+implementations use fixed wider fallbacks; without a sufficient proven precision
+bound or a certified adaptive fallback, those tests do not rule out untested
+misroundings. See [BINARY128.md](BINARY128.md#status) for scope and evidence.
 
 ## Enable [fused multiply-add][fma] for best performance
 
@@ -130,9 +150,9 @@ library is the default [rounding half to even][round-even].
 
 ## Goals
 
-- The functions should be correctly rounded (error ≤ 0.5 ulp).
-  - Works in progress may be only faithfully rounded (error < 1 ulp).  These
-    functions are considered buggy until I make them correctly rounded.
+- The functions should return the nearest representable result, with ties to even.
+  - A known misrounding is a bug. Passing tests without a full-domain argument
+    should be reported as tested accuracy, not proven correct rounding.
 - The functions should be about as fast as the system library.
 - Try to make `f32` functions faster than the system library.
 
@@ -145,15 +165,15 @@ library is the default [rounding half to even][round-even].
 
 ## Milestones
 
-- [x] C99 transcendental and special functions for `f32` and `f64`, all
-      correctly rounded:
+- [x] Implement C99 transcendental and special functions for `f32` and `f64`,
+      with strict regression tests:
   - Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
   - Hyperbolic: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
   - Exponential, logarithmic, power, and root: `exp`, `exp2`, `expm1`, `log`,
     `log2`, `log10`, `log1p`, `pow`, `cbrt`, `hypot`
   - Error and gamma: `erf`, `erfc`, `tgamma`, `lgamma`
-- [x] Selected C23 functions and extensions for `f32` and `f64`, all correctly
-      rounded: `sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`, `atanpi`,
+- [x] Implement selected C23 functions and extensions for `f32` and `f64`, with
+      strict regression tests: `sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`, `atanpi`,
       `atan2pi`, `exp10`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`, `rsqrt`,
       `compound`, and `sincos`
 - [ ] Complex `f32` and `f64` functions from [`<complex.h>`][complex]

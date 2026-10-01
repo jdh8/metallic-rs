@@ -8,7 +8,7 @@ description: >-
   argument reduction, generating minimax/Remez polynomial or rational
   coefficients (rminimax/Sollya, Remez.jl), choosing a polynomial evaluation
   scheme, applying error-free transforms and compensated arithmetic (true FMA
-  available), making a function correctly rounded (≤ 0.5 ulp; Table Maker's
+  available), making a function correctly rounded (nearest, ties to even; Table Maker's
   Dilemma, CORE-MATH, RLIBM), or benchmarking and optimizing a function's
   performance against CORE-MATH (criterion benches, Ziv fallback rates,
   branchless rewrites, issue #5). Covers f32, f64 and binary128 (`q`).
@@ -17,8 +17,9 @@ description: >-
 # Programming math functions
 
 metallic-rs is the original Rust math library; its **target is correct rounding
-(≤ 0.5 ulp)** — the nearest representable, every time — and a merely-faithful
-function (< 1 ulp) is treated as a bug to fix, not shipped as "done".
+(round-to-nearest, ties-to-even)** — the exact result rounded once to the
+destination format. A known misrounding is a bug; passing sampled tests does
+not establish this goal over the full domain.
 Implementations are *original*: not ported from musl, fdlibm, or glibc. The
 sibling C project [metallic](https://github.com/jdh8/metallic) ports *from here*,
 adapting for WASM (no scalar FMA, round-to-nearest only); this skill is the Rust
@@ -26,25 +27,28 @@ source of that lineage, distilled from
 <https://jdh8.org/how-to-program-math-functions/> and the conventions already in
 `src/f32_/` and `src/f64_/`.
 
-**Where the project stands:** every f32 *and* f64 function is already correctly
-rounded, with active bit-exact worst-case gates (issue #6, closed 2026-06-14) —
-a red gate is a regression. The open front is **performance** (issue #5):
-closing the remaining gaps to CORE-MATH without breaking a gate. Start
+**Where the project stands:** f32 and f64 functions have active bit-exact
+regression gates (issue #6, closed 2026-06-14); a red gate is a regression.
+Proof coverage must be recorded separately: corpus checks and sampled MPFR
+gate-error measurements are not full-domain proofs. Binary128 transcendental
+correct rounding remains unestablished over the full domain; see
+[reference/correct-rounding.md](reference/correct-rounding.md).
+Performance work must preserve the gates and any established bounds. Start
 performance work at [reference/performance.md](reference/performance.md).
 
-**Performance target: beat CORE-MATH.** CORE-MATH is the correctly-rounded
-reference implementation. Matching its throughput is the floor; the real goal is
+**Performance target: beat CORE-MATH.** CORE-MATH is the primary reference;
+check proof coverage per function and format. Matching its throughput is the floor; the real goal is
 to run *faster*. The main lever: CORE-MATH supports all four IEEE rounding modes
 and must detect the current mode at runtime, while metallic-rs targets
 **round-to-nearest only**. This unlocks:
 
-- **Tighter polynomial bounds.** Under RTN the error budget is exactly ½ ulp;
-  other modes need more headroom. A coefficients search can be tighter, sometimes
-  saving a degree.
+- **A narrower rounding contract.** Only nearest-mode decisions must be proved.
+  The required approximation error depends on distance to a midpoint; a nominal
+  ½-ulp approximation budget does not guarantee correct rounding.
 - **No rounding-mode branching.** CORE-MATH often checks `fegetround()` in its
   final rounding step. We skip that branch entirely.
-- **Faster Ziv refinement.** A first-pass approximation only needs to clear the
-  RTN tie-breaking threshold, not the wider fence that covers directed rounding.
+- **Mode-specific Ziv gates.** An enclosure only needs to lie in one nearest-mode
+  rounding cell. Whether this improves speed must be measured.
 
 Always bench with `RUSTFLAGS=-Ctarget-cpu=x86-64-v3 cargo bench --bench <fn>`
 (the host default has no FMA) and compare `metallic::<fn>` against
@@ -79,7 +83,7 @@ files — `exp.rs`, `log.rs`, `trig.rs`, `hyp.rs`, `gamma.rs`, `misc.rs`, … �
 holds *both* the public function and its inner approximations; the public API is
 re-exported flat, libm-style, at the crate root: `crate::exp2`, `crate::log2`
 (f64 keeps the bare C name), `crate::exp2f` (f32 gets the `f` suffix). Both
-precision trees are built out and correctly rounded — study the existing family
+precision trees are built out with strict regression gates — study the existing family
 files and the shared `DoubleDouble` type as models.
 
 **Polynomials.** Evaluate with `crate::poly(x, &[c0, c1, …])` (alias for
@@ -120,7 +124,7 @@ restates this rule in always-loaded context.)
 comment above the array so the coefficients are reproducible (see
 [reference/coefficients.md](reference/coefficients.md)).
 
-## Do the least that clears ½ ulp
+## Do the least that establishes correct rounding
 
 Correct rounding is the only non-negotiable; everything else is the *least* code
 that provably reaches it. Stop at the first rung that holds — the rest of this
@@ -181,15 +185,18 @@ skill cross-references these rungs instead of repeating "only where needed":
    `fast_ldexp(m, n)` or `crate::exp2i`. Handle subnormal outputs and the
    over/underflow ends explicitly (clamp before reduction).
 
-7. **Verify against an oracle.** For `f32`, each function's test sweeps **all
-   2³² bit patterns** against the `core-math` oracle (`common::test_all_f32`) —
-   a clean sweep *proves* correct rounding. For `f64`, the per-function
-   `tests/all/f64_/<fn>.rs` gates (CORE-MATH worst-case corpus, MPFR sweep) are the
-   proof; if you added or changed a Ziv fast leg or gate, its in-source
-   `ziv_soundness` certification ships **in the same commit**. See
-   [reference/correct-rounding.md](reference/correct-rounding.md). For `f128`,
-   its § `f128` ships a `q` function CORE-MATH has not bound yet: MPFR gate,
-   home-grown corpus with answers, oracle switch once upstream lands.
+7. **Verify and state the evidence accurately.** A completed unary `f32` sweep
+   of all 2³² bit patterns (`common::test_all_f32`) can establish correctness
+   for the tested build, conditional on a correct oracle and harness. Bivariate
+   case tests do not exhaust all input pairs. For `f64`, the per-function corpus
+   and MPFR gates are regression evidence; a proof also needs rigorous error
+   bounds and sufficient hard-case coverage for this implementation. A changed
+   Ziv leg or gate ships its sampled `ziv_soundness` check in the same commit;
+   call it certified only with a uniform error argument. For `f128`, keep the
+   MPFR checks and generated corpora, but do not infer a sufficient final
+   precision from sampling. See
+   [reference/correct-rounding.md](reference/correct-rounding.md) for the proof
+   obligations and oracle workflow.
 
 8. **Build, test, commit atomically.** Per `CLAUDE.md`: `cargo fmt`, then
    `cargo test` — **NOT `--all-features`** (the `_no_fma` feature disables FMA
@@ -241,7 +248,7 @@ before writing your own.
 
 - Article this skill is built on — <https://jdh8.org/how-to-program-math-functions/>
 - metallic (C/WASM sibling that ports from here) — <https://github.com/jdh8/metallic>
-- CORE-MATH (correctly-rounded reference, oracle, hard-to-round tables) — <https://core-math.gitlabpages.inria.fr/>
+- CORE-MATH (reference implementations and hard-to-round tables; check proof scope per function and format) — <https://core-math.gitlabpages.inria.fr/>
 - rminimax (machine-representable minimax) — <https://gitlab.inria.fr/sfilip/rminimax>; locally cloned at `~/src/rminimax`
 - Remez.jl — <https://github.com/simonbyrne/Remez.jl>
 - glibc "Errors in Math Functions" (ulp tables) — <https://www.gnu.org/software/libc/manual/html_node/Errors-in-Math-Functions.html>
