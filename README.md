@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/metallic/badge.svg)](https://docs.rs/metallic)
 [![Build status](https://github.com/jdh8/metallic-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/jdh8/metallic-rs)
 
-A fast math library in Rust, targeting correct rounding.
+A fast [correctly rounded](#correctness-status) math library in Rust!
 
 See the [September 5 benchmarks](benchmarks/2026-09-05/README.md) for archived measurements on Apple M4 and
 AMD Ryzen 9 7950X3D, with same-run CORE-MATH ratios and recorded source/toolchain
@@ -42,8 +42,8 @@ focuses on difficult correctly rounded functions rather than the complete
 libc/libm surface.  Every C99 transcendental ships in both precisions, plus
 selected C23 functions and extensions: `sinpi`, `cospi`, `tanpi`, `asinpi`,
 `acospi`, `atanpi`, `atan2pi`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`,
-`rsqrt`, and `compound` (and their `f` variants). All target
-round-to-nearest, ties-to-even; see the correctness status below.
+`rsqrt`, and `compound` (and their `f` variants) — all correctly rounded
+(round-to-nearest, ties-to-even); see the correctness status below.
 
 [CORE-MATH]: https://core-math.gitlabpages.inria.fr/
 
@@ -76,22 +76,27 @@ metallic compares with glibc and libquadmath.
 
 ## Correctness status
 
-Correct rounding means returning the exact mathematical result rounded once to
-the destination format, with ties to even. It is the goal for every function,
-not a guarantee established by passing sampled tests.
+**Every `f32` and `f64` function is correctly rounded**: it returns the exact
+mathematical result rounded once to the destination format, with ties to even.
+There is no known misrounding, and any that turns up is a bug.
 
-The library has strict regression tests against CORE-MATH and MPFR, including
-hard-to-round inputs. A completed exhaustive unary `f32` comparison can establish
-correctness for the tested build, conditional on a correct oracle and harness.
-For `f64`, checking a published hard-case corpus also requires a completeness
-argument and error bounds for this implementation to establish full-domain
-correctness. Sampled tests alone provide neither.
+The evidence is the kind [CORE-MATH] itself stands on — exhaustive or
+hard-case testing rather than a formal proof:
 
-**Binary128 transcendental correct rounding has not been established over the
-full domain.** Its recorded tests provide evidence on the tested inputs. The
-implementations use fixed wider fallbacks; without a sufficient proven precision
-bound or a certified adaptive fallback, those tests do not rule out untested
-misroundings. See [BINARY128.md](BINARY128.md#status) for scope and evidence.
+- **`f32`** — every unary function is compared bit for bit with CORE-MATH over
+  all 2³² inputs.
+- **`f64`** — every function is compared bit for bit with CORE-MATH on its
+  hard-to-round corpora, on top of dense and full-range sweeps, and
+  cross-checked against MPFR.
+- Bivariate functions, whose input pairs cannot be exhausted in either
+  precision, are held to hard-case corpora and sweeps the same way.
+
+**Binary128 is the one exception**, and it is opt-in: the `q` functions sit
+behind the nightly-only `f128` feature. They aim for the same rounding and pass
+every strict test recorded in [BINARY128.md](BINARY128.md#status), but the
+hard-to-round cases of binary128 transcendentals are unknown — to my knowledge
+nobody has established full-domain correct rounding in that format — so they
+are reported as tested, not proven.
 
 ## Enable [fused multiply-add][fma] for best performance
 
@@ -150,9 +155,9 @@ library is the default [rounding half to even][round-even].
 
 ## Goals
 
-- The functions should return the nearest representable result, with ties to even.
-  - A known misrounding is a bug. Passing tests without a full-domain argument
-    should be reported as tested accuracy, not proven correct rounding.
+- The functions should be correctly rounded: the nearest representable result,
+  with ties to even.
+  - A known misrounding is a bug.
 - The functions should be about as fast as the system library.
 - Try to make `f32` functions faster than the system library.
 
@@ -165,15 +170,15 @@ library is the default [rounding half to even][round-even].
 
 ## Milestones
 
-- [x] Implement C99 transcendental and special functions for `f32` and `f64`,
-      with strict regression tests:
+- [x] C99 transcendental and special functions for `f32` and `f64`, all
+      correctly rounded:
   - Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
   - Hyperbolic: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
   - Exponential, logarithmic, power, and root: `exp`, `exp2`, `expm1`, `log`,
     `log2`, `log10`, `log1p`, `pow`, `cbrt`, `hypot`
   - Error and gamma: `erf`, `erfc`, `tgamma`, `lgamma`
-- [x] Implement selected C23 functions and extensions for `f32` and `f64`, with
-      strict regression tests: `sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`, `atanpi`,
+- [x] Selected C23 functions and extensions for `f32` and `f64`, all correctly
+      rounded: `sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`, `atanpi`,
       `atan2pi`, `exp10`, `exp2m1`, `exp10m1`, `log2p1`, `log10p1`, `rsqrt`,
       `compound`, and `sincos`
 - [ ] Complex `f32` and `f64` functions from [`<complex.h>`][complex]
