@@ -68,6 +68,9 @@ fn powf_core(x: f64, y: f64) -> f32 {
         return r as f32;
     }
 
+    if let Some(exact) = exact_pow(x, y) {
+        return exact;
+    }
     exp2_dd(log2_dd(x) * y)
 }
 
@@ -199,17 +202,8 @@ fn exact_sqrt(m: u64) -> Option<u64> {
     (r.checked_mul(r) == Some(m)).then_some(r)
 }
 
-/// The exact-or-midpoint results the double-double fallback cannot decide
-///
-/// When `(1+x)ʸ` is a dyadic rational with at most 25 significant bits it can
-/// sit exactly on an f32 value or midpoint, where the fallback's ≈2⁻⁸⁰ slack
-/// still lands on a random side (round-to-nearest-even must decide from the
-/// exact value: e.g. `compoundf(2⁴⁸+2²⁵, ½) = 2²⁴+1`, a midpoint that rounds
-/// even to 2²⁴).  Such results only arise from an exactly-representable
-/// `1 + x = m·2ᵉ` and `y = ±n·2ᵍ` with a tiny integer skeleton; resolve them
-/// in exact integer arithmetic and round the exact `f64` once.  Everything
-/// else returns `None`: a result with ≥ 26 significant bits keeps every f32
-/// boundary at least ≈2⁻²⁶ away, far beyond the fallback's slack.
+/// [`exact_pow`] on the base `1 + x`, which must itself be exact in `f64` —
+/// an inexact `1 + x` never yields a short dyadic result.
 fn exact_compound(x: f64, y: f64) -> Option<f32> {
     let s = 1.0 + x;
     let c = if x <= 1.0 {
@@ -218,10 +212,26 @@ fn exact_compound(x: f64, y: f64) -> Option<f32> {
         1.0 - (s - x)
     };
     if c != 0.0 {
-        return None; // 1 + x inexact ⇒ the result is never a short dyadic
+        return None;
     }
+    exact_pow(s, y)
+}
 
-    // s = m·2^e with m odd; s is a positive normal (x > −1, x ≠ 0).
+/// The exact-or-midpoint results the double-double fallback cannot decide
+///
+/// When `sʸ` is a dyadic rational with at most 25 significant bits it can
+/// sit exactly on an f32 value or midpoint, where the fallback's ≈2⁻⁸⁰ slack
+/// still lands on a random side (round-to-nearest-even must decide from the
+/// exact value: e.g. `powf(4097, 2) = 2²⁴ + 8193`, a midpoint that rounds
+/// even to `2²⁴ + 8192`, and `compoundf(2⁴⁸+2²⁵, ½) = 2²⁴+1`, which rounds
+/// even to 2²⁴).  Such results only arise from a base `s = m·2ᵉ` and
+/// `y = ±n·2ᵍ` with a tiny integer skeleton; resolve them in exact integer
+/// arithmetic and round the exact `f64` once.  Everything else returns
+/// `None`: a result with ≥ 26 significant bits keeps every f32 boundary at
+/// least ≈2⁻²⁶ away, far beyond the fallback's slack.  `s` is a positive
+/// normal `f64` (every positive f32, subnormals included, promotes to one).
+fn exact_pow(s: f64, y: f64) -> Option<f32> {
+    // s = m·2^e with m odd.
     let sb = s.to_bits();
     let m = (sb & ((1_u64 << 52) - 1)) | (1 << 52);
     let mt = m.trailing_zeros();
