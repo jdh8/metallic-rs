@@ -8981,7 +8981,7 @@ fn cell_eval(table: &[GammaCell; 9], d: DoubleDouble) -> DoubleDouble {
     eval_cell(
         cell,
         DoubleDouble {
-            high: d.high - fi * 0.125,
+            high: crate::fast_mul_add(fi, -0.125, d.high),
             low: d.low,
         },
     )
@@ -9001,7 +9001,7 @@ fn tgamma_table_eval(zr: DoubleDouble) -> DoubleDouble {
     eval_cell(
         cell,
         DoubleDouble {
-            high: zr.high - kf * 0.125,
+            high: crate::fast_mul_add(kf, -0.125, zr.high),
             low: zr.low,
         },
     )
@@ -10025,7 +10025,12 @@ fn ln_td(x: f64) -> TripleDouble {
     let dxh0 = o - 1.0;
 
     // tail = dxh·(c6 + dxh·(c7 + dxh·c8)) in f64, then dd Horner of c0..c5.
-    let tail = dxh0 * (LOGD_C[6].high + dxh0 * (LOGD_C[7].high + dxh0 * LOGD_C[8].high));
+    let tail = dxh0
+        * crate::fast_mul_add(
+            dxh0,
+            crate::fast_mul_add(dxh0, LOGD_C[8].high, LOGD_C[7].high),
+            LOGD_C[6].high,
+        );
     let (dxh, dxl) = fast_two_sum(dxh0, dxl0);
     let (fh, fl) = c_polydd(dxh, dxl, &LOGD_C[..6], (tail, 0.0));
     let (fh, fl) = c_muldd(dxh, dxl, fh, fl);

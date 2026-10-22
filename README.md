@@ -57,7 +57,7 @@ behind a nightly-only feature:
 
 ```toml
 [dependencies]
-metallic = { version = "0.3.0", features = ["f128"] }
+metallic = { version = "0.3.1", features = ["f128"] }
 ```
 
 ```rust,ignore

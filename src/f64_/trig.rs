@@ -1273,7 +1273,7 @@ const SINPI_S3: f64 = -1.064_507_645_268_961e-15;
 #[inline]
 fn sinpi_dd(x: f64) -> DoubleDouble {
     let q = (2.0 * x).round_ties_even();
-    let theta = PI_DD * (x - q * 0.5);
+    let theta = PI_DD * crate::fast_mul_add(q, -0.5, x);
     // SAFETY: `|x| < 2⁵²`, so `|q| < 2⁵³` fits an `i64`.
     match unsafe { q.to_int_unchecked::<i64>() } & 3 {
         0 => sin_kernel(theta),
@@ -2107,7 +2107,7 @@ pub fn cospi(x: f64) -> f64 {
 #[inline]
 fn cospi_dd(x: f64) -> DoubleDouble {
     let q = (2.0 * x).round_ties_even();
-    let theta = PI_DD * (x - q * 0.5);
+    let theta = PI_DD * crate::fast_mul_add(q, -0.5, x);
     // SAFETY: `|x| < 2⁵²`, so `|q| < 2⁵³` fits an `i64`.
     match unsafe { q.to_int_unchecked::<i64>() } & 3 {
         0 => cos_kernel(theta),
@@ -2313,7 +2313,7 @@ fn tanpi_reconstruct(t: DoubleDouble, iq: usize, neg_n: bool) -> DoubleDouble {
     // reciprocal — CORE-MATH's operation order, kept for the certified eps.
     #[allow(clippy::suboptimal_flops)]
     let mh0 = nh * t.high;
-    let ml0 = crate::fma(nh, t.high, -mh0) + (nh * t.low + nl * t.high);
+    let ml0 = crate::fma(nh, t.high, -mh0) + crate::fast_mul_add(nl, t.high, nh * t.low);
     let m = fast_sum(1.0, -mh0);
     let ml = m.low - ml0;
     let n = fast_sum(nh, t.high);
@@ -2681,6 +2681,8 @@ pub fn tan(x: f64) -> f64 {
 /// orderings from coefficient-magnitude bounds at `v = w = (π/4)²`, the
 /// octant's edge, with 2× margin (cf. the same-named module in `erf.rs`).
 #[cfg(test)]
+// Bounds on unfused evaluation: the plain `a * b + c` form is the point.
+#[allow(clippy::suboptimal_flops)]
 mod fold_ordering {
     use super::*;
 

@@ -3380,7 +3380,7 @@ fn erf_table_eval(ax: f64) -> DoubleDouble {
     let fi = (ax * 16.0).round_ties_even();
     // SAFETY: ax ∈ [0.4375, 6.25] ⇒ 16·ax ∈ [7, 100] ⇒ fi ∈ [7, 100].
     let cell = &ERF_TABLE[unsafe { fi.to_int_unchecked::<usize>() } - 7];
-    let h = ax - fi * 0.0625;
+    let h = crate::fast_mul_add(fi, -0.0625, ax);
 
     // P(h) = c0 + h·(c1 + h·tail), tail = c2 + c3·h + … in f64.  The finer 1/16
     // cell (|h| ≤ 1/32) keeps the `c2..` tail accurate enough in plain `f64` to
@@ -3736,6 +3736,8 @@ pub fn erfc(x: f64) -> f64 {
 /// with at least 2× margin from coefficient-magnitude bounds, so float rounding
 /// slack can never flip them.
 #[cfg(test)]
+// Bounds on unfused evaluation: the plain `a * b + c` form is the point.
+#[allow(clippy::suboptimal_flops)]
 mod fold_ordering {
     use super::*;
 

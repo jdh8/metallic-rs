@@ -1958,7 +1958,7 @@ pub fn acospi(x: f64) -> f64 {
         let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
         let u = 0.25 * t;
         let jf = (128.0 * u).round_ties_even();
-        let r = u - jf * 0.007_812_5;
+        let r = crate::fast_mul_add(jf, -0.007_812_5, u);
         let off = DoubleDouble {
             high: FRAC_PI_2.high - FRAC_PI_2.high.copysign(x),
             low: FRAC_PI_2.low - FRAC_PI_2.low.copysign(x),
@@ -2110,7 +2110,7 @@ pub fn asin(x: f64) -> f64 {
         let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
         let u = 0.25 * t;
         let jf = (128.0 * u).round_ties_even();
-        let r = u - jf * 0.0078125; // exact
+        let r = crate::fast_mul_add(jf, -0.0078125, u); // exact
         let off = DoubleDouble {
             high: FRAC_PI_2.high.copysign(x),
             low: FRAC_PI_2.low.copysign(x),
@@ -2247,7 +2247,7 @@ pub fn asinpi(x: f64) -> f64 {
         let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
         let u = 0.25 * t;
         let jf = (128.0 * u).round_ties_even();
-        let r = u - jf * 0.007_812_5;
+        let r = crate::fast_mul_add(jf, -0.007_812_5, u);
         let off = DoubleDouble {
             high: FRAC_PI_2.high.copysign(x),
             low: FRAC_PI_2.low.copysign(x),
@@ -2312,7 +2312,7 @@ pub fn acos(x: f64) -> f64 {
         let zl = crate::fma(z, z, -t) * ((-0.5 / t) * z);
         let u = 0.25 * t;
         let jf = (128.0 * u).round_ties_even();
-        let r = u - jf * 0.0078125; // exact
+        let r = crate::fast_mul_add(jf, -0.0078125, u); // exact
         let off = DoubleDouble {
             high: FRAC_PI_2.high - FRAC_PI_2.high.copysign(x),
             low: FRAC_PI_2.low - FRAC_PI_2.low.copysign(x),
@@ -3291,6 +3291,8 @@ fn atan2_tint_mag(a: f64, b: f64, x_negative: bool) -> f64 {
 /// orderings from coefficient-magnitude bounds at the cell edge `|u| ≤ 1/16`
 /// (cf. the same-named modules in `erf.rs` and `trig.rs`).
 #[cfg(test)]
+// Bounds on unfused evaluation: the plain `a * b + c` form is the point.
+#[allow(clippy::suboptimal_flops)]
 mod fold_ordering {
     use super::*;
 

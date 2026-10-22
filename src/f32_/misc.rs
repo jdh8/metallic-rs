@@ -1,6 +1,5 @@
 use crate::Sign;
 use core::cmp::Ordering;
-use core::f32;
 use core::num::FpCategory;
 
 /// Rounds half-way cases away from zero

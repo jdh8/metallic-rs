@@ -534,11 +534,14 @@ fn lgamma_f64(z: f32) -> (f64, f64) {
         let value = LN_PI - log_lookup(abs_sinpi(z), &LNF_TABLES) - reflected;
         (
             value,
-            crate::exp2i(-36) * reflected.abs() + crate::exp2i(-44),
+            crate::fast_mul_add(crate::exp2i(-36), reflected.abs(), crate::exp2i(-44)),
         )
     } else {
         let value = lgamma_pos_f64(x);
-        (value, crate::exp2i(-36) * value.abs() + crate::exp2i(-44))
+        (
+            value,
+            crate::fast_mul_add(crate::exp2i(-36), value.abs(), crate::exp2i(-44)),
+        )
     }
 }
 

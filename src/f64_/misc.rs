@@ -55,7 +55,7 @@ pub fn cbrt(x: f64) -> f64 {
     let y2 = y * y;
     let y2l = crate::fma(y, y, -y2);
     let y3 = y2 * y;
-    let y3l = crate::fma(y, y2, -y3) + y * y2l; // y³ + y3l ≈ y³ to ≈106 bits
+    let y3l = fast_mul_add(y, y2l, crate::fma(y, y2, -y3)); // y³ + y3l ≈ y³ to ≈106 bits
     let rr = r * CBRT_RSC[it]; // (1/z)·2⁻ⁱᵗ = 1/zz
     let h = ((y3 - zz) + y3l) * rr;
     let dy = h * (y * CBRT_U0);
@@ -362,7 +362,7 @@ pub fn rsqrt(x: f64) -> f64 {
     // the exact `r − rf` swap `dr` is the residual beyond `rf`'s rounding.
     let rx = r * x;
     let drx = crate::fma(r, x, -rx);
-    let h = crate::fma(r, rx, -1.0) + r * drx;
+    let h = fast_mul_add(r, drx, crate::fma(r, rx, -1.0));
     let dr = (r * 0.5) * h;
     let rf = r - dr;
     let dr = dr - (r - rf);
