@@ -95,3 +95,33 @@ fn test_atan2_issue_11() {
     });
     common::test_bivariate_cases(metallic::atan2, core_math::atan2, scaled.chain(neighbours));
 }
+
+/// Issue #15: with both arguments subnormal the 192-bit tier's reciprocal
+/// seed was scaled by 2⁵⁴ but unscaled by 2⁵³, so one Newton step left
+/// `15/16` of the true quotient.  The five reported pairs plus a
+/// deterministic xorshift sweep of subnormal pairs, every sign.
+#[test]
+fn test_atan2_issue_15() {
+    common::test_bivariate_cases(metallic::atan2, core_math::atan2, issue_15_cases());
+}
+
+pub fn issue_15_cases() -> impl Iterator<Item = [f64; 2]> {
+    let reported = [
+        [0x80032570aa9e5ef4, 0x000176aebaf5998e],
+        [0x0009bc3a6bd9e0cd, 0x8007c67c55f7c04c],
+        [0x000e00e4f1d3d05e, 0x0000b67c7633a07e],
+        [0x000cebc13ff370c3, 0x000c9b36a28cc6e2],
+        [0x800000f7708624f3, 0x000625da9384747a],
+    ]
+    .map(|[y, x]| [f64::from_bits(y), f64::from_bits(x)]);
+    let mut s = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = move || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        // Random sign, random nonzero subnormal significand.
+        f64::from_bits((s & 0x800f_ffff_ffff_ffff) | u64::from(s & u64::MAX >> 12 == 0))
+    };
+    let sweep = std::iter::repeat_with(move || [next(), next()]).take(200_000);
+    reported.into_iter().chain(sweep)
+}

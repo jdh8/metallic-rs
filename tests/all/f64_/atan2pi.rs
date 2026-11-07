@@ -57,3 +57,14 @@ fn test_atan2pi_vs_mpfr() {
         2_000_000,
     );
 }
+
+/// Issue #15: `atan2pi` shares atan2's 192-bit tier and its subnormal
+/// reciprocal seed; same corpus.
+#[test]
+fn test_atan2pi_issue_15() {
+    common::test_bivariate_cases(
+        metallic::atan2pi,
+        core_math::atan2pi,
+        super::atan2::issue_15_cases(),
+    );
+}

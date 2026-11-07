@@ -3122,7 +3122,7 @@ impl Tint {
         let a = self.to_f64(0); // exact
         let subnormal = a.abs() < f64::MIN_POSITIVE;
         let a = if subnormal {
-            a * f64::from_bits(0x4350_0000_0000_0000) // 2^53
+            a * f64::from_bits(0x4340_0000_0000_0000) // 2^53
         } else {
             a
         };
